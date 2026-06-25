@@ -885,8 +885,9 @@ async fn trigger_deployment(
                     continue;
                 }
                 if trimmed.contains('=') {
-                    let escaped = trimmed.replace("\"", "\\\"");
-                    env_args.push_str(&format!(" -e \"{}\"", escaped));
+                    // Tək dırnaqlardan istifadə edirik ki, bash/sh $ kimi xüsusi simvolları dəyişən kimi oxumasın
+                    let escaped = trimmed.replace("'", "'\\''");
+                    env_args.push_str(&format!(" -e '{}'", escaped));
                 }
             }
         }
