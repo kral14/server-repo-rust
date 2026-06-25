@@ -6,16 +6,16 @@ def kill_previous_instances():
     print("[INFO] Evvelki server prosesleri yoxlanilir ve dayandirilir...")
     try:
         if os.name == 'nt':
-            subprocess.run(['taskkill', '/F', '/IM', 'coolify-rust.exe', '/T'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['taskkill', '/F', '/IM', 'masterdeploy-rust.exe', '/T'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         else:
-            subprocess.run(['pkill', '-f', 'coolify-rust'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(['pkill', '-f', 'masterdeploy-rust'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
 def main():
-    # Layihənin yerləşdiyi qovluğu tapırıq (coolify-rust)
+    # Layihənin yerləşdiyi qovluğu tapırıq (masterdeploy-rust)
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    project_dir = os.path.join(base_dir, 'coolify-rust')
+    project_dir = os.path.join(base_dir, 'masterdeploy-rust')
     
     if not os.path.exists(project_dir):
         print(f"[X] Xeta: '{project_dir}' qovlugu tapilmadi.")

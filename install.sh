@@ -13,10 +13,10 @@ if ! command -v whiptail &> /dev/null; then
     apt-get update && apt-get install -y whiptail
 fi
 
-whiptail --title "Mini-Coolify Installer" --msgbox "Mini-Coolify Quraşdırma Sisteminə Xoş Gəldiniz!\n\nBu proqram serverinizi avtomatik tənzimləyəcək və paneli quracaq." 10 60
+whiptail --title "MasterDeploy Installer" --msgbox "MasterDeploy Quraşdırma Sisteminə Xoş Gəldiniz!\n\nBu proqram serverinizi avtomatik tənzimləyəcək və paneli quracaq." 10 60
 
 # 1. Path
-INSTALL_PATH=$(whiptail --title "Quraşdırma Qovluğu" --inputbox "Mini-Coolify kodları hansı qovluğa endirilsin?" 10 60 "/opt/mini-coolify" 3>&1 1>&2 2>&3)
+INSTALL_PATH=$(whiptail --title "Quraşdırma Qovluğu" --inputbox "MasterDeploy kodları hansı qovluğa endirilsin?" 10 60 "/opt/masterdeploy" 3>&1 1>&2 2>&3)
 if [ -z "$INSTALL_PATH" ]; then
     echo "Quraşdırma ləğv edildi."
     exit 1
@@ -59,7 +59,7 @@ if ! command -v docker &> /dev/null; then
         systemctl start docker
         whiptail --title "Uğurlu" --msgbox "Docker uğurla quruldu!" 8 40
     else
-        whiptail --title "Xəbərdarlıq" --msgbox "Diqqət: Mini-Coolify Docker olmadan işləyə bilməz. Quraşdırma dayanır." 10 60
+        whiptail --title "Xəbərdarlıq" --msgbox "Diqqət: MasterDeploy Docker olmadan işləyə bilməz. Quraşdırma dayanır." 10 60
         exit 1
     fi
 fi
@@ -71,7 +71,7 @@ fi
 
 # 5. Clone and build
 echo "======================================"
-echo "[SETUP] Mini-Coolify yüklənir..."
+echo "[SETUP] MasterDeploy yüklənir..."
 echo "======================================"
 
 if [ -d "$INSTALL_PATH/.git" ]; then
@@ -82,28 +82,28 @@ else
     git clone https://github.com/kral14/server-repo-rust.git "$INSTALL_PATH"
 fi
 
-cd "$INSTALL_PATH/coolify-rust"
+cd "$INSTALL_PATH/masterdeploy-rust"
 
 echo "======================================"
 echo "[SETUP] Docker imici yığılır (Bu proses bir neçə dəqiqə çəkə bilər)..."
 echo "======================================"
-docker build -t mini-coolify:latest .
+docker build -t masterdeploy:latest .
 
 echo "======================================"
 echo "[SETUP] Köhnə konteyner silinir (əgər varsa)..."
 echo "======================================"
-docker stop mini-coolify 2>/dev/null || true
-docker rm mini-coolify 2>/dev/null || true
+docker stop masterdeploy 2>/dev/null || true
+docker rm masterdeploy 2>/dev/null || true
 
 echo "======================================"
-echo "[SETUP] Mini-Coolify işə salınır..."
+echo "[SETUP] MasterDeploy işə salınır..."
 echo "======================================"
-# Mounting a volume for coolify.db so data persists across container restarts
-docker run -d --name mini-coolify --restart always -p 3000:3000 \
-  -v mini-coolify-data:/app/data \
-  mini-coolify:latest
+# Mounting a volume for masterdeploy.db so data persists across container restarts
+docker run -d --name masterdeploy --restart always -p 3000:3000 \
+  -v masterdeploy-data:/app/data \
+  masterdeploy:latest
 
 IP_ADDR=$(curl -s ifconfig.me || echo "SERVER_IP")
-whiptail --title "Təbrik edirik! 🎉" --msgbox "Mini-Coolify uğurla quruldu və işə salındı!\n\nBrauzerdə daxil olun:\nhttp://$IP_ADDR:3000" 12 60
+whiptail --title "Təbrik edirik! 🎉" --msgbox "MasterDeploy uğurla quruldu və işə salındı!\n\nBrauzerdə daxil olun:\nhttp://$IP_ADDR:3000" 12 60
 
 echo "Quraşdırma bitdi! Sistem tam hazırdır."

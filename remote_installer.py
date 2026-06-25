@@ -21,7 +21,7 @@ BTN_CLEAN = "#E74C3C"
 class RemoteInstallerGUI:
     def __init__(self, root):
         self.root = root
-        self.root.title("Mini-Coolify Uzaqdan Quraşdırıcı 🚀")
+        self.root.title("MasterDeploy Uzaqdan Quraşdırıcı 🚀")
         self.root.geometry("800x700")
         self.root.configure(bg=BG_COLOR, padx=30, pady=20)
         
@@ -97,7 +97,7 @@ class RemoteInstallerGUI:
         self.btn_prep = create_button(btn_frame, "🛠️ Serveri Hazırla (Swap+Docker)", BTN_PREP, lambda: self.run_task(self.install_swap_and_docker))
         self.btn_prep.grid(row=0, column=1, padx=5, ipady=5, ipadx=5)
         
-        self.btn_panel = create_button(btn_frame, "🚀 Paneli Qur", BTN_PANEL, lambda: self.run_task(self.install_coolify))
+        self.btn_panel = create_button(btn_frame, "🚀 Paneli Qur", BTN_PANEL, lambda: self.run_task(self.install_masterdeploy))
         self.btn_panel.grid(row=0, column=2, padx=5, ipady=5, ipadx=5)
         
         self.btn_all = create_button(btn_frame, "🌟 Hepsini Qur (Tam)", BTN_ALL, lambda: self.run_task(self.install_all))
@@ -276,8 +276,8 @@ class RemoteInstallerGUI:
 }} && echo '===TASK_COMPLETED_SUCCESS===' || echo '===TASK_FAILED==='
 EOF
         chmod +x /tmp/task.sh
-        echo '' > /tmp/mini_coolify.log
-        nohup bash /tmp/task.sh >> /tmp/mini_coolify.log 2>&1 &
+        echo '' > /tmp/mini_masterdeploy.log
+        nohup bash /tmp/task.sh >> /tmp/mini_masterdeploy.log 2>&1 &
         """
 
         ssh_cmd = [
@@ -299,7 +299,7 @@ EOF
     def tail_logs(self, ip, user, key_path):
         ssh_cmd = [
             "ssh", "-o", "StrictHostKeyChecking=no", "-o", "ServerAliveInterval=5", "-i", key_path, f"{user}@{ip}",
-            "stdbuf -o0 tail -n +1 -F /tmp/mini_coolify.log 2>/dev/null"
+            "stdbuf -o0 tail -n +1 -F /tmp/mini_masterdeploy.log 2>/dev/null"
         ]
         
         try:
@@ -451,15 +451,15 @@ EOF
         """
         self.run_background_task(ip, user, key_path, cmd)
 
-    def install_coolify(self):
+    def install_masterdeploy(self):
         ip, user, key_path = self.get_creds()
         self.log(f"\n--- MİNİ-COOLİFY QURULUMU BAŞLADI ({ip}) ---")
         
         cmd = """
-        echo 'Mini-Coolify Qurulur...';
+        echo 'MasterDeploy Qurulur...';
         sudo rm -rf server-repo-rust;
         git clone https://github.com/kral14/server-repo-rust.git;
-        cd server-repo-rust/coolify-rust;
+        cd server-repo-rust/MasterDeploy-rust;
         
         echo 'Portlar açılır (Firewall / Iptables)...';
         sudo iptables -I INPUT -p tcp -m tcp --dport 3000 -j ACCEPT 2>/dev/null || true;
@@ -467,8 +467,8 @@ EOF
         sudo ufw allow 3000/tcp 2>/dev/null || true;
         
         echo 'Köhnə panel silinir (əgər varsa)...';
-        sudo docker stop mini-coolify 2>/dev/null || true;
-        sudo docker rm mini-coolify 2>/dev/null || true;
+        sudo docker stop masterdeploy 2>/dev/null || true;
+        sudo docker rm masterdeploy 2>/dev/null || true;
         
         echo 'Yeni panel yüklənir və işə salınır (GitHub-dan)... Bu cəmi bir neçə saniyə çəkəcək...';
         if ! sudo docker pull ghcr.io/kral14/server-repo-rust:latest; then
@@ -477,9 +477,9 @@ EOF
             exit 1;
         fi;
         
-        sudo docker run -d --name mini-coolify -p 3000:3000 \
+        sudo docker run -d --name masterdeploy -p 3000:3000 \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -v /data/mini-coolify:/data/mini-coolify \
+            -v /data/masterdeploy:/data/masterdeploy \
             -v ~/.ssh:/root/.ssh \
             --restart unless-stopped ghcr.io/kral14/server-repo-rust:latest;
         
@@ -493,7 +493,7 @@ EOF
             -e WATCHTOWER_POLL_INTERVAL=60 \
             -v /var/run/docker.sock:/var/run/docker.sock \
             containrrr/watchtower:1.5.3 \
-            mini-coolify;
+            masterdeploy;
         
         echo '=========================================';
         echo 'PANEL QURULDU! Link: http://'$(curl -s ifconfig.me)':3000';
@@ -524,16 +524,16 @@ EOF
         if ! command -v git > /dev/null 2>&1; then
             sudo apt-get update && sudo apt-get install -y git;
         fi;
-        echo 'Mini-Coolify Qurulur...';
+        echo 'MasterDeploy Qurulur...';
         sudo rm -rf server-repo-rust;
         git clone https://github.com/kral14/server-repo-rust.git;
-        cd server-repo-rust/coolify-rust;
+        cd server-repo-rust/MasterDeploy-rust;
         sudo iptables -I INPUT -p tcp -m tcp --dport 3000 -j ACCEPT 2>/dev/null || true;
         sudo ufw allow 3000/tcp 2>/dev/null || true;
-        sudo docker stop mini-coolify 2>/dev/null || true;
-        sudo docker rm mini-coolify 2>/dev/null || true;
-        sudo docker build -t mini-coolify-app . && \
-        sudo docker run -d --name mini-coolify -p 3000:3000 -v /var/run/docker.sock:/var/run/docker.sock -v /data/mini-coolify:/data/mini-coolify -v ~/.ssh:/root/.ssh --restart unless-stopped mini-coolify-app;
+        sudo docker stop masterdeploy 2>/dev/null || true;
+        sudo docker rm masterdeploy 2>/dev/null || true;
+        sudo docker build -t masterdeploy-app . && \
+        sudo docker run -d --name masterdeploy -p 3000:3000 -v /var/run/docker.sock:/var/run/docker.sock -v /data/masterdeploy:/data/masterdeploy -v ~/.ssh:/root/.ssh --restart unless-stopped masterdeploy-app;
         
         echo 'Watchtower qurulur (avto-yenileme sistemi)...';
         sudo docker stop watchtower 2>/dev/null || true;
@@ -544,7 +544,7 @@ EOF
             -v /var/run/docker.sock:/var/run/docker.sock \
             containrrr/watchtower \
             --interval 60 \
-            mini-coolify;
+            masterdeploy;
         
         echo '=========================================';
         echo 'PANEL QURULDU! Link: http://'$(curl -s ifconfig.me)':3000';
@@ -600,7 +600,7 @@ EOF
 
     def clean_server(self):
         ip, user, key_path = self.get_creds()
-        msg = "DİQQƏT: Bu otağı tamamilə sıfırlayacaq!\n\n- Bütün layihələr və Docker konteynerləri silinəcək.\n- Mini-Coolify paneli silinəcək.\n- Swap silinəcək.\n- DOCKER TAMAMİLƏ SİLİNƏCƏK.\n\nƏminsinizmi?"
+        msg = "DİQQƏT: Bu otağı tamamilə sıfırlayacaq!\n\n- Bütün layihələr və Docker konteynerləri silinəcək.\n- MasterDeploy paneli silinəcək.\n- Swap silinəcək.\n- DOCKER TAMAMİLƏ SİLİNƏCƏK.\n\nƏminsinizmi?"
         if not messagebox.askyesno("TƏHLÜKƏLİ ƏMƏLİYYAT", msg, icon='warning'):
             return
             
@@ -611,7 +611,7 @@ EOF
         sudo docker rm $(sudo docker ps -aq) 2>/dev/null || true;
         
         echo '2. Layihə faylları silinir...';
-        sudo rm -rf /data/mini-coolify;
+        sudo rm -rf /data/masterdeploy;
         sudo rm -rf ~/server-repo-rust;
         
         echo '3. Docker tamamilə sistemdən silinir...';
