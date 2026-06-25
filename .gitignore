@@ -1,0 +1,9 @@
+target/
+.env
+coolify.db
+*.pem
+*.key
+node_modules/
+__pycache__/
+*.log
+.vscode/
