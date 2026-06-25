@@ -524,6 +524,7 @@ sudo docker stop masterdeploy 2>/dev/null || true;
 sudo docker rm masterdeploy 2>/dev/null || true;
 
 echo 'Yeni panel yüklənir və işə salınır (GitHub-dan)...';
+echo '⏳ QEYD: Docker imicinin həcmi böyükdür (~400MB). Yüklənməsi 2-5 dəqiqə çəkə bilər. Lütfən ekran donmuş kimi görünsə də gözləyin...';
 if ! sudo docker pull ghcr.io/kral14/server-repo-rust:latest; then
     echo '❌ XƏTA: GitHub-dan hazır Docker imicini yükləmək mümkün olmadı!';
     exit 1;

@@ -26,7 +26,7 @@ RUN cargo build --release
 # Runtime Stage (Yüngül və son imic)
 FROM debian:bullseye-slim
 
-# Runtime üçün lazımlı kitabxanalar (SSH, OpenSSL, SQLite, Git, Docker)
+# Runtime üçün lazımlı kitabxanalar (SSH, OpenSSL, SQLite, Git)
 RUN apt-get update && apt-get install -y \
     libssl1.1 \
     sqlite3 \
@@ -34,8 +34,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     ca-certificates \
     git \
-    docker.io \
     && rm -rf /var/lib/apt/lists/*
+
+# Yüngül Docker CLI yükləyirik (bütün docker daemon yox, yalnız client lazımdır - həcmi kiçiltmək üçün)
+RUN curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz \
+    && tar xzvf docker-24.0.7.tgz --strip 1 -C /usr/local/bin docker/docker \
+    && rm docker-24.0.7.tgz
 
 WORKDIR /app
 
