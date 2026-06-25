@@ -135,9 +135,10 @@ async fn get_server_stats(
     let cmd = "free -m | awk 'NR==2{print $2,$3}'; nproc";
     let output = match {
         if server.ip == "local" || server.ip == "127.0.0.1" {
+            let local_cmd = cmd.replace("sudo ", "");
             tokio::process::Command::new("sh")
                 .arg("-c")
-                .arg(cmd)
+                .arg(&local_cmd)
                 .output()
                 .await
         } else {
@@ -227,9 +228,10 @@ async fn get_runtime_logs(
     let cmd = format!("sudo docker logs --tail 200 {}", app.name);
     let output = match {
         if server.ip == "local" || server.ip == "127.0.0.1" {
+            let local_cmd = cmd.replace("sudo ", "");
             tokio::process::Command::new("sh")
                 .arg("-c")
-                .arg(&cmd)
+                .arg(&local_cmd)
                 .output()
                 .await
         } else {
@@ -322,9 +324,10 @@ async fn setup_server(
     ";
 
     let output = if server.ip == "local" || server.ip == "127.0.0.1" {
+        let local_cmd = cmd.replace("sudo ", "");
         tokio::process::Command::new("sh")
             .arg("-c")
-            .arg(cmd)
+            .arg(&local_cmd)
             .output()
             .await
     } else {
@@ -541,9 +544,10 @@ async fn run_ssh_cmd_stream_helper(
 ) -> Result<bool, std::io::Error> {
     use tokio::io::AsyncBufReadExt;
     let mut child = if ip == "local" || ip == "127.0.0.1" {
+        let local_cmd = cmd.replace("sudo ", "");
         tokio::process::Command::new("sh")
             .arg("-c")
-            .arg(&cmd)
+            .arg(&local_cmd)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()?
