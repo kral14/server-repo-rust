@@ -27,43 +27,48 @@ def main():
             except Exception as e:
                 print(f"Failed to remove: {e}")
 
-    # 2. Əsas .git qovluğunu da sıfırlayaq ki, təmiz başlayaq
+    # 2. Əsas .git qovluğunu yoxlayırıq, yoxdursa yaradırıq
     main_git = os.path.join(ROOT_DIR, ".git")
-    if os.path.exists(main_git):
-        print("Resetting main git folder...")
-        shutil.rmtree(main_git, ignore_errors=True)
+    if not os.path.exists(main_git):
+        print("Initializing new git repository...")
+        run_cmd("git init")
+        run_cmd(f"git remote add origin {REPO_URL}")
+        run_cmd("git branch -M main")
+    else:
+        # Remote URL-in mövcud olub-olmadığını yoxlayıb, yoxdursa əlavə edirik
+        run_cmd(f"git remote add origin {REPO_URL}", ignore_error=True)
     
-    # 3. Yeni git repozitoriyası yaradırıq
-    run_cmd("git init")
-    
-    # 4. .gitignore faylını yeniləyirik
-    gitignore_content = """
+    # 3. .gitignore faylını yalnız yoxdursa yaradırıq ki, etdiyiniz dəyişikliklər silinməsin
+    gitignore_path = os.path.join(ROOT_DIR, ".gitignore")
+    if not os.path.exists(gitignore_path):
+        gitignore_content = """
 target/
 .env
-coolify.db
 *.pem
-*.key
 node_modules/
 __pycache__/
 *.log
 .vscode/
 """
-    with open(os.path.join(ROOT_DIR, ".gitignore"), "w", encoding="utf-8") as f:
-        f.write(gitignore_content.strip())
-    print("Created .gitignore")
+        with open(gitignore_path, "w", encoding="utf-8") as f:
+            f.write(gitignore_content.strip())
+        print("Created .gitignore")
         
-    # 5. Remote URL əlavə edirik
-    run_cmd(f"git remote add origin {REPO_URL}")
-    run_cmd("git branch -M main")
-    
-    # 6. Bütün faylları əlavə edib commit edirik
+    # 4. Bütün faylları əlavə edib commit edirik
     print("Adding files...")
-    run_cmd("git add .")
-    run_cmd('git commit -m "Initial commit for Server Repo Rust"')
+    if not run_cmd("git add ."):
+        print("ERROR: Failed to add files. See output above.")
+        return
     
-    # 7. GitHub-a göndəririk (Force push)
+    import datetime
+    time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if not run_cmd(f'git commit -m "Avtomatik yenilenme: {time_str}"', ignore_error=True):
+        print("Nothing to commit or commit failed.")
+        # We don't return here, maybe there are just no changes
+    
+    # 5. GitHub-a göndəririk (Normal push, Force (-f) deyil ki tarixçə silinməsin)
     print("Pushing to GitHub, please wait...")
-    success = run_cmd("git push -u origin main -f")
+    success = run_cmd("git push origin main")
     
     if success:
         print("\nSUCCESS! All code pushed to GitHub (server-repo-rust) successfully!")

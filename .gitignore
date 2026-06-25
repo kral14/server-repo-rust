@@ -1,8 +1,9 @@
 target/
 .env
-coolify.db
+
 *.pem
-*.key
+temp_key_*.key
+
 node_modules/
 __pycache__/
 *.log
