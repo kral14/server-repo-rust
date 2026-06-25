@@ -60,7 +60,24 @@ async function fetchAppVersion() {
             const data = await res.json();
             const el = document.getElementById('app-version');
             if (el && data.version) {
-                el.textContent = 'v' + data.version;
+                const localVersion = data.version;
+                el.innerHTML = `v${localVersion} <span id="version-badge"></span>`;
+                
+                // Fetch GitHub version to compare
+                fetch('https://raw.githubusercontent.com/kral14/server-repo-rust/main/MasterDeploy-rust/Cargo.toml')
+                    .then(r => r.text())
+                    .then(toml => {
+                        const match = toml.match(/version\s*=\s*"([^"]+)"/);
+                        if (match && match[1]) {
+                            const gitVersion = match[1];
+                            const badge = document.getElementById('version-badge');
+                            if (localVersion === gitVersion) {
+                                badge.innerHTML = `<span style="background: #2ecc71; color: #fff; padding: 1px 4px; border-radius: 4px; font-size: 0.55rem; font-weight: bold; margin-left: 5px;">NEW</span>`;
+                            } else {
+                                badge.innerHTML = `<span style="background: #e74c3c; color: #fff; padding: 1px 4px; border-radius: 4px; font-size: 0.55rem; font-weight: bold; margin-left: 5px;">UPDATE (v${gitVersion})</span>`;
+                            }
+                        }
+                    }).catch(e => console.log('Git version check failed', e));
             }
         }
     } catch (e) {

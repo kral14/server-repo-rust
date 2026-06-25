@@ -26,13 +26,15 @@ RUN cargo build --release
 # Runtime Stage (Yüngül və son imic)
 FROM debian:bullseye-slim
 
-# Runtime üçün lazımlı kitabxanalar (SSH, OpenSSL, SQLite)
+# Runtime üçün lazımlı kitabxanalar (SSH, OpenSSL, SQLite, Git, Docker)
 RUN apt-get update && apt-get install -y \
     libssl1.1 \
     sqlite3 \
     openssh-client \
     curl \
     ca-certificates \
+    git \
+    docker.io \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

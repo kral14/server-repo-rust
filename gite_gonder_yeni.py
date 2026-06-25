@@ -14,8 +14,33 @@ def run_cmd(cmd, ignore_error=False):
         print(result.stdout)
     return result.returncode == 0
 
+import re
+
+def bump_cargo_version():
+    cargo_path = os.path.join(ROOT_DIR, "MasterDeploy-rust", "Cargo.toml")
+    if not os.path.exists(cargo_path):
+        return None
+    with open(cargo_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    match = re.search(r'version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
+    if match:
+        major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
+        new_patch = patch + 1
+        new_version = f'{major}.{minor}.{new_patch}'
+        new_content = content.replace(match.group(0), f'version = "{new_version}"')
+        
+        with open(cargo_path, 'w', encoding='utf-8') as f:
+            f.write(new_content)
+        print(f"BUMPED CARGO VERSION TO: v{new_version}")
+        return new_version
+    return None
+
 def main():
     print("Preparing to push to server-repo-rust...\n")
+    
+    # Avtomatik versiya artırılması
+    bump_cargo_version()
     
     # 1. Bütün alt .git qovluqlarını silək (submodule xətasının qarşısını almaq üçün)
     for root, dirs, files in os.walk(ROOT_DIR):
@@ -45,6 +70,8 @@ def main():
 target/
 .env
 *.pem
+*.key
+*.db
 node_modules/
 __pycache__/
 *.log

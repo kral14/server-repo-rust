@@ -133,17 +133,26 @@ async fn get_server_stats(
     }
 
     let cmd = "free -m | awk 'NR==2{print $2,$3}'; nproc";
-    let output = match tokio::process::Command::new("ssh")
-        .args(&[
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "ConnectTimeout=5",
-            "-i", &temp_key_path,
-            &format!("{}@{}", server.ssh_user, server.ip),
-            cmd
-        ])
-        .output()
-        .await
-    {
+    let output = match {
+        if server.ip == "local" || server.ip == "127.0.0.1" {
+            tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .await
+        } else {
+            tokio::process::Command::new("ssh")
+                .args(&[
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "ConnectTimeout=5",
+                    "-i", &temp_key_path,
+                    &format!("{}@{}", server.ssh_user, server.ip),
+                    cmd
+                ])
+                .output()
+                .await
+        }
+    } {
         Ok(out) => out,
         Err(_) => {
             let _ = std::fs::remove_file(&temp_key_path);
@@ -216,17 +225,26 @@ async fn get_runtime_logs(
     }
 
     let cmd = format!("sudo docker logs --tail 200 {}", app.name);
-    let output = match tokio::process::Command::new("ssh")
-        .args(&[
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "ConnectTimeout=5",
-            "-i", &temp_key_path,
-            &format!("{}@{}", server.ssh_user, server.ip),
-            &cmd
-        ])
-        .output()
-        .await
-    {
+    let output = match {
+        if server.ip == "local" || server.ip == "127.0.0.1" {
+            tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .output()
+                .await
+        } else {
+            tokio::process::Command::new("ssh")
+                .args(&[
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "ConnectTimeout=5",
+                    "-i", &temp_key_path,
+                    &format!("{}@{}", server.ssh_user, server.ip),
+                    &cmd
+                ])
+                .output()
+                .await
+        }
+    } {
         Ok(o) => {
             let mut logs = String::from_utf8_lossy(&o.stdout).to_string();
             let stderr = String::from_utf8_lossy(&o.stderr).to_string();
@@ -303,16 +321,25 @@ async fn setup_server(
         echo 'Setup Complete';
     ";
 
-    let output = tokio::process::Command::new("ssh")
-        .args(&[
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "ConnectTimeout=10",
-            "-i", &temp_key_path,
-            &format!("{}@{}", server.ssh_user, server.ip),
-            cmd
-        ])
-        .output()
-        .await;
+    let output = if server.ip == "local" || server.ip == "127.0.0.1" {
+        tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .await
+    } else {
+        tokio::process::Command::new("ssh")
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=10",
+                "-i", &temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                cmd
+            ])
+            .output()
+            .await
+    };
+    let output = output;
 
     let _ = std::fs::remove_file(&temp_key_path);
 
@@ -513,17 +540,26 @@ async fn run_ssh_cmd_stream_helper(
     logs: std::sync::Arc<tokio::sync::Mutex<String>>,
 ) -> Result<bool, std::io::Error> {
     use tokio::io::AsyncBufReadExt;
-    let mut child = tokio::process::Command::new("ssh")
-        .args(&[
-            "-o", "StrictHostKeyChecking=no",
-            "-o", "ConnectTimeout=15",
-            "-i", &key_path,
-            &format!("{}@{}", user, ip),
-            &cmd
-        ])
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .spawn()?;
+    let mut child = if ip == "local" || ip == "127.0.0.1" {
+        tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(&cmd)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?
+    } else {
+        tokio::process::Command::new("ssh")
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=15",
+                "-i", &key_path,
+                &format!("{}@{}", user, ip),
+                &cmd
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?
+    };
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
