@@ -41,6 +41,10 @@ async fn main() {
         .route("/api/system/changelog", get(get_changelog))
         .route("/api/system/docs", get(get_docs))
         .route("/api/system/update", post(trigger_system_update))
+        .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"),
+        ))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
