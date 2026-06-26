@@ -1918,9 +1918,9 @@ async function initSystemUpdates() {
         if(badgeSpan) {
             if (hasNewer) {
                 const latestVer = changelog[0].version;
-                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--text-secondary);" title="Versiyalara bax">v${currentVersion}</span> <span onclick="quickUpdate('${latestVer}')" style="background: var(--primary-color); color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.5rem; margin-left: 3px; cursor: pointer; font-weight: bold;" title="${latestVer} versiyasına yüklə">UPDATE</span>`;
+                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--text-secondary);" title="Versiyalara bax">v${currentVersion}</span> <span onclick="quickUpdate('${latestVer}')" style="background: var(--primary-color); color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.5rem; margin-left: 3px; cursor: pointer; font-weight: bold;" title="${latestVer} mövcuddur - klikləyin">UPDATE</span>`;
             } else {
-                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--text-secondary);" title="Versiyalara bax">v${currentVersion}</span> <span style="background: #27ae60; color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.5rem; margin-left: 3px; cursor: default;">NEW</span>`;
+                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--text-secondary);" title="Versiyalara bax">v${currentVersion}</span>`;
             }
         }
         
