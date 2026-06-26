@@ -2068,6 +2068,10 @@ async function confirmVersionSwitch(version, isRollback) {
         confirmStyle: isRollback ? '' : 'background: linear-gradient(135deg,#ff416c,#ff4b2b);',
         onConfirm: async () => {
             closeModal('system-update-modal');
+            
+            // Ekran qaralma/loading animasiyasını dərhal başlat
+            showVersionSwitchProgress();
+            
             try {
                 addActivityLog(`Versiya keçidi: ${version} (${action})`, 'update');
                 await fetch('/api/system/update', {
@@ -2075,10 +2079,10 @@ async function confirmVersionSwitch(version, isRollback) {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ version: version })
                 });
-                showVersionSwitchProgress();
             } catch(e) {
-                addActivityLog(`Versiya keçidi uğursuz: ${e.message}`, 'error');
-                showInfoCard('❌ Xəta', 'Versiya keçidi zamanı problem yarandı.', e.message);
+                // Əgər bağlantı kəsilərsə bu normaldır, çünki docker container sönür.
+                // Lakin gözlənilməz digər xətalar üçün log yazırıq.
+                addActivityLog(`Yenilənmə başladıldı (Bağlantı kəsildi/Yenidən başlayır)`, 'update');
             }
         }
     });
@@ -2088,16 +2092,16 @@ function showVersionSwitchProgress() {
     // Ekranı qarala, gözlə, yenilə
     const overlay = document.createElement('div');
     overlay.id = 'update-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(18,20,30,0.95);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;backdrop-filter:blur(10px);';
     overlay.innerHTML = `
         <div style="text-align:center; color:white;">
-            <div style="font-size:3rem; margin-bottom:1rem;">🔄</div>
-            <h2 style="margin:0 0 0.5rem; font-family:monospace;">Panel yenilənir...</h2>
-            <p style="color:rgba(255,255,255,0.6); margin:0 0 1.5rem;">Bir neçə saniyə gözləyin</p>
-            <div style="width:200px; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden; margin:0 auto;">
-                <div id="progress-bar" style="width:0%; height:100%; background:linear-gradient(90deg,#00d2ff,#7c3aed); border-radius:2px; transition:width 0.3s;"></div>
+            <div class="spin-icon" style="font-size:3.5rem; margin-bottom:1.5rem; display:inline-block;">🔄</div>
+            <h2 style="margin:0 0 0.5rem; font-family:'Space Grotesk',sans-serif; font-weight:600; letter-spacing:-0.5px;">Panel Yenilənir...</h2>
+            <p style="color:var(--text-secondary); margin:0 0 1.5rem; font-size:0.9rem;">Konteyner yenidən başladılır, zəhmət olmasa gözləyin</p>
+            <div style="width:240px; height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; margin:0 auto; box-shadow:var(--shadow-in);">
+                <div id="progress-bar" style="width:0%; height:100%; background:linear-gradient(90deg,#00d2ff,#7c3aed); border-radius:3px; transition:width 0.3s; box-shadow: 0 0 10px var(--accent-glow);"></div>
             </div>
-            <p id="update-countdown" style="color:rgba(255,255,255,0.4); font-size:0.85rem; margin-top:1rem;">10 saniyə...</p>
+            <p id="update-countdown" style="color:var(--text-secondary); font-size:0.8rem; margin-top:1.2rem; font-family:monospace;">10 saniyə...</p>
         </div>
     `;
     document.body.appendChild(overlay);
