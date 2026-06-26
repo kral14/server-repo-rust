@@ -955,19 +955,32 @@ struct UpdatePayload {
     version: String,
 }
 
-async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> StatusCode {
+async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> Result<StatusCode, (StatusCode, String)> {
     let version = payload.version;
     let image = format!("ghcr.io/kral14/server-repo-rust:{}", version);
-    let _ = std::process::Command::new("docker").args(["pull", &image]).status();
+    
+    // 1. Docker image pull edirik. Əgər ghcr-da bu tag yoxdursa (yəni actions hələ build etməyibsə), pull uğursuz olacaq.
+    let pull_status = std::process::Command::new("docker")
+        .args(["pull", &image])
+        .status();
+        
+    match pull_status {
+        Ok(status) if status.success() => {
+            // Pull uğurludursa, yenilənmə skriptini işə salırıq
+            let script = format!(
+                "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && docker run -d --name masterdeploy --restart always -p 3000:3000 -v masterdeploy-data:/app/data -v /var/run/docker.sock:/var/run/docker.sock {}",
+                image
+            );
 
-    let script = format!(
-        "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && docker run -d --name masterdeploy --restart always -p 3000:3000 -v masterdeploy-data:/app/data -v /var/run/docker.sock:/var/run/docker.sock {}",
-        image
-    );
+            let _ = std::process::Command::new("docker")
+                .args(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", &image, "sh", "-c", &script])
+                .spawn();
 
-    let _ = std::process::Command::new("docker")
-        .args(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", &image, "sh", "-c", &script])
-        .spawn();
-
-    StatusCode::OK
+            Ok(StatusCode::OK)
+        }
+        _ => {
+            // Docker pull alınmadı (Actions hələ build etməyib və ya şəbəkə xətası)
+            Err((StatusCode::BAD_REQUEST, "Seçilən versiya üçün Docker imici tapılmadı (GitHub Actions build-i hələ bitməyib).".to_string()))
+        }
+    }
 }

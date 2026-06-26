@@ -2069,20 +2069,26 @@ async function confirmVersionSwitch(version, isRollback) {
         onConfirm: async () => {
             closeModal('system-update-modal');
             
-            // Ekran qaralma/loading animasiyasını dərhal başlat
-            showVersionSwitchProgress();
-            
             try {
-                addActivityLog(`Versiya keçidi: ${version} (${action})`, 'update');
-                await fetch('/api/system/update', {
+                addActivityLog(`Versiya keçidi başladılır: ${version}`, 'update');
+                const res = await fetch('/api/system/update', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ version: version })
                 });
+
+                if (res.ok) {
+                    // Pull və proses uğurludur, loading ekranını açırıq
+                    showVersionSwitchProgress();
+                } else {
+                    const errMsg = await res.text();
+                    showInfoCard('❌ Keçid Baş tutmadı', 'Docker Pull Xətası', errMsg);
+                }
             } catch(e) {
-                // Əgər bağlantı kəsilərsə bu normaldır, çünki docker container sönür.
-                // Lakin gözlənilməz digər xətalar üçün log yazırıq.
-                addActivityLog(`Yenilənmə başladıldı (Bağlantı kəsildi/Yenidən başlayır)`, 'update');
+                // Şəbəkə kəsilməsi (fetch-in yarıda qalması) serverin sönməsi deməkdir.
+                // Buna görə əgər xəta baş verərsə lakin heç bir HTTP statusu yoxdursa, böyük ehtimal update başlayıb.
+                // Ancaq ehtiyat üçün 3 saniyə gözləyib yenidən yoxlama loadingini göstərə bilərik.
+                showVersionSwitchProgress();
             }
         }
     });
