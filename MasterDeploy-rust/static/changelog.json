@@ -1,13 +1,47 @@
 [
   {
+    "version": "v1.0.17",
+    "changes": [
+      "NEW badge-i silindi - artıq ən son versiyadasınızsa heç nə göstərilmir.",
+      "UPDATE badge-i yalnız yeni versiya olduqda çıxır."
+    ]
+  },
+  {
+    "version": "v1.0.16",
+    "changes": [
+      "UPDATE badge-i birbaşa kliklenebilir edildi - basanda yeniliklər göstərib qurur.",
+      "Versiya nömrəsinə klikləndikdə Versiyalar/Rollback pəncərəsi açılır."
+    ]
+  },
+  {
     "version": "v1.0.15",
     "changes": [
       "GitHub Actions Docker tag mexanizmi düzəldildi - GITHUB_OUTPUT istifadə edildi.",
       "Versiyaların GHCR-da düzgün saxlanılması təmin edildi (latest + vX.X.X).",
-      "Versiya siyahısına köhnə versiyalar əlavə edildi (v1.0.8 - v1.0.14).",
       "Avtomatik versiya artırılması söndürüldü - əllə idarə olunur.",
-      "Yeniləmə/Rollback pəncərəsinin modal CSS sinifləri düzəldildi.",
+      "Modal pəncərələri düzgün CSS sinifləri ilə işlədildi.",
       "ℹ️ ikonu versiya nömrəsinin soluna keçirildi."
+    ]
+  },
+  {
+    "version": "v1.0.14",
+    "changes": [
+      "Versiya siyahısına köhnə versiyalar əlavə edildi (v1.0.8 - v1.0.14).",
+      "Sidebar badge dizaynı yeniləndi."
+    ]
+  },
+  {
+    "version": "v1.0.13",
+    "changes": [
+      "Kömək Mərkəzi tabları düzəldildi.",
+      "Help/Docs modal pəncərəsi tam işlək edildi."
+    ]
+  },
+  {
+    "version": "v1.0.12",
+    "changes": [
+      "Versiya nömrəsinin altından xətt çəkildi - kliklenebilir edildi.",
+      "Sual ikonu (?) sağdan sola keçirildi."
     ]
   },
   {
@@ -40,6 +74,57 @@
       "App details panel yeniləndi.",
       "Serverlərin real-time status yenilənməsi düzəldildi.",
       "GitHub PAT inteqrasiyası genişləndirildi."
+    ]
+  },
+  {
+    "version": "v1.0.7",
+    "changes": [
+      "Deploy prosesi zamanı mərhələ göstəriciləri əlavə edildi.",
+      "Log terminal dizaynı yeniləndi."
+    ]
+  },
+  {
+    "version": "v1.0.6",
+    "changes": [
+      "Çoxlu deployment xətaları düzəldildi.",
+      "Cancel deployment funksiyası əlavə edildi.",
+      "Server stats (CPU, RAM) real-time göstəricisi əlavə edildi."
+    ]
+  },
+  {
+    "version": "v1.0.5",
+    "changes": [
+      "GitHub repozitoriya siyahısı avtomatik yüklənməsi əlavə edildi.",
+      "App yaradarkən repo seçimi dropdown-a çevrildi."
+    ]
+  },
+  {
+    "version": "v1.0.4",
+    "changes": [
+      "SSH açar saxlama sistemi quruldu.",
+      "Server əlavə etmə formu genişləndirildi."
+    ]
+  },
+  {
+    "version": "v1.0.3",
+    "changes": [
+      "SQLite verilənlər bazası inteqrasiyası tamamlandı.",
+      "Server və App modelləri yaradıldı."
+    ]
+  },
+  {
+    "version": "v1.0.2",
+    "changes": [
+      "Docker-based deployment sistemi üçün ilk prototip.",
+      "Əsas API endpoint-ləri (servers, apps, deploy) yaradıldı."
+    ]
+  },
+  {
+    "version": "v1.0.1",
+    "changes": [
+      "Layihənin ilk versiyası.",
+      "Rust + Axum backend quruldu.",
+      "Əsas UI strukturu (sidebar, dashboard) yaradıldı."
     ]
   }
 ]
