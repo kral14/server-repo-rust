@@ -1,10 +1,43 @@
 [
   {
+    "version": "v1.0.15",
+    "changes": [
+      "Versiya nömrəsinin avtomatik artırılması söndürüldü - versiya əllə idarə olunur.",
+      "UI: NEW / UPDATE badge-ləri əlavə edildi.",
+      "İnfo (ℹ️) ikonu sol tərəfə keçirildi.",
+      "Modal pəncərələri düzgün CSS class-larla işlədildi."
+    ]
+  },
+  {
     "version": "v1.0.11",
     "changes": [
       "Panel üçün Kömək və Versiya Mərkəzi əlavə edildi.",
       "Rollback (Köhnə versiyaya qayıdış) və Vebdən manuel Update sistemi quruldu.",
       "Watchtower silindi və yeniləməyə tam idarəetmə verildi."
+    ]
+  },
+  {
+    "version": "v1.0.10",
+    "changes": [
+      "Sidebar-da NEW/UPDATE badge sistemi quruldu.",
+      "Versiya müqayisəsi (lokal vs GitHub) məntiqinin ilk versiyası.",
+      "Docker image-ları versiya tag-i ilə qeyd edilməyə başlandı."
+    ]
+  },
+  {
+    "version": "v1.0.9",
+    "changes": [
+      "Runtime log streaming əlavə edildi.",
+      "Deployment log konsolu UI-a inteqrasiya edildi.",
+      "Bir neçə UI stabillik xətası aradan qaldırıldı."
+    ]
+  },
+  {
+    "version": "v1.0.8",
+    "changes": [
+      "App details panel yeniləndi.",
+      "Serverlərin real-time status yenilənməsi düzəldildi.",
+      "GitHub PAT inteqrasiyası genişləndirildi."
     ]
   }
 ]

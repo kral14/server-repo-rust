@@ -39,8 +39,8 @@ def bump_cargo_version():
 def main():
     print("Preparing to push to server-repo-rust...\n")
     
-    # Avtomatik versiya artırılması
-    bump_cargo_version()
+    # Versiya artırılması ƏLLƏ idarə olunur, avtomatik deyil
+    # bump_cargo_version()  ← SÖNDÜRÜLDÜ
     
     # 1. Bütün alt .git qovluqlarını silək (submodule xətasının qarşısını almaq üçün)
     for root, dirs, files in os.walk(ROOT_DIR):
