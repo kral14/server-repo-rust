@@ -2,10 +2,12 @@
   {
     "version": "v1.0.15",
     "changes": [
-      "Versiya nömrəsinin avtomatik artırılması söndürüldü - versiya əllə idarə olunur.",
-      "UI: NEW / UPDATE badge-ləri əlavə edildi.",
-      "İnfo (ℹ️) ikonu sol tərəfə keçirildi.",
-      "Modal pəncərələri düzgün CSS class-larla işlədildi."
+      "GitHub Actions Docker tag mexanizmi düzəldildi - GITHUB_OUTPUT istifadə edildi.",
+      "Versiyaların GHCR-da düzgün saxlanılması təmin edildi (latest + vX.X.X).",
+      "Versiya siyahısına köhnə versiyalar əlavə edildi (v1.0.8 - v1.0.14).",
+      "Avtomatik versiya artırılması söndürüldü - əllə idarə olunur.",
+      "Yeniləmə/Rollback pəncərəsinin modal CSS sinifləri düzəldildi.",
+      "ℹ️ ikonu versiya nömrəsinin soluna keçirildi."
     ]
   },
   {
