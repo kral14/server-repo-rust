@@ -66,18 +66,8 @@
                 <button class="nav-btn" onclick="showModal('github-modal')"
                     style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">⚙️
                     GitHub Ayarları</button>
+                <button class="nav-btn" onclick="showModal('activity-log-modal')" style="margin-top: 0.5rem;">📋 Fəaliyyət Jurnalı</button>
             </nav>
-
-            <!-- Fəaliyyət Jurnalı -->
-            <div style="margin-top: 1.5rem; flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0;">
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 0.25rem; margin-bottom: 0.6rem;">
-                    <span style="font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">📋 Jurnal</span>
-                    <button onclick="clearActivityLogs()" style="background: none; border: none; color: var(--text-secondary); font-size: 0.65rem; cursor: pointer; padding: 2px 5px; border-radius: 3px; opacity: 0.6; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'" title="Təmizlə">təmizlə</button>
-                </div>
-                <div id="activity-log-list" style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; padding-right: 2px;">
-                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-align: center; padding: 8px; opacity: 0.5;">Hərəkət yoxdur</div>
-                </div>
-            </div>
 
             <div class="theme-toggle-container" style="padding-bottom: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--card-border); margin-top: 0.75rem;">
                 <button id="theme-toggle-btn" class="btn btn-secondary"
@@ -1041,6 +1031,26 @@
             </div>
             <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border);">
                 <button class="btn btn-secondary" onclick="closeModal('system-update-modal')">Bağla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fəaliyyət Jurnalı Modal -->
+    <div id="activity-log-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 500px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem;">📋 Fəaliyyət Jurnalı</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Panel daxilində icra edilmiş hərəkətlər</p>
+                </div>
+                <button onclick="closeModal('activity-log-modal')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">✕</button>
+            </div>
+            <div id="activity-log-list" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; padding-bottom: 10px;">
+                <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>
+            </div>
+            <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border);">
+                <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important;">🧹 Jurnalı Təmizlə</button>
+                <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')">Bağla</button>
             </div>
         </div>
     </div>

@@ -2197,17 +2197,19 @@ function renderActivityLogs() {
     if (!container) return;
     const logs = JSON.parse(localStorage.getItem('activity_logs') || '[]');
     if (logs.length === 0) {
-        container.innerHTML = '<div style="font-size: 0.7rem; color: var(--text-secondary); text-align: center; padding: 8px; opacity: 0.5;">Hərəkət yoxdur</div>';
+        container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>';
         return;
     }
     container.innerHTML = logs.map(l => {
         const meta = LOG_ICONS[l.type] || LOG_ICONS.info;
-        return `<div style="display:flex; align-items:flex-start; gap:6px; padding:5px 6px; border-radius:6px; background:rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);">
-            <span style="font-size:0.75rem; flex-shrink:0; margin-top:1px;">${meta.icon}</span>
-            <div style="flex:1; min-width:0;">
-                <div style="font-size:0.68rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${l.message}">${l.message}</div>
-                <div style="font-size:0.6rem; color:var(--text-secondary); margin-top:1px;">${l.time}</div>
+        return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.02); border: 1px solid var(--card-border); margin-bottom: 2px;">
+            <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+                <span style="font-size:1.1rem; flex-shrink:0; display:flex; align-items:center; justify-content:center; width:28px; height:28px; background:rgba(255,255,255,0.03); border-radius:8px;">${meta.icon}</span>
+                <div style="flex:1; min-width:0;">
+                    <div style="font-size:0.82rem; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis;" title="${l.message}">${l.message}</div>
+                </div>
             </div>
+            <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace; opacity:0.8; flex-shrink:0;">${l.time}</span>
         </div>`;
     }).join('');
 }
