@@ -1877,3 +1877,136 @@ function deleteAppFromDetails() {
     if (!currentAppDetailsId || !currentAppDetailsName) return;
     deleteApp(currentAppDetailsId, currentAppDetailsName);
 }
+
+// --- Help Center & System Update ---
+async function fetchChangelog() {
+    try {
+        const res = await fetch('/api/system/changelog');
+        return await res.json();
+    } catch(e) { return []; }
+}
+
+async function fetchDocs() {
+    try {
+        const res = await fetch('/api/system/docs');
+        return await res.json();
+    } catch(e) { return {}; }
+}
+
+let systemVersions = [];
+
+async function initSystemUpdates() {
+    const changelog = await fetchChangelog();
+    systemVersions = changelog;
+    
+    try {
+        const vRes = await fetch('/api/version');
+        const vData = await vRes.json();
+        const currentVersion = vData.version;
+        const currentVersionNumber = parseInt(currentVersion.replace(/[^0-9]/g, '')) || 0;
+        
+        let hasNewer = false;
+        if(changelog.length > 0) {
+            const latestVersion = changelog[0].version;
+            const latestVersionNumber = parseInt(latestVersion.replace(/[^0-9]/g, '')) || 0;
+            if (latestVersionNumber > currentVersionNumber) {
+                hasNewer = true;
+            }
+        }
+        
+        const badgeSpan = document.getElementById('app-version');
+        if(badgeSpan) {
+            if (hasNewer) {
+                badgeSpan.innerHTML = `v${currentVersion} <span onclick="openSystemUpdateModal()" style="background: var(--primary-color); color: white; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.55rem; margin-left: 5px;">YENİLƏ</span>`;
+            } else {
+                badgeSpan.innerHTML = `v${currentVersion} <span onclick="openSystemUpdateModal()" style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.55rem; margin-left: 5px;">Versiyalar</span>`;
+            }
+        }
+        
+        const select = document.getElementById('system-version-select');
+        if(select) {
+            select.innerHTML = '';
+            changelog.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.version;
+                opt.textContent = `${v.version}${v.version === currentVersion || v.version === 'v' + currentVersion ? ' (Hazırki)' : ''}`;
+                select.appendChild(opt);
+            });
+        }
+    } catch(e) {}
+}
+
+function openSystemUpdateModal() {
+    showModal('system-update-modal');
+    updateSelectedVersionChanges();
+}
+
+function updateSelectedVersionChanges() {
+    const select = document.getElementById('system-version-select');
+    if(!select) return;
+    const v = select.value;
+    const versionObj = systemVersions.find(x => x.version === v);
+    const div = document.getElementById('selected-version-changes');
+    if(versionObj && versionObj.changes) {
+        div.innerHTML = `<b>Bu versiyadakı yeniliklər:</b><ul style="padding-left:20px;margin-top:5px;margin-bottom:0;">` + versionObj.changes.map(c => `<li>${c}</li>`).join('') + `</ul>`;
+    } else {
+        div.innerHTML = '';
+    }
+}
+
+async function confirmSystemUpdate() {
+    const select = document.getElementById('system-version-select');
+    const v = select.value;
+    if(!confirm(`Panelin ${v} versiyasını qurmaq istədiyinizdən əminsiniz? Bu əməliyyat paneli qısa müddətə söndürüb yenidən işə salacaq.`)) return;
+    
+    closeModal('system-update-modal');
+    try {
+        await fetch('/api/system/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ version: v })
+        });
+        alert('Yeniləmə sorğusu göndərildi! Panel 5-10 saniyə ərzində yenidən başladılacaq. Zəhmət olmasa bir az gözləyib səhifəni yeniləyin.');
+    } catch(e) {
+        alert('Xəta baş verdi!');
+    }
+}
+
+async function openHelpCenter() {
+    showModal('help-modal');
+    switchHelpTab('help-changelog');
+    
+    const clog = document.getElementById('help-changelog');
+    clog.innerHTML = 'Yüklənir...';
+    if(systemVersions.length === 0) systemVersions = await fetchChangelog();
+    clog.innerHTML = systemVersions.map(v => `<div style="margin-bottom: 20px;">
+        <h3 style="margin-bottom:10px; color:var(--primary-color);">${v.version}</h3>
+        <ul style="padding-left:20px; color:var(--text-secondary); line-height:1.6;">
+            ${v.changes.map(c => `<li>${c}</li>`).join('')}
+        </ul>
+    </div>`).join('<hr style="border:0; border-top:1px solid var(--card-border); margin:15px 0;">');
+    
+    const docs = await fetchDocs();
+    document.getElementById('help-about').innerText = docs.proqram_haqqinda || '';
+    document.getElementById('help-external').innerText = docs.xarici_server || '';
+    document.getElementById('help-local').innerText = docs.lokal_server || '';
+}
+
+function switchHelpTab(tabId) {
+    document.querySelectorAll('.help-tab-content').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.help-tab-btn').forEach(el => {
+        el.style.color = 'var(--text-secondary)';
+        el.style.borderBottom = '2px solid transparent';
+    });
+    
+    document.getElementById(tabId).style.display = 'block';
+    const activeBtn = Array.from(document.querySelectorAll('.help-tab-btn')).find(b => b.getAttribute('onclick').includes(tabId));
+    if(activeBtn) {
+        activeBtn.style.color = 'var(--text-primary)';
+        activeBtn.style.borderBottom = '2px solid var(--primary-color)';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initSystemUpdates();
+});

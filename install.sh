@@ -101,20 +101,8 @@ echo "======================================"
 # Mounting a volume for masterdeploy.db so data persists across container restarts
 docker run -d --name masterdeploy --restart always -p 3000:3000 \
   -v masterdeploy-data:/app/data \
-  ghcr.io/kral14/server-repo-rust:latest
-
-echo "======================================"
-echo "[SETUP] Watchtower qurulur (Avtomatik yenilənmə üçün)..."
-echo "======================================"
-docker stop watchtower 2>/dev/null || true
-docker rm watchtower 2>/dev/null || true
-docker run -d \
-  --name watchtower \
-  --restart unless-stopped \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  containrrr/watchtower \
-  --interval 60 \
-  masterdeploy
+  ghcr.io/kral14/server-repo-rust:latest
 
 IP_ADDR=$(curl -s ifconfig.me || echo "SERVER_IP")
 whiptail --title "Təbrik edirik! 🎉" --msgbox "MasterDeploy uğurla quruldu və işə salındı!\n\nBrauzerdə daxil olun:\nhttp://$IP_ADDR:3000" 12 60

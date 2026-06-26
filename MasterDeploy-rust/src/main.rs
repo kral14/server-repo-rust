@@ -38,6 +38,9 @@ async fn main() {
         .route("/api/deployments/:app_id", get(list_deployments))
         .route("/api/runtime-logs/:app_id", get(get_runtime_logs))
         .route("/api/version", get(get_version))
+        .route("/api/system/changelog", get(get_changelog))
+        .route("/api/system/docs", get(get_docs))
+        .route("/api/system/update", post(trigger_system_update))
         .layer(CorsLayer::permissive())
         .with_state(state);
 
@@ -917,4 +920,54 @@ async fn trigger_deployment(
     });
 
     Ok(Json(deployment))
+}
+
+async fn get_changelog() -> axum::response::Response {
+    let url = "https://raw.githubusercontent.com/kral14/server-repo-rust/main/MasterDeploy-rust/static/changelog.json";
+    let output = std::process::Command::new("curl").args(["-s", url]).output();
+    let text = if let Ok(out) = output {
+        String::from_utf8_lossy(&out.stdout).to_string()
+    } else {
+        "[]".to_string()
+    };
+    axum::response::Response::builder()
+        .header("Content-Type", "application/json")
+        .body(axum::body::Body::from(text))
+        .unwrap()
+}
+
+async fn get_docs() -> axum::response::Response {
+    let url = "https://raw.githubusercontent.com/kral14/server-repo-rust/main/MasterDeploy-rust/static/docs.json";
+    let output = std::process::Command::new("curl").args(["-s", url]).output();
+    let text = if let Ok(out) = output {
+        String::from_utf8_lossy(&out.stdout).to_string()
+    } else {
+        "{}".to_string()
+    };
+    axum::response::Response::builder()
+        .header("Content-Type", "application/json")
+        .body(axum::body::Body::from(text))
+        .unwrap()
+}
+
+#[derive(serde::Deserialize)]
+struct UpdatePayload {
+    version: String,
+}
+
+async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> StatusCode {
+    let version = payload.version;
+    let image = format!("ghcr.io/kral14/server-repo-rust:{}", version);
+    let _ = std::process::Command::new("docker").args(["pull", &image]).status();
+
+    let script = format!(
+        "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && docker run -d --name masterdeploy --restart always -p 3000:3000 -v masterdeploy-data:/app/data -v /var/run/docker.sock:/var/run/docker.sock {}",
+        image
+    );
+
+    let _ = std::process::Command::new("docker")
+        .args(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", &image, "sh", "-c", &script])
+        .spawn();
+
+    StatusCode::OK
 }

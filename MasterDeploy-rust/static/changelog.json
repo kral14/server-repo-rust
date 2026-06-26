@@ -1,0 +1,10 @@
+[
+  {
+    "version": "v1.0.11",
+    "changes": [
+      "Panel üçün Kömək və Versiya Mərkəzi əlavə edildi.",
+      "Rollback (Köhnə versiyaya qayıdış) və Vebdən manuel Update sistemi quruldu.",
+      "Watchtower silindi və yeniləməyə tam idarəetmə verildi."
+    ]
+  }
+]
