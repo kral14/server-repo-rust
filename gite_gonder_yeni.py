@@ -39,8 +39,8 @@ def bump_cargo_version():
 def main():
     print("Preparing to push to server-repo-rust...\n")
     
-    # Versiya artırılması ƏLLƏ idarə olunur, avtomatik deyil
-    # bump_cargo_version()  ← SÖNDÜRÜLDÜ
+    # Hər push-da versiya avtomatik artır ki, Docker-də yeni tag yaransın
+    new_version = bump_cargo_version()
     
     # 1. Bütün alt .git qovluqlarını silək (submodule xətasının qarşısını almaq üçün)
     for root, dirs, files in os.walk(ROOT_DIR):

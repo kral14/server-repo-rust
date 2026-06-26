@@ -1917,9 +1917,10 @@ async function initSystemUpdates() {
         const badgeSpan = document.getElementById('app-version');
         if(badgeSpan) {
             if (hasNewer) {
-                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--primary-color); font-weight: bold;" title="Klikləyərək yeniləyin">v${currentVersion}</span> <span style="background: var(--primary-color); color: white; border-radius: 4px; padding: 2px 5px; font-size: 0.5rem; margin-left: 3px; cursor: default;">UPDATE</span>`;
+                const latestVer = changelog[0].version;
+                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--text-secondary);" title="Versiyalara bax">v${currentVersion}</span> <span onclick="quickUpdate('${latestVer}')" style="background: var(--primary-color); color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.5rem; margin-left: 3px; cursor: pointer; font-weight: bold;" title="${latestVer} versiyasına yüklə">UPDATE</span>`;
             } else {
-                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px;" title="Versiyalar">v${currentVersion}</span> <span style="background: var(--success-color); color: white; border-radius: 4px; padding: 2px 5px; font-size: 0.5rem; margin-left: 3px; cursor: default;">NEW</span>`;
+                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--text-secondary);" title="Versiyalara bax">v${currentVersion}</span> <span style="background: #27ae60; color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.5rem; margin-left: 3px; cursor: default;">NEW</span>`;
             }
         }
         
@@ -1934,6 +1935,26 @@ async function initSystemUpdates() {
             });
         }
     } catch(e) {}
+}
+
+async function quickUpdate(version) {
+    const versionObj = systemVersions.find(x => x.version === version);
+    let changesList = '';
+    if(versionObj && versionObj.changes) {
+        changesList = '\n\nYeniliklər:\n• ' + versionObj.changes.join('\n• ');
+    }
+    if(!confirm(`${version} versiyasına yüksəltmək istəyirsiniz?${changesList}\n\nPanel 5-10 saniyə söndürülüb yenidən başladılacaq.`)) return;
+    
+    try {
+        await fetch('/api/system/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ version: version })
+        });
+        alert('Yeniləmə başladıldı! 10 saniyə sonra səhifəni yeniləyin.');
+    } catch(e) {
+        alert('Xəta baş verdi!');
+    }
 }
 
 function openSystemUpdateModal() {
