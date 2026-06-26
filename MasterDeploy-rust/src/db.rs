@@ -3,7 +3,7 @@ use std::fs::File;
 use std::path::Path;
 
 pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
-    let db_dir = "/data/masterdeploy";
+    let db_dir = "/app/data";
     let db_path = format!("{}/masterdeploy.db", db_dir);
 
     // Create directory if it doesn't exist
