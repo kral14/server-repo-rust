@@ -22,7 +22,6 @@ class RemoteInstallerGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("MasterDeploy Quraşdırıcı 🚀 (Remote & Local)")
-        self.root.geometry("850x780")
         self.root.configure(bg=BG_COLOR, padx=20, pady=10)
         
         # Fontlar
@@ -32,16 +31,24 @@ class RemoteInstallerGUI:
         self.font_btn = ("Segoe UI", 9, "bold")
         self.font_console = ("Consolas", 9)
 
-        # --- Başlıq ---
-        tk.Label(root, text="MİNİ-COOLİFY İDARƏETMƏ MƏRKƏZİ", font=self.font_title, bg=BG_COLOR, fg=ACCENT_COLOR).pack(pady=(0, 10))
-        
+        # Config yüklənir (pəncərə ölçüsü daxil olmaqla)
+        self.load_config()
+
+        # Ölçü dəyişəndə avtomatik save_config çağırmaq üçün event bağlayırıq
+        self.root.bind("<Configure>", lambda e: self.save_window_geometry())
+
+        # Monitorinq dəyişənləri
+        self.monitoring_active = False
+
         # --- Notebook (Tabs) ---
         style = ttk.Style()
         style.theme_use('default')
-        style.configure('TNotebook.Tab', font=self.font_label, padding=[10, 5])
+        style.configure('TNotebook', background=BG_COLOR, borderwidth=0)
+        style.configure('TNotebook.Tab', font=self.font_label, padding=[12, 6], background=CARD_COLOR, foreground=TEXT_COLOR)
+        style.map('TNotebook.Tab', background=[('selected', ACCENT_COLOR)], foreground=[('selected', 'black')])
         
         self.notebook = ttk.Notebook(root)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+        self.notebook.pack(fill=tk.BOTH, expand=True, pady=(5, 5))
         
         self.tab_remote = tk.Frame(self.notebook, bg=BG_COLOR)
         self.tab_local = tk.Frame(self.notebook, bg=BG_COLOR)
@@ -73,78 +80,129 @@ class RemoteInstallerGUI:
     # ==========================================
     # REMOTE TAB (UZAQ SERVER)
     # ==========================================
+    # ==========================================
+    # REMOTE TAB (UZAQ SERVER)
+    # ==========================================
+    # ==========================================
+    # REMOTE TAB (UZAQ SERVER)
+    # ==========================================
     def setup_remote_tab(self):
-        form_frame = tk.Frame(self.tab_remote, bg=CARD_COLOR, bd=0, relief=tk.FLAT, highlightbackground="#333", highlightthickness=1)
-        form_frame.pack(fill=tk.X, pady=10, ipady=10, ipadx=10)
+        # 1. Giriş Məlumatları və Konfiqurasiya YANA-YANA (Horizontal Split)
+        top_split_frame = tk.Frame(self.tab_remote, bg=BG_COLOR)
+        top_split_frame.pack(fill=tk.X, pady=5)
         
-        tk.Label(form_frame, text="Server IP:", font=self.font_label, bg=CARD_COLOR, fg=TEXT_COLOR).grid(row=0, column=0, sticky=tk.W, pady=5, padx=10)
-        self.ip_entry = tk.Entry(form_frame, width=35, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
-        self.ip_entry.grid(row=0, column=1, pady=5, padx=10, ipady=4)
+        # Sol tərəf: Giriş məlumatları
+        cred_lf = tk.LabelFrame(top_split_frame, text=" 🔐 Server Giriş Məlumatları ", font=(self.font_label[0], 9, "bold"), bg=BG_COLOR, fg=ACCENT_COLOR, bd=1, relief=tk.GROOVE)
+        cred_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5), ipady=5)
         
-        tk.Label(form_frame, text="İstifadəçi adı:", font=self.font_label, bg=CARD_COLOR, fg=TEXT_COLOR).grid(row=1, column=0, sticky=tk.W, pady=5, padx=10)
-        self.user_entry = tk.Entry(form_frame, width=35, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        tk.Label(cred_lf, text="Server IP:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=0, column=0, sticky=tk.W, pady=4, padx=8)
+        self.ip_entry = tk.Entry(cred_lf, width=22, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.ip_entry.grid(row=0, column=1, pady=4, padx=8, ipady=3)
+        
+        tk.Label(cred_lf, text="İstifadəçi:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=1, column=0, sticky=tk.W, pady=4, padx=8)
+        self.user_entry = tk.Entry(cred_lf, width=22, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
         self.user_entry.insert(0, "ubuntu")
-        self.user_entry.grid(row=1, column=1, pady=5, padx=10, ipady=4)
+        self.user_entry.grid(row=1, column=1, pady=4, padx=8, ipady=3)
         
-        tk.Label(form_frame, text="SSH Açarı:", font=self.font_label, bg=CARD_COLOR, fg=TEXT_COLOR).grid(row=2, column=0, sticky=tk.W, pady=5, padx=10)
-        key_frame = tk.Frame(form_frame, bg=CARD_COLOR)
-        key_frame.grid(row=2, column=1, sticky=tk.W, padx=10)
-        self.key_entry = tk.Entry(key_frame, width=27, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
-        self.key_entry.pack(side=tk.LEFT, ipady=4)
-        self.create_button(key_frame, "Seç", "#555", self.browse_key).pack(side=tk.LEFT, padx=10, ipady=2, ipadx=10)
+        tk.Label(cred_lf, text="SSH Açarı:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=2, column=0, sticky=tk.W, pady=4, padx=8)
+        key_frame = tk.Frame(cred_lf, bg=BG_COLOR)
+        key_frame.grid(row=2, column=1, sticky=tk.W, padx=8)
+        self.key_entry = tk.Entry(key_frame, width=15, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.key_entry.pack(side=tk.LEFT, ipady=3)
+        self.create_button(key_frame, "Seç", "#555", self.browse_key).pack(side=tk.LEFT, padx=3, ipady=1, ipadx=5)
 
-        tk.Label(form_frame, text="Swap (GB):", font=self.font_label, bg=CARD_COLOR, fg=BTN_CHECK).grid(row=3, column=0, sticky=tk.W, pady=5, padx=10)
-        self.swap_entry = tk.Entry(form_frame, width=15, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
-        self.swap_entry.grid(row=3, column=1, sticky=tk.W, pady=5, padx=10, ipady=4)
+        # Sağ tərəf: Konfiqurasiyalar
+        config_lf = tk.LabelFrame(top_split_frame, text=" ⚙️ Konfiqurasiya ", font=(self.font_label[0], 9, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
+        config_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0), ipady=5)
 
-        tk.Label(form_frame, text="Panel Portu:", font=self.font_label, bg=CARD_COLOR, fg=TEXT_COLOR).grid(row=4, column=0, sticky=tk.W, pady=5, padx=10)
-        self.panel_port_entry = tk.Entry(form_frame, width=15, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
-        self.panel_port_entry.grid(row=4, column=1, sticky=tk.W, pady=5, padx=10, ipady=4)
+        tk.Label(config_lf, text="Swap (GB):", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=0, column=0, sticky=tk.W, pady=4, padx=8)
+        self.swap_entry = tk.Entry(config_lf, width=12, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.swap_entry.grid(row=0, column=1, sticky=tk.W, pady=4, padx=8, ipady=3)
 
-        tk.Label(form_frame, text="Portainer Portu:", font=self.font_label, bg=CARD_COLOR, fg=TEXT_COLOR).grid(row=5, column=0, sticky=tk.W, pady=5, padx=10)
-        self.portainer_port_entry = tk.Entry(form_frame, width=15, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
-        self.portainer_port_entry.grid(row=5, column=1, sticky=tk.W, pady=5, padx=10, ipady=4)
+        tk.Label(config_lf, text="Panel Portu:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=1, column=0, sticky=tk.W, pady=4, padx=8)
+        self.panel_port_entry = tk.Entry(config_lf, width=12, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.panel_port_entry.grid(row=1, column=1, sticky=tk.W, pady=4, padx=8, ipady=3)
 
-        # Düymələr
-        btn_frame = tk.Frame(self.tab_remote, bg=BG_COLOR)
-        btn_frame.pack(fill=tk.X, pady=5)
-        self.btn_check = self.create_button(btn_frame, "🔗 Yoxla", BTN_CHECK, self.test_connection)
-        self.btn_check.grid(row=0, column=0, padx=3, ipady=4, ipadx=3)
-        self.btn_prep = self.create_button(btn_frame, "🛠️ Hazırla", BTN_PREP, lambda: self.run_remote_task(self.get_cmd_prep))
-        self.btn_prep.grid(row=0, column=1, padx=3, ipady=4, ipadx=3)
-        self.btn_panel = self.create_button(btn_frame, "🚀 Paneli Qur", BTN_PANEL, lambda: self.run_remote_task(self.get_cmd_panel))
-        self.btn_panel.grid(row=0, column=2, padx=3, ipady=4, ipadx=3)
-        self.btn_all = self.create_button(btn_frame, "🌟 Tam Qur", BTN_ALL, lambda: self.run_remote_task(self.get_cmd_all))
-        self.btn_all.grid(row=0, column=3, padx=3, ipady=4, ipadx=3)
+        tk.Label(config_lf, text="Portainer Port:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=2, column=0, sticky=tk.W, pady=4, padx=8)
+        self.portainer_port_entry = tk.Entry(config_lf, width=12, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.portainer_port_entry.grid(row=2, column=1, sticky=tk.W, pady=4, padx=8, ipady=3)
 
-        extra_btn_frame = tk.Frame(self.tab_remote, bg=BG_COLOR)
-        extra_btn_frame.pack(fill=tk.X, pady=5)
-        self.btn_reboot = self.create_button(extra_btn_frame, "🔄 Restart", BTN_REBOOT, self.remote_reboot, fg="black")
-        self.btn_reboot.grid(row=0, column=0, padx=3, ipady=4, ipadx=5)
-        self.btn_clean = self.create_button(extra_btn_frame, "🗑️ Təmizlə", BTN_CLEAN, lambda: self.run_remote_task(self.get_cmd_clean, confirm="Serveri tamamilə sıfırlamaq istəyirsiniz?"))
-        self.btn_clean.grid(row=0, column=1, padx=3, ipady=4, ipadx=5)
-        self.btn_portainer = self.create_button(extra_btn_frame, "🐳 Portainer", "#00A2D3", lambda: self.run_remote_task(self.get_cmd_portainer))
-        self.btn_portainer.grid(row=0, column=2, padx=3, ipady=4, ipadx=5)
-        self.btn_token = self.create_button(extra_btn_frame, "🔑 Token Yarat", "#8E44AD", lambda: self.trigger_portainer_token(is_local=False))
-        self.btn_token.grid(row=0, column=3, padx=3, ipady=4, ipadx=5)
+        # 2. Port İdarəetmə Paneli (Yeni Hissə)
+        port_mgmt_lf = tk.LabelFrame(self.tab_remote, text=" 🔌 Firewall Port İdarəetməsi (UFW / Iptables) ", font=(self.font_label[0], 9, "bold"), bg=BG_COLOR, fg="#E74C3C", bd=1, relief=tk.GROOVE)
+        port_mgmt_lf.pack(fill=tk.X, pady=5, ipady=5, ipadx=5)
 
-        self.remote_action_btns = [self.btn_prep, self.btn_panel, self.btn_all, self.btn_reboot, self.btn_clean, self.btn_portainer, self.btn_token]
+        tk.Label(port_mgmt_lf, text="Port:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).pack(side=tk.LEFT, padx=(10, 5))
+        self.target_port_entry = tk.Entry(port_mgmt_lf, width=8, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.target_port_entry.pack(side=tk.LEFT, padx=5, ipady=3)
+
+        self.btn_port_open = self.create_button(port_mgmt_lf, "🔓 Portu Aç", "#27AE60", self.remote_open_port)
+        self.btn_port_open.pack(side=tk.LEFT, padx=5, ipady=3, ipadx=10)
+
+        self.btn_port_close = self.create_button(port_mgmt_lf, "🔒 Portu Bağla", "#C0392B", self.remote_close_port)
+        self.btn_port_close.pack(side=tk.LEFT, padx=5, ipady=3, ipadx=10)
+
+        self.btn_port_list = self.create_button(port_mgmt_lf, "📋 Portları Listələ", "#2980B9", self.remote_list_ports)
+        self.btn_port_list.pack(side=tk.LEFT, padx=10, ipady=3, ipadx=10)
+
+        # Monitor (Düymələrin üstünə)
+        self.monitor_frame = tk.Frame(self.tab_remote, bg="#1a1a1a", highlightbackground=ACCENT_COLOR, highlightthickness=1)
+        self.monitor_frame.pack(fill=tk.X, pady=(5, 10))
+        
+        self.lbl_cpu = tk.Label(self.monitor_frame, text="🟢 CPU: --", bg="#1a1a1a", fg=ACCENT_COLOR, font=("Consolas", 10, "bold"))
+        self.lbl_cpu.pack(side=tk.LEFT, expand=True, pady=6)
+        self.lbl_ram = tk.Label(self.monitor_frame, text="💾 RAM: -- / --", bg="#1a1a1a", fg="#00FF00", font=("Consolas", 10, "bold"))
+        self.lbl_ram.pack(side=tk.LEFT, expand=True, pady=6)
+        self.lbl_swap = tk.Label(self.monitor_frame, text="🔄 SWAP: -- / --", bg="#1a1a1a", fg="#FFCC00", font=("Consolas", 10, "bold"))
+        self.lbl_swap.pack(side=tk.LEFT, expand=True, pady=6)
+
+        # 3. Düymələr Qrupu - YANA-YANA (Horizontal Flow Layout)
+        btn_action_frame = tk.Frame(self.tab_remote, bg=BG_COLOR)
+        btn_action_frame.pack(fill=tk.X, pady=5)
+        
+        # Quraşdırma & İdarəetmə Düymələri
+        setup_lf = tk.LabelFrame(btn_action_frame, text=" 🛠️ Quraşdırma ", font=(self.font_label[0], 8, "bold"), bg=BG_COLOR, fg="#00FF00", bd=1, relief=tk.GROOVE)
+        setup_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+        
+        self.btn_check = self.create_button(setup_lf, "🔗 Yoxla", BTN_CHECK, self.test_connection)
+        self.btn_check.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3, pady=5, ipady=4)
+        self.btn_prep = self.create_button(setup_lf, "🛠️ Hazırla", BTN_PREP, lambda: self.run_remote_task(self.get_cmd_prep))
+        self.btn_prep.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3, pady=5, ipady=4)
+        self.btn_panel = self.create_button(setup_lf, "🚀 Paneli Qur", BTN_PANEL, lambda: self.run_remote_task(self.get_cmd_panel))
+        self.btn_panel.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3, pady=5, ipady=4)
+        self.btn_all = self.create_button(setup_lf, "🌟 Tam Qur", BTN_ALL, lambda: self.run_remote_task(self.get_cmd_all))
+        self.btn_all.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3, pady=5, ipady=4)
+
+        # Sistem & Xidmətlər Düymələri
+        sys_lf = tk.LabelFrame(btn_action_frame, text=" 🖥️ Server & Servislər ", font=(self.font_label[0], 8, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
+        sys_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+
+        self.btn_reboot = self.create_button(sys_lf, "🔄 Restart", BTN_REBOOT, self.remote_reboot, fg="black")
+        self.btn_reboot.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        self.btn_clean = self.create_button(sys_lf, "🗑️ Təmizlə", BTN_CLEAN, lambda: self.run_remote_task(self.get_cmd_clean, confirm="Serveri tamamilə sıfırlamaq istəyirsiniz?"))
+        self.btn_clean.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        self.btn_portainer = self.create_button(sys_lf, "🐳 Portainer", "#00A2D3", lambda: self.run_remote_task(self.get_cmd_portainer))
+        self.btn_portainer.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        self.btn_token = self.create_button(sys_lf, "🔑 Token Yarat", "#8E44AD", lambda: self.trigger_portainer_token(is_local=False))
+        self.btn_token.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+
+        self.remote_action_btns = [self.btn_prep, self.btn_panel, self.btn_all, self.btn_reboot, self.btn_clean, self.btn_portainer, self.btn_token, self.btn_port_open, self.btn_port_close, self.btn_port_list]
         self.toggle_remote_buttons(tk.DISABLED)
 
-        # Monitor
-        self.monitor_frame = tk.Frame(self.tab_remote, bg="#111111", highlightbackground="#00FF00", highlightthickness=1)
-        self.lbl_cpu = tk.Label(self.monitor_frame, text="CPU: --", bg="#111111", fg="#00FF00", font=("Consolas", 9, "bold"))
-        self.lbl_cpu.pack(side=tk.LEFT, expand=True, pady=2)
-        self.lbl_ram = tk.Label(self.monitor_frame, text="RAM: -- / --", bg="#111111", fg="#00FF00", font=("Consolas", 9, "bold"))
-        self.lbl_ram.pack(side=tk.LEFT, expand=True, pady=2)
-        self.lbl_swap = tk.Label(self.monitor_frame, text="SWAP: -- / --", bg="#111111", fg="#00FF00", font=("Consolas", 9, "bold"))
-        self.lbl_swap.pack(side=tk.LEFT, expand=True, pady=2)
+        # Konsol İdarəetmə Alətləri (Zoom In, Zoom Out, Təmizlə, Kopyala, Yenilə)
+        console_header = tk.Frame(self.tab_remote, bg=BG_COLOR)
+        console_header.pack(fill=tk.X, pady=(10, 0))
+        
+        tk.Label(console_header, text="Uzaq Server Çıxışı:", font=self.font_label, bg=BG_COLOR, fg=ACCENT_COLOR).pack(side=tk.LEFT)
+        
+        # Düymələr sağ tərəfdə səliqəli şəkildə sıralandı
+        self.create_button(console_header, "🔄 Logları Yenilə", "#2980B9", self.refresh_remote_logs).pack(side=tk.RIGHT, padx=2)
+        self.create_button(console_header, "📄 Kopyala", "#444", lambda: self.copy_console(self.console_remote)).pack(side=tk.RIGHT, padx=2)
+        self.create_button(console_header, "🗑️ Konsolu Təmizlə", "#C0392B", self.clear_remote_console).pack(side=tk.RIGHT, padx=2)
+        self.create_button(console_header, "🔍 -", "#444", self.zoom_out_remote).pack(side=tk.RIGHT, padx=2, ipadx=4)
+        self.create_button(console_header, "🔍 +", "#444", self.zoom_in_remote).pack(side=tk.RIGHT, padx=2, ipadx=4)
 
-        # Konsol
-        tk.Label(self.tab_remote, text="Uzaq Server Çıxışı:", font=self.font_label, bg=BG_COLOR, fg=ACCENT_COLOR).pack(anchor=tk.W, pady=(10, 0))
         self.console_remote = scrolledtext.ScrolledText(self.tab_remote, height=9, bg="#0A0A0A", fg="#00FF00", font=self.font_console, relief=tk.FLAT, padx=5, pady=5)
         self.console_remote.pack(fill=tk.BOTH, expand=True, pady=5)
-        self.create_button(self.tab_remote, "📄 Kopyala", "#444", lambda: self.copy_console(self.console_remote)).pack(anchor=tk.E)
 
     # ==========================================
     # LOCAL TAB (YERLİ PC)
@@ -249,6 +307,10 @@ class RemoteInstallerGUI:
                     port_val = data.get("portainer_port", "9000")
                     self.portainer_port_entry.insert(0, port_val)
                     self.local_portainer_port_entry.insert(0, port_val)
+                    
+                    # Son yadda saxlanan pəncərə ölçüsünü tətbiq edirik
+                    geom = data.get("geometry", "850x780")
+                    self.root.geometry(geom)
             else:
                 self.user_entry.insert(0, "ubuntu")
                 self.swap_entry.insert(0, "2")
@@ -257,7 +319,14 @@ class RemoteInstallerGUI:
                 self.local_panel_port_entry.insert(0, "3000")
                 self.portainer_port_entry.insert(0, "9000")
                 self.local_portainer_port_entry.insert(0, "9000")
-        except: pass
+                self.root.geometry("850x780")
+        except: 
+            self.root.geometry("850x780")
+
+    def save_window_geometry(self):
+        # Yalnız pəncərə normal vəziyyətdə olanda ölçüsünü save edirik (minimize olanda yox)
+        if self.root.state() == "normal":
+            self.save_config()
 
     def save_config(self):
         try:
@@ -272,17 +341,23 @@ class RemoteInstallerGUI:
                 panel_val = self.local_panel_port_entry.get().strip()
                 portainer_val = self.local_portainer_port_entry.get().strip()
                 
+            # Hazırkı pəncərə ölçüsünü alırıq
+            geom = self.root.geometry()
+            
             data = {
                 "ip": self.ip_entry.get().strip(),
                 "user": self.user_entry.get().strip(),
                 "key": self.key_entry.get().strip(),
                 "swap": swap_val,
                 "panel_port": panel_val,
-                "portainer_port": portainer_val
+                "portainer_port": portainer_val,
+                "geometry": geom
             }
             with open("config.json", "w") as f:
                 json.dump(data, f)
         except: pass
+
+
 
     # ==========================================
     # TOGGLE BUTTONS
@@ -776,6 +851,222 @@ EOF
         except:
             self.root.after(0, lambda: self.toggle_remote_buttons(tk.NORMAL))
 
+
+        
+    def remote_open_port(self):
+        port = self.target_port_entry.get().strip()
+        if not port.isdigit():
+            messagebox.showwarning("Xəta", "Zəhmət olmasa düzgün port daxil edin (məs: 8080)!")
+            return
+        
+        ip = self.ip_entry.get().strip()
+        user = self.user_entry.get().strip()
+        key_path = self.key_entry.get().strip()
+        
+        # Konfiqurasiya edilən xüsusi portları alırıq
+        panel_port = self.panel_port_entry.get().strip() or "3000"
+        portainer_port = self.portainer_port_entry.get().strip() or "9000"
+        
+        self.log_remote(f"\n--- Port {port} uzaq serverdə açılır və xidmət aktivləşdirilir ({ip}) ---")
+        
+        # 1. Portu tapmaq üçün əvvəlcə standart port siyahısından süzürük
+        # 2. Əgər Ports sütunu boşdursa, port dəyərinə görə (3000 -> masterdeploy, 8000/9000 -> portainer) birbaşa adla tapırıq
+        cmd = f"""
+        sudo ufw allow {port}/tcp 2>/dev/null || true; 
+        sudo iptables -I INPUT -p tcp --dport {port} -j ACCEPT 2>/dev/null || true;
+        sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null || true;
+        
+        # Süzgəclə axtarış
+        container_id=$(sudo docker ps -a --format "{{{{.ID}}}} {{{{.Ports}}}}" | grep -E "[:]{port}->|[^0-9]{port}->" | awk '{{print $1}}' | head -n 1)
+        
+        # Əgər süzgəclə tapılmasa (çünki dayandırılmış konteynerin portu siyahıda görünmür), ad uyğunluğuna görə tapırıq
+        if [ -z "$container_id" ]; then
+            if [ "{port}" = "{panel_port}" ]; then
+                container_id=$(sudo docker ps -a --filter name=masterdeploy --format "{{{{.ID}}}}" | head -n 1)
+            elif [ "{port}" = "{portainer_port}" ] || [ "{port}" = "8000" ] || [ "{port}" = "9000" ]; then
+                container_id=$(sudo docker ps -a --filter name=portainer --format "{{{{.ID}}}}" | head -n 1)
+            fi
+        fi
+        
+        if [ ! -z "$container_id" ]; then
+            echo "Konteyner tapıldı ($container_id), arxa planda restart edilir..."
+            nohup sudo docker restart $container_id >/dev/null 2>&1 &
+        else
+            echo "Bu portda heç bir konteyner tapılmadı (adi firewall portu kimi açıldı)."
+        fi
+        sudo netfilter-persistent save 2>/dev/null || true;
+        """
+        
+        def task():
+            ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", "-i", key_path, f"{user}@{ip}", cmd]
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', creationflags=creationflags)
+            if proc.returncode == 0:
+                self.log_remote(proc.stdout)
+                self.log_remote(f"✅ Port {port} açıldı və xidmət işə salındı!")
+            else:
+                self.log_remote(f"❌ Port açılarkən xəta: {proc.stderr}")
+        threading.Thread(target=task, daemon=True).start()
+
+    def remote_close_port(self):
+        port = self.target_port_entry.get().strip()
+        if not port.isdigit():
+            messagebox.showwarning("Xəta", "Zəhmət olmasa düzgün port daxil edin (məs: 8080)!")
+            return
+            
+        ip = self.ip_entry.get().strip()
+        user = self.user_entry.get().strip()
+        key_path = self.key_entry.get().strip()
+        panel_port = self.panel_port_entry.get().strip() or "3000"
+        portainer_port = self.portainer_port_entry.get().strip() or "9000"
+        
+        self.log_remote(f"\n--- Port {port} uzaq serverdə bağlanır və xidmət dayandırılır ({ip}) ---")
+        
+        cmd = f"""
+        # Portu dəqiq mətndən süzərək konteyner ID-sini tapırıq
+        container_ids=$(sudo docker ps -a --format "{{{{.ID}}}} {{{{.Ports}}}}" | grep -E "[:]{port}->|[^0-9]{port}->" | awk '{{print $1}}')
+        
+        # Əgər boşdursa və bizdən panel/portainer portu tələb olunubsa, birbaşa adla axtarırıq
+        if [ -z "$container_ids" ]; then
+            if [ "{port}" = "{panel_port}" ]; then
+                container_ids=$(sudo docker ps -a --filter name=masterdeploy --format "{{{{.ID}}}}")
+            elif [ "{port}" = "{portainer_port}" ] || [ "{port}" = "8000" ] || [ "{port}" = "9000" ]; then
+                container_ids=$(sudo docker ps -a --filter name=portainer --format "{{{{.ID}}}}")
+            fi
+        fi
+        
+        if [ ! -z "$container_ids" ]; then
+            echo "Konteynerlər tapıldı, arxa planda dayandırılır..."
+            nohup sudo docker stop $container_ids >/dev/null 2>&1 &
+        else
+            echo "Bu portu işlədən aktiv konteyner tapılmadı (adi firewall portu kimi qapandı)."
+        fi
+        
+        sudo ufw delete allow {port}/tcp 2>/dev/null || true; 
+        sudo iptables -D INPUT -p tcp --dport {port} -j ACCEPT 2>/dev/null || true;
+        sudo iptables -I DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null || true;
+        sudo netfilter-persistent save 2>/dev/null || true;
+        """
+        
+        def task():
+            ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", "-i", key_path, f"{user}@{ip}", cmd]
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', creationflags=creationflags)
+            if proc.returncode == 0:
+                self.log_remote(f"✅ Port {port} uğurla bağlandı və arxadakı xidmətlər dayandırıldı!")
+            else:
+                self.log_remote(f"❌ Port bağlanarkən xəta: {proc.stderr}")
+        threading.Thread(target=task, daemon=True).start()
+
+    def remote_list_ports(self):
+        ip = self.ip_entry.get().strip()
+        user = self.user_entry.get().strip()
+        key_path = self.key_entry.get().strip()
+        
+        self.log_remote(f"\n--- Uzaq serverdəki Açıq Portların siyahısı ({ip}) ---")
+        
+        # Portların nə üçün istifadə olunduğunu izah edən bash skripti
+        cmd = """
+        echo '=== AÇIQ TCP PORTLARI (Aktiv işləyən xidmətlər) ==='
+        # Həm portu, həm də işləyən proqramın adını çıxarır
+        sudo ss -tlnp | awk 'NR>1 {
+            split($4, a, ":"); 
+            port=a[length(a)]; 
+            split($6, b, "\\""); 
+            proc=b[2];
+            if(proc=="") proc="Bilinməyən xidmət";
+            print "-> Port: " port " [" proc "]"
+        }' | sort -V
+        
+        echo ''
+        echo '=== IPTABLES İCAZƏ VERİLƏN PORTLAR (Server daxilində açılmış qapılar) ==='
+        # Hər bir icazə verilən portu və standart adını göstərir, DOCKER-USER bloklamalarını da yoxlayır
+        sudo iptables -L INPUT -n --line-numbers | grep -i 'ACCEPT' | grep -oE 'dpt:[0-9]+|dports [0-9:,]+' | sed 's/dpt://' | sed 's/dports //' | tr ',' '\\n' | sort -nu | while read -r port; do
+            if [ ! -z "$port" ]; then
+                # Docker-User tərəfindən bloklanıb-bloklanmadığını yoxlayaq
+                is_blocked=$(sudo iptables -L DOCKER-USER -n | grep -i 'DROP' | grep -w "dpt:$port" || echo "")
+                
+                service="Fərdi Xidmət"
+                case "$port" in
+                    22) service="SSH (Serverə Qoşulma)" ;;
+                    80) service="HTTP (Veb Server)" ;;
+                    443) service="HTTPS (Təhlükəsiz Veb)" ;;
+                    3000) service="MasterDeploy Paneli" ;;
+                    7000) service="Portainer Agent (Daxili)" ;;
+                    8000) service="Portainer Veb (HTTP)" ;;
+                    9000) service="Portainer Veb (Alternativ HTTP)" ;;
+                    9443) service="Portainer Veb (HTTPS)" ;;
+                    8080) service="Test/Alternativ Veb Portu" ;;
+                esac
+                
+                if [ ! -z "$is_blocked" ]; then
+                    echo "-> Port: $port ($service) [❌ DOCKER SƏVİYYƏSİNDƏ BLOKLANIB]"
+                else
+                    echo "-> Port: $port ($service) [✅ AÇIQ]"
+                fi
+            fi
+        done
+        if [ -z "$(sudo iptables -L INPUT -n | grep -i 'ACCEPT' | grep -oE 'dpt:[0-9]+|dports [0-9:,]+')" ]; then
+            echo 'iptables-da xüsusi port məhdudiyyəti yoxdur.'
+        fi
+        
+        echo ''
+        echo '⚠️ QEYD: Əgər yuxarıdakı portlardan hansısa Oracle Cloud panelində (Security Rules) açılmayıbsa, ona kənardan (internetdən) daxil olmaq mümkün olmayacaq.'
+        """
+        
+        def task():
+            ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", "-i", key_path, f"{user}@{ip}", cmd]
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', creationflags=creationflags)
+            if proc.returncode == 0:
+                self.log_remote(proc.stdout or "Məlumat yoxdur.")
+            else:
+                self.log_remote(f"❌ Portlar siyahılaşdırılarkən xəta: {proc.stderr or 'Bilinməyən qoşulma xətası'}")
+        threading.Thread(target=task, daemon=True).start()
+
+    def zoom_in_remote(self):
+        try:
+            # Hazırkı şriftin ölçüsünü artırırıq
+            current_size = self.font_console[1]
+            if current_size < 24:
+                self.font_console = (self.font_console[0], current_size + 1)
+                self.console_remote.configure(font=self.font_console)
+        except: pass
+
+    def zoom_out_remote(self):
+        try:
+            # Hazırkı şriftin ölçüsünü azaldırıq
+            current_size = self.font_console[1]
+            if current_size > 6:
+                self.font_console = (self.font_console[0], current_size - 1)
+                self.console_remote.configure(font=self.font_console)
+        except: pass
+
+    def clear_remote_console(self):
+        self.console_remote.delete("1.0", tk.END)
+
+    def refresh_remote_logs(self):
+        ip = self.ip_entry.get().strip()
+        user = self.user_entry.get().strip()
+        key_path = self.key_entry.get().strip()
+        if not ip or not user or not key_path:
+            messagebox.showwarning("Xəta", "Server məlumatları əskikdir!")
+            return
+            
+        self.log_remote("\n--- Arxa plandakı mövcud quraşdırma logları çəkilir... ---")
+        
+        def task():
+            # Serverdə işləyən tapşırığın ən son 50 sətrini çəkirik
+            cmd = "tail -n 50 /tmp/mini_masterdeploy.log 2>/dev/null || echo 'Aktiv tapşırıq logu tapılmadı.'"
+            ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", "-i", key_path, f"{user}@{ip}", cmd]
+            creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+            proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace', creationflags=creationflags)
+            if proc.returncode == 0:
+                self.log_remote(proc.stdout)
+            else:
+                self.log_remote("❌ Loglar yenilənə bilmədi: Serverə qoşulmaq olmur.")
+        threading.Thread(target=task, daemon=True).start()
+
     def remote_reboot(self):
         if not messagebox.askyesno("Təsdiq", "Serveri yenidən başlatmaq istədiyinizə əminsiniz?"): return
         ip = self.ip_entry.get().strip()
@@ -909,25 +1200,27 @@ EOF
         cmd = "free -m | awk 'NR==2{print $2,$3}; NR==3{print $2,$3}'; cat /proc/loadavg | awk '{print $1}'"
         while self.monitoring_active:
             try:
-                ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", "-i", key_path, f"{user}@{ip}", cmd]
+                ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=3", "-i", key_path, f"{user}@{ip}", cmd]
                 creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                 process = subprocess.Popen(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=creationflags)
-                out, _ = process.communicate()
+                # Python-un sonsuz kilidlənməsinin qarşısını almaq üçün 4 saniyə timeout təyin edirik
+                out, _ = process.communicate(timeout=4)
                 if process.returncode == 0:
-                    lines = out.strip().split('\\n')
+                    lines = out.strip().split('\n')
                     if len(lines) >= 3:
                         r_tot, r_used = float(lines[0].split()[0])/1024, float(lines[0].split()[1])/1024
                         s_tot, s_used = float(lines[1].split()[0])/1024, float(lines[1].split()[1])/1024
                         cpu = lines[2]
                         self.root.after(0, self.update_monitor, r_used, r_tot, s_used, s_tot, cpu)
-            except: pass
-            time.sleep(5)
+            except Exception as e:
+                pass
+            time.sleep(6)
 
     def update_monitor(self, ram_u, ram_t, swap_u, swap_t, cpu):
-        self.lbl_cpu.config(text=f"CPU: {cpu}")
-        self.lbl_ram.config(text=f"RAM: {ram_u:.2f}GB / {ram_t:.2f}GB")
-        if swap_t > 0: self.lbl_swap.config(text=f"SWAP: {swap_u:.2f}GB / {swap_t:.2f}GB")
-        else: self.lbl_swap.config(text="SWAP: Yoxdur")
+        self.lbl_cpu.config(text=f"🟢 CPU: {cpu}")
+        self.lbl_ram.config(text=f"💾 RAM: {ram_u:.2f}GB / {ram_t:.2f}GB")
+        if swap_t > 0: self.lbl_swap.config(text=f"🔄 SWAP: {swap_u:.2f}GB / {swap_t:.2f}GB")
+        else: self.lbl_swap.config(text="🔄 SWAP: Yoxdur")
 
 if __name__ == "__main__":
     root = tk.Tk()

@@ -3,12 +3,14 @@ use std::fs::File;
 use std::path::Path;
 
 pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
-    let db_dir = "/app/data";
-    let db_path = format!("{}/masterdeploy.db", db_dir);
+    let db_path = if Path::new("/.dockerenv").exists() || (cfg!(target_family = "unix") && Path::new("/app/data").exists()) {
+        let db_dir = "/app/data";
+        std::fs::create_dir_all(db_dir).ok();
+        format!("{}/masterdeploy.db", db_dir)
+    } else {
+        "masterdeploy.db".to_string()
+    };
 
-    // Create directory if it doesn't exist
-    std::fs::create_dir_all(db_dir).ok();
-    
     // Create db file if it does not exist
     if !Path::new(&db_path).exists() {
         File::create(&db_path).ok();
@@ -70,6 +72,22 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
         );"
     ).execute(&pool).await?;
 
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS settings (\n\
+            key TEXT PRIMARY KEY,\n\
+            value TEXT NOT NULL\n\
+        );"
+    ).execute(&pool).await?;
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS activity_logs (\n\
+            id TEXT PRIMARY KEY,\n\
+            message TEXT NOT NULL,\n\
+            log_type TEXT NOT NULL,\n\
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n\
+        );"
+    ).execute(&pool).await?;
+
     // Auto-migrate: Add columns if they do not exist (for existing databases)
     let _ = sqlx::query("ALTER TABLE servers ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN env_vars TEXT;").execute(&pool).await;
@@ -85,6 +103,17 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN memory_limit TEXT;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN cpu_limit REAL;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;").execute(&pool).await;
+
+    // Seed default local server if empty
+    if let Ok(row_count) = sqlx::query_scalar::<_, i32>("SELECT COUNT(*) FROM servers").fetch_one(&pool).await {
+        if row_count == 0 {
+            let local_id = "local-server-id"; // Constant ID or generated UUID
+            let _ = sqlx::query("INSERT INTO servers (id, name, ip, ssh_user, ssh_key) VALUES (?, 'Local Host', 'local', 'local', 'local')")
+                .bind(local_id)
+                .execute(&pool)
+                .await;
+        }
+    }
 
     Ok(pool)
 }

@@ -13,7 +13,7 @@ use uuid::Uuid;
 mod db;
 mod models;
 
-use models::{Application, CreateApplicationInput, CreateServerInput, Deployment, Server};
+use models::{Application, CreateApplicationInput, CreateServerInput, UpdateServerInput, Deployment, Server, ActivityLog, CreateActivityLogInput};
 
 #[derive(Clone)]
 struct AppState {
@@ -28,9 +28,10 @@ async fn main() {
     let app = Router::new()
         .nest_service("/", ServeDir::new("static"))
         .route("/api/servers", get(list_servers).post(create_server))
-        .route("/api/servers/:server_id", get(get_server).delete(delete_server))
+        .route("/api/servers/:server_id", get(get_server).put(update_server).delete(delete_server))
         .route("/api/servers/:server_id/stats", get(get_server_stats))
         .route("/api/servers/:server_id/setup", post(setup_server))
+        .route("/api/servers/:server_id/check", get(check_server_connection))
         .route("/api/applications", get(list_applications).post(create_application))
         .route("/api/applications/:app_id", get(get_application).put(update_application).delete(delete_application))
         .route("/api/deploy/:app_id", post(trigger_deployment))
@@ -41,6 +42,8 @@ async fn main() {
         .route("/api/system/changelog", get(get_changelog))
         .route("/api/system/docs", get(get_docs))
         .route("/api/system/update", post(trigger_system_update))
+        .route("/api/settings/github-token", get(get_github_token).post(save_github_token))
+        .route("/api/activity-logs", get(list_activity_logs).post(create_activity_log).delete(clear_activity_logs))
         .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
             axum::http::header::CACHE_CONTROL,
             axum::http::HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"),
@@ -98,8 +101,49 @@ async fn get_server(State(state): State<AppState>, AxumPath(server_id): AxumPath
     Ok(Json(server))
 }
 
+async fn update_server(
+    State(state): State<AppState>,
+    AxumPath(server_id): AxumPath<String>,
+    Json(input): Json<UpdateServerInput>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    sqlx::query("UPDATE servers SET name = ?, ip = ?, ssh_user = ?, ssh_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(&input.name)
+        .bind(&input.ip)
+        .bind(&input.ssh_user)
+        .bind(&input.ssh_key)
+        .bind(&server_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(true))
+}
+
 async fn delete_server(State(state): State<AppState>, AxumPath(server_id): AxumPath<String>) -> Result<Json<bool>, (StatusCode, String)> {
-    sqlx::query("DELETE FROM servers WHERE id = ?").bind(&server_id).execute(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // Start a transaction to ensure atomic deletes
+    let mut tx = state.db.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // 1. Delete all deployments for applications running on this server
+    sqlx::query("DELETE FROM deployments WHERE application_id IN (SELECT id FROM applications WHERE server_id = ?)")
+        .bind(&server_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // 2. Delete all applications running on this server
+    sqlx::query("DELETE FROM applications WHERE server_id = ?")
+        .bind(&server_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // 3. Delete the server itself
+    sqlx::query("DELETE FROM servers WHERE id = ?")
+        .bind(&server_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(true))
 }
 
@@ -153,6 +197,8 @@ async fn get_server_stats(
                 .args(&[
                     "-o", "StrictHostKeyChecking=no",
                     "-o", "ConnectTimeout=5",
+                    "-o", "ServerAliveInterval=3",
+                    "-o", "ServerAliveCountMax=2",
                     "-i", &temp_key_path,
                     &format!("{}@{}", server.ssh_user, server.ip),
                     cmd
@@ -187,6 +233,156 @@ async fn get_server_stats(
     } else {
         Ok(Json(serde_json::json!({"total_ram_mb": 0, "used_ram_mb": 0, "cores": 0})))
     }
+}
+
+async fn check_server_connection(
+    State(state): State<AppState>,
+    AxumPath(server_id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
+
+    let temp_key_path = format!("temp_check_key_{}.key", uuid::Uuid::new_v4());
+    let key_content = if server.ssh_key.contains("BEGIN ") {
+        server.ssh_key.clone()
+    } else {
+        std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+    };
+
+    if let Err(e) = std::fs::write(&temp_key_path, &key_content) {
+        return Ok(Json(serde_json::json!({
+            "success": false,
+            "error": format!("Key write error: {}", e)
+        })));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
+        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+        let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+        let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+    }
+
+    let cmd = "echo 'OK'";
+    let output = if server.ip == "local" || server.ip == "127.0.0.1" {
+        tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .await
+    } else {
+        tokio::process::Command::new("ssh")
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=5",
+                "-o", "ServerAliveInterval=3",
+                "-o", "ServerAliveCountMax=2",
+                "-i", &temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                cmd
+            ])
+            .output()
+            .await
+    };
+
+    let _ = std::fs::remove_file(&temp_key_path);
+
+    match output {
+        Ok(out) if out.status.success() => {
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "message": "Connection successful!"
+            })))
+        }
+        Ok(out) => {
+            let err_msg = String::from_utf8_lossy(&out.stderr).to_string();
+            let out_msg = String::from_utf8_lossy(&out.stdout).to_string();
+            let full_err = format!("{}\n{}", out_msg, err_msg).trim().to_string();
+            Ok(Json(serde_json::json!({
+                "success": false,
+                "error": if full_err.is_empty() { "SSH connection failed without stdout/stderr".to_string() } else { full_err }
+            })))
+        }
+        Err(e) => {
+            Ok(Json(serde_json::json!({
+                "success": false,
+                "error": format!("Failed to spawn SSH process: {}", e)
+            })))
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct GithubTokenInput {
+    token: String,
+}
+
+async fn get_github_token(State(state): State<AppState>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let row: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = 'github_token'")
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let token = row.map(|r| r.0).unwrap_or_default();
+    Ok(Json(serde_json::json!({ "token": token })))
+}
+
+async fn save_github_token(
+    State(state): State<AppState>,
+    Json(input): Json<GithubTokenInput>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    sqlx::query(
+        "INSERT INTO settings (key, value) VALUES ('github_token', ?) \
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+    )
+    .bind(&input.token)
+    .execute(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(true))
+}
+
+async fn list_activity_logs(State(state): State<AppState>) -> Result<Json<Vec<ActivityLog>>, (StatusCode, String)> {
+    let logs = sqlx::query_as::<_, ActivityLog>("SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 30")
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(logs))
+}
+
+async fn create_activity_log(
+    State(state): State<AppState>,
+    Json(input): Json<CreateActivityLogInput>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    let id = Uuid::new_v4().to_string();
+    sqlx::query("INSERT INTO activity_logs (id, message, log_type) VALUES (?, ?, ?)")
+        .bind(&id)
+        .bind(&input.message)
+        .bind(&input.log_type)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(true))
+}
+
+async fn clear_activity_logs(State(state): State<AppState>) -> Result<Json<bool>, (StatusCode, String)> {
+    sqlx::query("DELETE FROM activity_logs")
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(true))
 }
 
 async fn get_runtime_logs(
@@ -246,6 +442,8 @@ async fn get_runtime_logs(
                 .args(&[
                     "-o", "StrictHostKeyChecking=no",
                     "-o", "ConnectTimeout=5",
+                    "-o", "ServerAliveInterval=3",
+                    "-o", "ServerAliveCountMax=2",
                     "-i", &temp_key_path,
                     &format!("{}@{}", server.ssh_user, server.ip),
                     &cmd
@@ -342,6 +540,8 @@ async fn setup_server(
             .args(&[
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "ConnectTimeout=10",
+                "-o", "ServerAliveInterval=3",
+                "-o", "ServerAliveCountMax=2",
                 "-i", &temp_key_path,
                 &format!("{}@{}", server.ssh_user, server.ip),
                 cmd
@@ -478,7 +678,23 @@ async fn update_application(
 }
 
 async fn delete_application(State(state): State<AppState>, AxumPath(app_id): AxumPath<String>) -> Result<Json<bool>, (StatusCode, String)> {
-    sqlx::query("DELETE FROM applications WHERE id = ?").bind(&app_id).execute(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let mut tx = state.db.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // 1. Delete all deployments of this application
+    sqlx::query("DELETE FROM deployments WHERE application_id = ?")
+        .bind(&app_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // 2. Delete the application itself
+    sqlx::query("DELETE FROM applications WHERE id = ?")
+        .bind(&app_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(true))
 }
 
@@ -563,6 +779,8 @@ async fn run_ssh_cmd_stream_helper(
             .args(&[
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "ConnectTimeout=15",
+                "-o", "ServerAliveInterval=3",
+                "-o", "ServerAliveCountMax=2",
                 "-i", &key_path,
                 &format!("{}@{}", user, ip),
                 &cmd

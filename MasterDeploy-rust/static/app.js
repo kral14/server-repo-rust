@@ -1,3 +1,5 @@
+let githubToken = '';
+
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     loadServers();
@@ -25,7 +27,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Fetch server stats periodically
     fetchServerStats();
-    setInterval(fetchServerStats, 10000);
 
     // Theme Toggle Logic
     const themeBtn = document.getElementById('theme-toggle-btn');
@@ -163,21 +164,38 @@ async function loadServers() {
         updateServerStatsAdvisor('app-server', 'app-server-advisor', 'app-memory', 'app-cpu');
 
         serversList.innerHTML = servers.map(s => `
-            <div class="list-item">
-                <div class="item-info">
-                    <h3>🖥️ ${s.name}</h3>
-                    <p>
-                        <span><strong>IP:</strong> ${s.ip}</span>
-                        <span><strong>İstifadəçi:</strong> ${s.ssh_user}</span>
-                    </p>
+            <div class="list-item" style="flex-direction: column; align-items: stretch; gap: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 1rem;">
+                    <div class="item-info">
+                        <h3>🖥️ ${s.name}</h3>
+                        <p>
+                            <span><strong>IP:</strong> ${s.ip}</span>
+                            <span><strong>İstifadəçi:</strong> ${s.ssh_user}</span>
+                        </p>
+                    </div>
+                    <div class="item-actions" style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="editServer('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">✏️ Redaktə Et</button>
+                        <button class="btn btn-primary" onclick="setupServer('${s.id}', '${s.name}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none;">⚙️ Serveri Hazırla</button>
+                        <button class="btn btn-secondary" onclick="toggleServerConsole('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">🖥️ Konsol</button>
+                        <span id="status-${s.id}" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; cursor: pointer; background: rgba(255,255,255,0.05); color: #ccc;" onclick="checkConnection('${s.id}')">⏳ Yoxlanılır...</span>
+                        <button class="btn btn-secondary" onclick="deleteServer('${s.id}', '${s.name}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: rgba(255,0,0,0.1); color: #ff1744; border-color: rgba(255,0,0,0.2);">&#128465;</button>
+                    </div>
                 </div>
-                <div class="item-actions">
-                    <button class="btn btn-primary" onclick="setupServer('${s.id}', '${s.name}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none;">⚙️ Serveri Hazırla</button>
-                    <span class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">Qoşulub ✅</span>
-                    <button class="btn btn-secondary" onclick="deleteServer('${s.id}', '${s.name}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: rgba(255,0,0,0.1); color: #ff1744; border-color: rgba(255,0,0,0.2);">&#128465;</button>
+                <div id="console-wrapper-${s.id}" class="server-console-wrapper" style="display: none; position: relative; margin-top: 0.5rem; width: 100%;">
+                    <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 0.5rem; z-index: 10;">
+                        <button class="btn btn-secondary" onclick="copyServerConsole('${s.id}')" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">📋 Kopyala</button>
+                        <button class="btn btn-secondary" onclick="clearServerConsole('${s.id}')" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">🧹 Təmizlə</button>
+                    </div>
+                    <div id="console-container-${s.id}" class="server-console-container" style="width: 100%; padding: 1rem; padding-top: 2.5rem; background: #07080d; border-radius: 8px; font-family: monospace; color: #ff3333; font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; border: 1px solid var(--card-border); max-height: 200px; overflow-y: auto;">
+                        [Sistem] Qoşulma yoxlanılır...
+                    </div>
                 </div>
             </div>
         `).join('');
+
+        // Trigger connection check for each server
+        servers.forEach(s => checkConnection(s.id));
+
         if (document.body.classList.contains('debug-mode')) {
             updateDebugDimensions();
         }
@@ -281,6 +299,148 @@ async function handleCreateServer(event) {
     }
 }
 
+// Edit server details (fetch and open modal)
+async function editServer(id) {
+    try {
+        const res = await fetch(`/api/servers/${id}`);
+        if (!res.ok) throw new Error("Server məlumatları alınmadı");
+        const server = await res.json();
+        
+        document.getElementById('edit-srv-id').value = server.id;
+        document.getElementById('edit-srv-name').value = server.name;
+        document.getElementById('edit-srv-ip').value = server.ip;
+        document.getElementById('edit-srv-user').value = server.ssh_user;
+        document.getElementById('edit-srv-key').value = server.ssh_key;
+        
+        showModal('server-edit-modal');
+    } catch (e) {
+        console.error("Redaktə xətası", e);
+        showInfoCard("❌ Xəta", "Server məlumatlarını yükləmək mümkün olmadı", e.message);
+    }
+}
+
+// Handle server update submit
+async function handleUpdateServer(event) {
+    event.preventDefault();
+    const id = document.getElementById('edit-srv-id').value;
+    const payload = {
+        name: document.getElementById('edit-srv-name').value,
+        ip: document.getElementById('edit-srv-ip').value,
+        ssh_user: document.getElementById('edit-srv-user').value,
+        ssh_key: document.getElementById('edit-srv-key').value,
+    };
+
+    try {
+        const res = await fetch(`/api/servers/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            closeModal('server-edit-modal');
+            document.getElementById('server-edit-form').reset();
+            addActivityLog(`Server redaktə edildi: ${payload.name} (${payload.ip})`, 'server');
+            loadServers();
+        } else {
+            const err = await res.text();
+            addActivityLog(`Server yeniləmə uğursuz: ${err}`, 'error');
+            showInfoCard("❌ Xəta", "Serveri yeniləmək mümkün olmadı", err);
+        }
+    } catch (e) {
+        addActivityLog(`Server yeniləmə xətası: ${e.message}`, 'error');
+        console.error("Failed to update server", e);
+        showInfoCard("❌ Xəta", "Bağlantı xətası", e.message);
+    }
+}
+
+// Check real server connection via backend SSH check
+async function checkConnection(id) {
+    const statusEl = document.getElementById(`status-${id}`);
+    const consoleEl = document.getElementById(`console-container-${id}`);
+    if (statusEl) {
+        statusEl.innerHTML = `⏳ Yoxlanılır...`;
+        statusEl.style.color = '#ccc';
+        statusEl.style.background = 'rgba(255,255,255,0.05)';
+    }
+
+    try {
+        const res = await fetch(`/api/servers/${id}/check`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+                if (statusEl) {
+                    statusEl.innerHTML = `Qoşulub ✅`;
+                    statusEl.style.color = '#00e676';
+                    statusEl.style.background = 'rgba(0, 230, 118, 0.1)';
+                }
+                if (consoleEl) {
+                    consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ✅ Bağlantı uğurludur!\nCavab: ${data.message}`;
+                    consoleEl.style.color = '#00e676';
+                }
+            } else {
+                if (statusEl) {
+                    statusEl.innerHTML = `Xəta var ❌`;
+                    statusEl.style.color = '#ff1744';
+                    statusEl.style.background = 'rgba(255, 23, 68, 0.1)';
+                }
+                if (consoleEl) {
+                    consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ❌ Qoşulma Xətası:\n${data.error}`;
+                    consoleEl.style.color = '#ff1744';
+                }
+            }
+        } else {
+            throw new Error(`HTTP Error ${res.status}`);
+        }
+    } catch (e) {
+        if (statusEl) {
+            statusEl.innerHTML = `Xəta var ❌`;
+            statusEl.style.color = '#ff1744';
+            statusEl.style.background = 'rgba(255, 23, 68, 0.1)';
+        }
+        if (consoleEl) {
+            consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ❌ Qoşulma Xətası:\n${e.message}`;
+            consoleEl.style.color = '#ff1744';
+        }
+    }
+}
+
+// Toggle server console display
+function toggleServerConsole(id) {
+    const el = document.getElementById(`console-wrapper-${id}`);
+    if (el) {
+        if (el.style.display === 'none') {
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+}
+
+// Copy server console content to clipboard
+function copyServerConsole(id) {
+    const el = document.getElementById(`console-container-${id}`);
+    if (!el) return;
+    const text = el.innerText || el.textContent;
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = event.currentTarget;
+            const orig = btn.innerHTML;
+            btn.innerHTML = '✅ Kopyalandı!';
+            setTimeout(() => { btn.innerHTML = orig; }, 2000);
+        }).catch(err => console.error("Copy failed", err));
+    }
+}
+
+// Clear server console content
+function clearServerConsole(id) {
+    const el = document.getElementById(`console-container-${id}`);
+    if (el) {
+        el.innerHTML = `[Sistem] Konsol təmizləndi.\n`;
+    }
+}
+
 // Delete server
 async function deleteServer(id, name) {
     showConfirmCard({
@@ -374,7 +534,7 @@ function toggleRepoSource(mode) {
         document.getElementById('app-repo').required = false;
         document.getElementById('app-branch').required = false;
 
-        const token = localStorage.getItem('github_token');
+        const token = githubToken;
         if (token && gitHubRepos.length === 0) {
             loadGithubRepos();
         }
@@ -400,7 +560,7 @@ async function handleCreateApp(event) {
         }
 
         branch = document.getElementById('app-branch-select').value;
-        const token = localStorage.getItem('github_token');
+        const token = githubToken;
 
         // Check if the selected repo is private
         const selectedOption = repoSelect.options[repoSelect.selectedIndex];
@@ -954,25 +1114,46 @@ function copyTerminalLogs() {
 
 // GitHub Integration Functions
 async function loadGithubToken() {
-    const token = localStorage.getItem('github_token');
-    if (token) {
-        document.getElementById('gh-token').value = token;
-        verifyGithubToken(token);
+    try {
+        const res = await fetch('/api/settings/github-token');
+        if (res.ok) {
+            const data = await res.json();
+            githubToken = data.token || '';
+            if (githubToken) {
+                document.getElementById('gh-token').value = githubToken;
+                verifyGithubToken(githubToken);
+            }
+        }
+    } catch (e) {
+        console.error("Failed to load GitHub token", e);
     }
 }
 
 async function saveGithubToken() {
     const token = document.getElementById('gh-token').value.trim();
-    if (!token) {
-        localStorage.removeItem('github_token');
-        document.getElementById('gh-status').innerText = "Məlumat yoxdur";
-        document.getElementById('gh-status').style.color = "#94a3b8";
-        document.getElementById('app-repo-select').innerHTML = '<option value="">Token quraşdırılmayıb</option>';
-        gitHubRepos = [];
-        return;
+    try {
+        const res = await fetch('/api/settings/github-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+        if (res.ok) {
+            githubToken = token;
+            if (!token) {
+                document.getElementById('gh-status').innerText = "Məlumat yoxdur";
+                document.getElementById('gh-status').style.color = "#94a3b8";
+                document.getElementById('app-repo-select').innerHTML = '<option value="">Token quraşdırılmayıb</option>';
+                gitHubRepos = [];
+            } else {
+                verifyGithubToken(token);
+            }
+        } else {
+            showInfoCard("❌ Xəta", "GitHub tokeni yadda saxlanıla bilmədi.");
+        }
+    } catch (e) {
+        console.error("Failed to save GitHub token", e);
+        showInfoCard("❌ Xəta", "Serverlə əlaqə qurulmadı.", e.message);
     }
-    localStorage.setItem('github_token', token);
-    verifyGithubToken(token);
 }
 
 async function verifyGithubToken(token) {
@@ -1006,7 +1187,7 @@ async function verifyGithubToken(token) {
 }
 
 async function loadGithubRepos() {
-    const token = localStorage.getItem('github_token');
+    const token = githubToken;
     const repoSelect = document.getElementById('app-repo-select');
     const wizardReposList = document.getElementById('github-repos-list');
 
@@ -1073,7 +1254,7 @@ async function handleRepoSelectChange() {
     }
 
     branchSelect.innerHTML = '<option value="">Budaqlar yüklənir...</option>';
-    const token = localStorage.getItem('github_token');
+    const token = githubToken;
 
     try {
         const res = await fetch(`https://api.github.com/repos/${selectedRepoName}/branches`, {
@@ -1387,7 +1568,7 @@ async function selectRepo(repoFullName, isPrivate) {
     const branchSelect = document.getElementById('wiz-app-branch');
     branchSelect.innerHTML = '<option value="">Budaqlar yüklənir...</option>';
 
-    const token = localStorage.getItem('github_token');
+    const token = githubToken;
 
     try {
         const res = await fetch(`https://api.github.com/repos/${repoFullName}/branches`, {
@@ -1485,7 +1666,7 @@ async function handleWizardDeploy(event) {
         repoUrl = wizSelectedRepo.manualUrl;
         branch = document.getElementById('wiz-app-branch').value;
     } else {
-        const token = localStorage.getItem('github_token');
+        const token = githubToken;
         if (wizSelectedRepo.private && token) {
             repoUrl = `https://${token}@github.com/${wizSelectedRepo.full_name}.git`;
         } else {
@@ -1651,6 +1832,9 @@ async function fetchServerStats() {
             console.error("Failed to fetch stats", e);
         }
     }
+    
+    // Recursive setTimeout to prevent overlapping requests
+    setTimeout(fetchServerStats, 10000);
 }
 
 // Accordion toggle logic
@@ -1733,12 +1917,12 @@ async function updateServerStatsAdvisor(selectId, advisorDivId, memInputId, cpuI
         advisorDiv.innerHTML = '⚠️ Server məlumatları alına bilmədi. Serverin aktiv olduğuna əmin olun.';
     }
 }
-let runtimeLogInterval = null;
+let runtimeLogTimeout = null;
 
 function stopRuntimeLogPolling() {
-    if (runtimeLogInterval) {
-        clearInterval(runtimeLogInterval);
-        runtimeLogInterval = null;
+    if (runtimeLogTimeout) {
+        clearTimeout(runtimeLogTimeout);
+        runtimeLogTimeout = null;
     }
 }
 
@@ -1757,6 +1941,13 @@ async function fetchRuntimeLogs(appId) {
     } catch (e) {
         console.error("Error fetching runtime logs:", e);
     }
+
+    // Schedule next run only if polling is still active and it matches the current app
+    const content = document.getElementById('live-content');
+    if (content && (content.style.display === 'flex' || content.style.display === 'block') && appId === currentAppId) {
+        stopRuntimeLogPolling(); // clear any previous scheduled timeout
+        runtimeLogTimeout = setTimeout(() => fetchRuntimeLogs(appId), 3000);
+    }
 }
 
 // Modify toggleAccordion to start/stop polling
@@ -1769,12 +1960,8 @@ toggleAccordion = function (contentId, headerElement) {
         const content = document.getElementById(contentId);
         if (content.style.display === 'flex' || content.style.display === 'block') {
             if (currentAppId) {
-                // Initial fetch
+                stopRuntimeLogPolling();
                 fetchRuntimeLogs(currentAppId);
-                // Poll every 3 seconds
-                if (!runtimeLogInterval) {
-                    runtimeLogInterval = setInterval(() => fetchRuntimeLogs(currentAppId), 3000);
-                }
             }
         } else {
             stopRuntimeLogPolling();
@@ -2188,41 +2375,71 @@ const LOG_ICONS = {
     setup:   { icon: '⚙️', color: '#00e676' },
 };
 
-function addActivityLog(message, type = 'info') {
-    const logs = JSON.parse(localStorage.getItem('activity_logs') || '[]');
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('az', { hour: '2-digit', minute: '2-digit' });
-    logs.unshift({ message, type, time: timeStr });
-    if (logs.length > 30) logs.pop();
-    localStorage.setItem('activity_logs', JSON.stringify(logs));
-    renderActivityLogs();
+async function addActivityLog(message, type = 'info') {
+    try {
+        await fetch('/api/activity-logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, log_type: type })
+        });
+        renderActivityLogs();
+    } catch (e) {
+        console.error("Failed to add activity log", e);
+    }
 }
 
-function renderActivityLogs() {
+async function renderActivityLogs() {
     const container = document.getElementById('activity-log-list');
     if (!container) return;
-    const logs = JSON.parse(localStorage.getItem('activity_logs') || '[]');
-    if (logs.length === 0) {
-        container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>';
-        return;
+    try {
+        const res = await fetch('/api/activity-logs');
+        if (res.ok) {
+            const logs = await res.json();
+            if (logs.length === 0) {
+                container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>';
+                return;
+            }
+            container.innerHTML = logs.map(l => {
+                const meta = LOG_ICONS[l.log_type] || LOG_ICONS.info;
+                let timeStr = '--:--';
+                if (l.created_at) {
+                    try {
+                        const parts = l.created_at.split(' ');
+                        if (parts.length >= 2) {
+                            const timeParts = parts[1].split(':');
+                            if (timeParts.length >= 2) {
+                                timeStr = `${timeParts[0]}:${timeParts[1]}`;
+                            }
+                        }
+                    } catch (e) {
+                        timeStr = l.created_at;
+                    }
+                }
+                return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.02); border: 1px solid var(--card-border); margin-bottom: 2px;">
+                    <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+                        <span style="font-size:1.1rem; flex-shrink:0; display:flex; align-items:center; justify-content:center; width:28px; height:28px; background:rgba(255,255,255,0.03); border-radius:8px;">${meta.icon}</span>
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-size:0.82rem; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis;" title="${l.message}">${l.message}</div>
+                        </div>
+                    </div>
+                    <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace; opacity:0.8; flex-shrink:0;">${timeStr}</span>
+                </div>`;
+            }).join('');
+        }
+    } catch (e) {
+        console.error("Failed to render activity logs", e);
     }
-    container.innerHTML = logs.map(l => {
-        const meta = LOG_ICONS[l.type] || LOG_ICONS.info;
-        return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.02); border: 1px solid var(--card-border); margin-bottom: 2px;">
-            <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
-                <span style="font-size:1.1rem; flex-shrink:0; display:flex; align-items:center; justify-content:center; width:28px; height:28px; background:rgba(255,255,255,0.03); border-radius:8px;">${meta.icon}</span>
-                <div style="flex:1; min-width:0;">
-                    <div style="font-size:0.82rem; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis;" title="${l.message}">${l.message}</div>
-                </div>
-            </div>
-            <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace; opacity:0.8; flex-shrink:0;">${l.time}</span>
-        </div>`;
-    }).join('');
 }
 
-function clearActivityLogs() {
-    localStorage.removeItem('activity_logs');
-    renderActivityLogs();
+async function clearActivityLogs() {
+    try {
+        const res = await fetch('/api/activity-logs', { method: 'DELETE' });
+        if (res.ok) {
+            renderActivityLogs();
+        }
+    } catch (e) {
+        console.error("Failed to clear activity logs", e);
+    }
 }
 
 async function openHelpCenter() {

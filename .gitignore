@@ -2,7 +2,8 @@ target/
 .env
 
 *.pem
-temp_key_*.key
+temp_*.key
+**/temp_*.key
 
 node_modules/
 __pycache__/

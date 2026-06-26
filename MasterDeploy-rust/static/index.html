@@ -842,6 +842,39 @@
         </div>
     </div>
 
+    <!-- Server Edit Modal -->
+    <div id="server-edit-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>✏️ Server Ayarlarını Redaktə Et</h2>
+            <form id="server-edit-form" onsubmit="handleUpdateServer(event)">
+                <input type="hidden" id="edit-srv-id">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Server Adı</label>
+                        <input type="text" id="edit-srv-name" required placeholder="Məs: Oracle Always Free">
+                    </div>
+                    <div class="form-group">
+                        <label>IP Ünvanı (Public IP)</label>
+                        <input type="text" id="edit-srv-ip" required placeholder="Məs: 79.72.95.173">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH İstifadəçi Adı</label>
+                        <input type="text" id="edit-srv-user" required placeholder="Məs: ubuntu">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH Private Key</label>
+                        <textarea id="edit-srv-key" required placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-edit-modal')">Ləğv
+                        Et</button>
+                    <button type="submit" class="btn btn-primary">Yadda Saxla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Application Add Modal -->
     <div id="app-modal" class="modal-backdrop">
         <div class="modal-card">

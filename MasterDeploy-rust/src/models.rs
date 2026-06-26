@@ -19,6 +19,14 @@ pub struct CreateServerInput {
     pub ssh_key: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct UpdateServerInput {
+    pub name: String,
+    pub ip: String,
+    pub ssh_user: String,
+    pub ssh_key: String,
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Application {
     pub id: String,
@@ -91,4 +99,18 @@ pub struct Deployment {
     pub status: String,
     pub logs: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ActivityLog {
+    pub id: String,
+    pub message: String,
+    pub log_type: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateActivityLogInput {
+    pub message: String,
+    pub log_type: String,
 }
