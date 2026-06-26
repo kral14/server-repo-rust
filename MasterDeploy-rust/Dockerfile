@@ -1,5 +1,5 @@
 # Build Stage
-FROM rust:1-slim-bullseye AS builder
+FROM rust:1-slim-bookworm AS builder
 
 # Install required build dependencies
 RUN apt-get update && apt-get install -y \
@@ -24,11 +24,11 @@ RUN cargo build --release
 
 # ---------------------------------------------------
 # Runtime Stage (Yüngül və son imic)
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
 # Runtime üçün lazımlı kitabxanalar (SSH, OpenSSL, SQLite, Git)
 RUN apt-get update && apt-get install -y \
-    libssl1.1 \
+    libssl3 \
     sqlite3 \
     openssh-client \
     curl \
