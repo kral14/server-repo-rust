@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.0.20",
+    "changes": [
+      "Versiya sistemi tam yenidən quruldu — kart əsaslı versiya seçici.",
+      "Sidebar-da UPDATE badge (qırmızı, nəbz animasiyası) düzgün işləyir.",
+      "Versiyalar modalında hər versiya ayrı kart kimi göstərilir (Ən Son / Hazırki / Köhnə).",
+      "5 dəqiqəlik avtomatik versiya yoxlama intervalı əlavə edildi.",
+      "Rollback (köhnə versiyaya qayıdış) tam işlək edildi — ↩ Qayıt düyməsi.",
+      "Versiyaya keçid zamanı ekran qaralar, progress bar göstərilir, 10 saniyə gözlənilir.",
+      "Badge race condition düzəldildi — badge yalnız initSystemUpdates() tərəfindən idarə olunur."
+    ]
+  },
+  {
     "version": "v1.0.19",
     "changes": [
       "Versiya sistemi tam yenidən quruldu — kart əsaslı versiya seçici.",
