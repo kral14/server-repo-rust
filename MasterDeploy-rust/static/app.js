@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadGithubToken();
     resetEnvVarsContainer();
     fetchAppVersion();
+    renderActivityLogs();
 
     // Restore active tab
     const activeTab = localStorage.getItem('active_tab') || 'dashboard';
@@ -271,61 +272,81 @@ async function handleCreateServer(event) {
         if (res.ok) {
             closeModal('server-modal');
             document.getElementById('server-form').reset();
+            addActivityLog(`Server əlavə edildi: ${payload.name} (${payload.ip})`, 'server');
             loadServers();
         }
     } catch (e) {
+        addActivityLog(`Server yaratma uğursuz: ${e.message}`, 'error');
         console.error("Failed to create server", e);
     }
 }
 
 // Delete server
 async function deleteServer(id, name) {
-    if (!confirm(`"${name}" serverini silmək istədiyinizə əminsiniz? (Qeyd: Bu serverə bağlı layihələr varsa, silinmə uğursuz ola bilər)`)) {
-        return;
-    }
-
-    try {
-        const res = await fetch(`/api/servers/${id}`, { method: 'DELETE' });
-        if (res.ok) {
-            loadServers();
-        } else {
-            const err = await res.text();
-            alert("Xəta: " + err);
+    showConfirmCard({
+        icon: '🖥️',
+        title: 'Server Silinsin?',
+        subtitle: name,
+        body: `"${name}" serverini silmək istədiyinizə əminsiniz? <br><br><strong>Qeyd:</strong> Bu serverə bağlı layihələr varsa, silinmə uğursuz ola bilər.`,
+        confirmText: '🗑️ Sil',
+        confirmStyle: 'background: #ff1744; color: white;',
+        onConfirm: async () => {
+            try {
+                const res = await fetch(`/api/servers/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    addActivityLog(`Server silindi: ${name}`, 'delete');
+                    loadServers();
+                } else {
+                    const err = await res.text();
+                    addActivityLog(`Server silmə uğursuz: ${err}`, 'error');
+                    showInfoCard("❌ Xəta", "Serveri silmək mümkün olmadı", err);
+                }
+            } catch (e) {
+                console.error("Silinmə xətası", e);
+                showInfoCard("❌ Xəta", "Bağlantı xətası yarandı", e.message);
+            }
         }
-    } catch (e) {
-        console.error("Silinmə xətası", e);
-    }
+    });
 }
 
 // Setup (Provision) server
 async function setupServer(id, name) {
-    if (!confirm(`"${name}" serverində avtomatik hazırlıq (Swap artırmaq və Docker qurmaq) başladılsın?\nBu proses 1-2 dəqiqə çəkə bilər, zəhmət olmasa gözləyin.`)) {
-        return;
-    }
-
     const btn = event.currentTarget;
     const originalText = btn.innerHTML;
-    btn.innerHTML = "⏳ Hazırlanır (Gözləyin)...";
-    btn.disabled = true;
 
-    try {
-        const res = await fetch(`/api/servers/${id}/setup`, { method: 'POST' });
-        
-        if (res.ok) {
-            alert(`Təbriklər! "${name}" serveri uğurla hazırlandı və Docker quraşdırıldı! Artıq layihə yükləyə bilərsiniz.`);
-            btn.innerHTML = "✅ Hazırdır";
-        } else {
-            const err = await res.text();
-            alert("Hazırlıq zamanı xəta: " + err);
-            btn.innerHTML = originalText;
-            btn.disabled = false;
+    showConfirmCard({
+        icon: '🛠️',
+        title: 'Hazırlıq Başladılsın?',
+        subtitle: name,
+        body: `"${name}" serverində avtomatik hazırlıq (Swap artırmaq və Docker qurmaq) başladılsın?<br>Bu proses 1-2 dəqiqə çəkə bilər.`,
+        confirmText: '🚀 Başlat',
+        onConfirm: async () => {
+            btn.innerHTML = "⏳ Hazırlanır (Gözləyin)...";
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(`/api/servers/${id}/setup`, { method: 'POST' });
+                
+                if (res.ok) {
+                    addActivityLog(`Server hazırlandı: ${name}`, 'setup');
+                    showInfoCard('✅ Uğurlu', `"${name}" serveri`, 'Docker uğurla quraşdırıldı. Artıq layihə yükləyə bilərsiniz.');
+                    btn.innerHTML = "✅ Hazırdır";
+                } else {
+                    const err = await res.text();
+                    addActivityLog(`Server hazırlıq uğursuz: ${name}`, 'error');
+                    showInfoCard('❌ Xəta', 'Hazırlıq zamanı problem', err);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                console.error("Setup error", e);
+                addActivityLog(`Server hazırlıq xətası: ${name}`, 'error');
+                showInfoCard('❌ Bağlantı Xətası', 'Serverə qoşula bilmədi.', e.message);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
         }
-    } catch (e) {
-        console.error("Setup error", e);
-        alert("Bağlantı xətası baş verdi.");
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }
+    });
 }
 
 let activeSourceMode = 'manual';
@@ -436,12 +457,15 @@ async function handleCreateApp(event) {
             document.getElementById('app-form').reset();
             resetEnvVarsContainer();
             toggleRepoSource('manual');
+            addActivityLog(`Layihə yaradıldı: ${payload.name}`, 'app');
             loadApplications();
         } else {
             const errText = await res.text();
-            alert("Xəta baş verdi: " + errText);
+            addActivityLog(`Layihə yaratma uğursuz: ${payload.name}`, 'error');
+            showInfoCard('❌ Xəta', 'Layihə yaranılmadı', errText);
         }
     } catch (e) {
+        addActivityLog(`Layihə yaratma xətası`, 'error');
         console.error("Failed to create application", e);
     }
 }
@@ -454,58 +478,80 @@ let updateBadgeTimer = null;
 
 // Delete Application
 async function deleteApp(appId, appName) {
-    if (!confirm(`DİQQƏT: "${appName}" tətbiqini silmək istədiyinizə əminsiniz?\n\nBu əməliyyat həm verilənlər bazasından, həm də uzaq serverdən (Docker container, kodlar və fayllar) hər şeyi geri qaytarılmaz şəkildə siləcək!`)) {
-        return;
-    }
-    try {
-        const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' });
-        if (res.ok) {
-            alert("Tətbiq uğurla silindi.");
-            loadApplications();
-        } else {
-            const err = await res.text();
-            alert("Silinmədə xəta: " + err);
+    showConfirmCard({
+        icon: '🗑️',
+        title: 'Tətbiq Silinsin?',
+        subtitle: appName,
+        body: `<strong>DİQQƏT:</strong> Bu əməliyyat həm verilənlər bazasından, həm də uzaq serverdən (Docker container, kodlar) hər şeyi geri qaytarılmaz şəkildə siləcək.`,
+        warning: '⚠️ Bu əməliyyat geri alına bilməz!',
+        confirmText: '🗑️ Sil',
+        confirmStyle: 'background: #ff1744; color: white;',
+        onConfirm: async () => {
+            try {
+                const res = await fetch(`/api/applications/${appId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    addActivityLog(`Tətbiq silindi: ${appName}`, 'delete');
+                    loadApplications();
+                    switchTab('applications');
+                } else {
+                    const err = await res.text();
+                    addActivityLog(`Tətbiq silmə uğursuz: ${appName}`, 'error');
+                    showInfoCard('❌ Xəta', 'Silmə zamanı problem', err);
+                }
+            } catch (e) {
+                addActivityLog(`Tətbiq silmə xətası: ${appName}`, 'error');
+                showInfoCard('❌ Bağlantı Xətası', 'Serverdən cavab gəlmədi.', e.message);
+            }
         }
-    } catch (e) {
-        console.error("Failed to delete app", e);
-        alert("Serverlə əlaqə qurula bilmədi.");
-    }
+    });
 }
 
 // Trigger Deployment
 async function deployApp(id) {
     try {
+        const appName = document.getElementById('detail-app-name') ? document.getElementById('detail-app-name').innerText : id;
         const res = await fetch(`/api/deploy/${id}`, { method: 'POST' });
         if (res.ok) {
+            addActivityLog(`Deploy başladıldı: ${appName}`, 'deploy');
             loadApplications();
             viewLogs(id);
         } else {
             const errText = await res.text();
-            alert("Yayımlama başladılarkən xəta: " + errText);
+            addActivityLog(`Deploy uğursuz: ${appName}`, 'error');
+            showInfoCard('❌ Xəta', 'Deploy başladıla bilmədi', errText);
         }
     } catch (e) {
-        console.error("Failed to deploy", e);
-        alert("Yayımlama (Deploy) xətası: " + e);
+        addActivityLog('Deploy xətası', 'error');
+        showInfoCard('❌ Deploy Xətası', 'Serverdən cavab gəlmədi.', e.message);
     }
 }
 
 // Cancel Active Deployment
 async function cancelActiveDeployment() {
     if (!currentActiveDeploymentId) return;
-    if (!confirm("Bu yayımı ləğv etmək istədiyinizdən əminsiniz?")) return;
-
-    try {
-        const res = await fetch(`/api/deploy/cancel/${currentActiveDeploymentId}`, { method: 'POST' });
-        if (res.ok) {
-            const result = await res.json();
-            if (result) {
-                document.getElementById('cancel-deploy-btn').style.display = 'none';
-                document.getElementById('terminal-body').innerText += "\n[MƏLUMAT] Ləğv etmə sorğusu göndərildi...\n";
+    showConfirmCard({
+        icon: '🛑',
+        title: 'Yayımı Ləğv Et?',
+        subtitle: 'Cari deployment dayandırılacaq',
+        body: 'Bu yayımı ləğv etmək istədiyinizdən əminsiniz?',
+        confirmText: '🛑 Bəli, Ləğv Et',
+        confirmStyle: 'background: #ff9100; color: white;',
+        onConfirm: async () => {
+            try {
+                const res = await fetch(`/api/deploy/cancel/${currentActiveDeploymentId}`, { method: 'POST' });
+                if (res.ok) {
+                    const result = await res.json();
+                    if (result) {
+                        document.getElementById('cancel-deploy-btn').style.display = 'none';
+                        document.getElementById('terminal-body').innerText += "\n[MƏLUMAT] Ləğv etmə sorğusu göndərildi...\n";
+                        addActivityLog('Yayım ləğv edildi', 'delete');
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to cancel deployment", e);
             }
         }
-    } catch (e) {
-        console.error("Failed to cancel deployment", e);
-    }
+    });
 }
 
 // View Logs in Split-screen Tab (Koyeb-style)
@@ -2004,24 +2050,38 @@ function renderVersionCards() {
 
 async function confirmVersionSwitch(version, isRollback) {
     const versionObj = systemVersions.find(x => x.version === version);
-    let changesList = '';
-    if (versionObj && versionObj.changes) {
-        changesList = '\n\nBu versiyada:\n• ' + versionObj.changes.join('\n• ');
-    }
     const action = isRollback ? 'geri qayıtmaq' : 'yüksəltmək';
-    if (!confirm(`${version} versiyasına ${action} istəyirsiniz?${changesList}\n\nPanel 5-10 saniyə söndürülüb yenidən başladılacaq.`)) return;
+    const actionLabel = isRollback ? '↩ Qayıt' : '⬆ Yüksəlt';
     
-    closeModal('system-update-modal');
-    try {
-        await fetch('/api/system/update', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ version: version })
-        });
-        showVersionSwitchProgress();
-    } catch(e) {
-        alert('Xəta baş verdi: ' + e.message);
+    let bodyHtml = `<strong>${version}</strong> versiyasına ${action} istəyirsiniz.`;
+    if (versionObj && versionObj.changes && versionObj.changes.length > 0) {
+        bodyHtml += `<br><br><strong>Bu versiyada:</strong><ul style="margin: 6px 0 0; padding-left: 18px;">${versionObj.changes.map(c => `<li>${c}</li>`).join('')}</ul>`;
     }
+    
+    showConfirmCard({
+        icon: isRollback ? '↩' : '⬆️',
+        title: isRollback ? 'Köhnə Versiyaya Qayıt' : 'Versiyaya Yüksəlt',
+        subtitle: version,
+        body: bodyHtml,
+        warning: '⚠️ Panel 5-10 saniyə söndürülüb yenidən başladılacaq.',
+        confirmText: actionLabel,
+        confirmStyle: isRollback ? '' : 'background: linear-gradient(135deg,#ff416c,#ff4b2b);',
+        onConfirm: async () => {
+            closeModal('system-update-modal');
+            try {
+                addActivityLog(`Versiya keçidi: ${version} (${action})`, 'update');
+                await fetch('/api/system/update', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ version: version })
+                });
+                showVersionSwitchProgress();
+            } catch(e) {
+                addActivityLog(`Versiya keçidi uğursuz: ${e.message}`, 'error');
+                showInfoCard('❌ Xəta', 'Versiya keçidi zamanı problem yarandı.', e.message);
+            }
+        }
+    });
 }
 
 function showVersionSwitchProgress() {
@@ -2066,6 +2126,92 @@ async function confirmSystemUpdate() {
     if (select) await confirmVersionSwitch(select.value, false);
 }
 function updateSelectedVersionChanges() {}
+
+// ─── Custom Kart Modal (confirm yerine) ───────────────────────────────────────
+function showConfirmCard({ icon, title, subtitle, body, warning, confirmText, confirmStyle, onConfirm }) {
+    const modal = document.getElementById('confirm-card-modal');
+    document.getElementById('confirm-card-icon').textContent = icon || '❓';
+    document.getElementById('confirm-card-title').textContent = title || 'Əminsiniz?';
+    document.getElementById('confirm-card-subtitle').textContent = subtitle || '';
+    document.getElementById('confirm-card-body').innerHTML = body || '';
+    
+    const warnEl = document.getElementById('confirm-card-warning');
+    if (warning) {
+        warnEl.style.display = 'block';
+        warnEl.textContent = warning;
+    } else {
+        warnEl.style.display = 'none';
+    }
+    
+    const yesBtn = document.getElementById('confirm-card-yes');
+    yesBtn.textContent = confirmText || 'Təsdiqlə';
+    yesBtn.style.cssText = `padding: 8px 20px; ${confirmStyle || ''}`;
+    
+    modal.style.display = 'flex';
+    
+    const close = () => { modal.style.display = 'none'; };
+    yesBtn.onclick = () => { close(); onConfirm && onConfirm(); };
+    document.getElementById('confirm-card-no').onclick = close;
+    modal.onclick = (e) => { if (e.target === modal) close(); };
+}
+
+function showInfoCard(title, subtitle, body) {
+    showConfirmCard({
+        icon: 'ℹ️', title, subtitle, body,
+        confirmText: 'Bağla',
+        confirmStyle: '',
+        onConfirm: () => {}
+    });
+    document.getElementById('confirm-card-no').style.display = 'none';
+    setTimeout(() => document.getElementById('confirm-card-no').style.display = '', 100);
+}
+
+// ─── Fəaliyyət Jurnalı ─────────────────────────────────────────────────────
+const LOG_ICONS = {
+    deploy:  { icon: '🚀', color: '#00d2ff' },
+    update:  { icon: '🔄', color: '#7c3aed' },
+    server:  { icon: '🖥️', color: '#00e676' },
+    app:     { icon: '📦', color: '#ff9800' },
+    error:   { icon: '❌', color: '#ff1744' },
+    info:    { icon: '📋', color: '#9aa0a6' },
+    delete:  { icon: '🗑️', color: '#ff1744' },
+    setup:   { icon: '⚙️', color: '#00e676' },
+};
+
+function addActivityLog(message, type = 'info') {
+    const logs = JSON.parse(localStorage.getItem('activity_logs') || '[]');
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('az', { hour: '2-digit', minute: '2-digit' });
+    logs.unshift({ message, type, time: timeStr });
+    if (logs.length > 30) logs.pop();
+    localStorage.setItem('activity_logs', JSON.stringify(logs));
+    renderActivityLogs();
+}
+
+function renderActivityLogs() {
+    const container = document.getElementById('activity-log-list');
+    if (!container) return;
+    const logs = JSON.parse(localStorage.getItem('activity_logs') || '[]');
+    if (logs.length === 0) {
+        container.innerHTML = '<div style="font-size: 0.7rem; color: var(--text-secondary); text-align: center; padding: 8px; opacity: 0.5;">Hərəkət yoxdur</div>';
+        return;
+    }
+    container.innerHTML = logs.map(l => {
+        const meta = LOG_ICONS[l.type] || LOG_ICONS.info;
+        return `<div style="display:flex; align-items:flex-start; gap:6px; padding:5px 6px; border-radius:6px; background:rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04);">
+            <span style="font-size:0.75rem; flex-shrink:0; margin-top:1px;">${meta.icon}</span>
+            <div style="flex:1; min-width:0;">
+                <div style="font-size:0.68rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${l.message}">${l.message}</div>
+                <div style="font-size:0.6rem; color:var(--text-secondary); margin-top:1px;">${l.time}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function clearActivityLogs() {
+    localStorage.removeItem('activity_logs');
+    renderActivityLogs();
+}
 
 async function openHelpCenter() {
     showModal('help-modal');

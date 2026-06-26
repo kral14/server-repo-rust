@@ -67,7 +67,19 @@
                     style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">⚙️
                     GitHub Ayarları</button>
             </nav>
-            <div class="theme-toggle-container" style="margin-top: auto; padding-bottom: 1rem;">
+
+            <!-- Fəaliyyət Jurnalı -->
+            <div style="margin-top: 1.5rem; flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0;">
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 0.25rem; margin-bottom: 0.6rem;">
+                    <span style="font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px;">📋 Jurnal</span>
+                    <button onclick="clearActivityLogs()" style="background: none; border: none; color: var(--text-secondary); font-size: 0.65rem; cursor: pointer; padding: 2px 5px; border-radius: 3px; opacity: 0.6; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'" title="Təmizlə">təmizlə</button>
+                </div>
+                <div id="activity-log-list" style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; padding-right: 2px;">
+                    <div style="font-size: 0.7rem; color: var(--text-secondary); text-align: center; padding: 8px; opacity: 0.5;">Hərəkət yoxdur</div>
+                </div>
+            </div>
+
+            <div class="theme-toggle-container" style="padding-bottom: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--card-border); margin-top: 0.75rem;">
                 <button id="theme-toggle-btn" class="btn btn-secondary"
                     style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
                     <span id="theme-icon">☀️</span> <span id="theme-text">Açıq Tema</span>
@@ -991,6 +1003,25 @@
                     <div id="help-external" class="help-tab-content" style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">Yüklənir...</div>
                     <div id="help-local" class="help-tab-content" style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">Yüklənir...</div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Card Modal -->
+    <div id="confirm-card-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9998; align-items:center; justify-content:center; backdrop-filter:blur(6px);">
+        <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 28px; max-width: 440px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+            <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 16px;">
+                <span id="confirm-card-icon" style="font-size:1.8rem;">🔄</span>
+                <div>
+                    <h3 id="confirm-card-title" style="margin:0; font-size:1.1rem; color: var(--text-primary);">Əminsiniz?</h3>
+                    <p id="confirm-card-subtitle" style="margin:4px 0 0; font-size:0.8rem; color: var(--text-secondary);"></p>
+                </div>
+            </div>
+            <div id="confirm-card-body" style="font-size:0.85rem; color: var(--text-secondary); background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 20px; line-height: 1.6;"></div>
+            <div id="confirm-card-warning" style="display:none; background: rgba(255,165,0,0.1); border: 1px solid rgba(255,165,0,0.3); border-radius: 8px; padding: 10px 12px; margin-bottom: 20px; font-size: 0.8rem; color: #ffaa00;"></div>
+            <div style="display:flex; justify-content:flex-end; gap: 10px;">
+                <button id="confirm-card-no" class="btn btn-secondary" style="padding: 8px 20px;">Ləğv Et</button>
+                <button id="confirm-card-yes" class="btn btn-primary" style="padding: 8px 20px;">Təsdiqlə</button>
             </div>
         </div>
     </div>

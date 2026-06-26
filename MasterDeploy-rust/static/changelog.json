@@ -1,5 +1,20 @@
 [
   {
+    "version": "v1.0.23",
+    "changes": [
+      "Qalan bütün confirm() və alert() pəncərələri premium kart modalları ilə əvəz edildi.",
+      "deleteApp funksiyasındakı sintaksis xətası düzəldildi.",
+      "Server silmə və server hazırlığı (provision) üçün xüsusi təsdiq kartları əlavə olundu.",
+      "Yayımın ləğv edilməsi üçün (cancelActiveDeployment) təsdiq modalı əlavə edildi."
+    ]
+  },
+  {
+    "version": "v1.0.22",
+    "changes": [
+      "Sidebar-a yeni hərəkət jurnalı (activity log) əlavə edildi."
+    ]
+  },
+  {
     "version": "v1.0.21",
     "changes": [
       "Changelog v1.0.20 qeydləri əlavə edildi."
