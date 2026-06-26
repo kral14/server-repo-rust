@@ -61,23 +61,9 @@ async function fetchAppVersion() {
             const el = document.getElementById('app-version');
             if (el && data.version) {
                 const localVersion = data.version;
-                el.innerHTML = `v${localVersion} <span id="version-badge"></span>`;
-                
-                // Fetch GitHub version to compare
-                fetch('https://raw.githubusercontent.com/kral14/server-repo-rust/main/MasterDeploy-rust/Cargo.toml')
-                    .then(r => r.text())
-                    .then(toml => {
-                        const match = toml.match(/version\s*=\s*"([^"]+)"/);
-                        if (match && match[1]) {
-                            const gitVersion = match[1];
-                            const badge = document.getElementById('version-badge');
-                            if (localVersion === gitVersion) {
-                                badge.innerHTML = `<span style="background: #2ecc71; color: #fff; padding: 1px 4px; border-radius: 4px; font-size: 0.55rem; font-weight: bold; margin-left: 5px;">NEW</span>`;
-                            } else {
-                                badge.innerHTML = `<span style="background: #e74c3c; color: #fff; padding: 1px 4px; border-radius: 4px; font-size: 0.55rem; font-weight: bold; margin-left: 5px;">UPDATE (v${gitVersion})</span>`;
-                            }
-                        }
-                    }).catch(e => console.log('Git version check failed', e));
+                // Yalnız versiya mətnini göstər, kliklenebilir et
+                // Badge məntiqi initSystemUpdates() tərəfindən idarə olunur
+                el.innerHTML = `<span id="version-text" onclick="openSystemUpdateModal()" style="cursor:pointer; text-decoration:underline; text-underline-offset:3px;" title="Versiyalara bax">v${localVersion}</span> <span id="version-badge"></span>`;
             }
         }
     } catch (e) {
@@ -1894,6 +1880,16 @@ async function fetchDocs() {
 }
 
 let systemVersions = [];
+let _currentPanelVersion = '';
+
+// Versiya rəqəmlərini müqayisə üçün çevir (v1.0.19 -> 10019)
+function parseVersionNum(v) {
+    const clean = v.replace(/^v/, '').replace(/[^0-9.]/g, '');
+    const parts = clean.split('.');
+    return (parseInt(parts[0] || 0) * 10000) +
+           (parseInt(parts[1] || 0) * 100) +
+            parseInt(parts[2] || 0);
+}
 
 async function initSystemUpdates() {
     const changelog = await fetchChangelog();
@@ -1902,96 +1898,174 @@ async function initSystemUpdates() {
     try {
         const vRes = await fetch('/api/version');
         const vData = await vRes.json();
-        const currentVersion = vData.version;
-        const currentVersionNumber = parseInt(currentVersion.replace(/[^0-9]/g, '')) || 0;
+        _currentPanelVersion = vData.version;
+        const currentNum = parseVersionNum(_currentPanelVersion);
         
+        let latestVer = '';
         let hasNewer = false;
-        if(changelog.length > 0) {
-            const latestVersion = changelog[0].version;
-            const latestVersionNumber = parseInt(latestVersion.replace(/[^0-9]/g, '')) || 0;
-            if (latestVersionNumber > currentVersionNumber) {
+        if (changelog.length > 0) {
+            latestVer = changelog[0].version;
+            if (parseVersionNum(latestVer) > currentNum) {
                 hasNewer = true;
             }
         }
         
-        const badgeSpan = document.getElementById('app-version');
-        if(badgeSpan) {
+        // Badge məntiqi — yalnız burada, fetchAppVersion-da deyil
+        const badge = document.getElementById('version-badge');
+        const versionText = document.getElementById('version-text');
+        if (badge) {
             if (hasNewer) {
-                const latestVer = changelog[0].version;
-                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--text-secondary);" title="Versiyalara bax">v${currentVersion}</span> <span onclick="quickUpdate('${latestVer}')" style="background: var(--primary-color); color: white; border-radius: 4px; padding: 2px 6px; font-size: 0.5rem; margin-left: 3px; cursor: pointer; font-weight: bold;" title="${latestVer} mövcuddur - klikləyin">UPDATE</span>`;
+                badge.innerHTML = `<span onclick="openSystemUpdateModal()" style="background: linear-gradient(135deg, #ff416c, #ff4b2b); color: white; border-radius: 5px; padding: 2px 7px; font-size: 0.52rem; margin-left: 4px; cursor: pointer; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(255,65,108,0.4); animation: pulse-badge 2s infinite;" title="${latestVer} mövcuddur — klikləyin">UPDATE</span>`;
             } else {
-                badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; color: var(--text-secondary);" title="Versiyalara bax">v${currentVersion}</span>`;
+                badge.innerHTML = '';
             }
-        }
-        
-        const select = document.getElementById('system-version-select');
-        if(select) {
-            select.innerHTML = '';
-            changelog.forEach(v => {
-                const opt = document.createElement('option');
-                opt.value = v.version;
-                opt.textContent = `${v.version}${v.version === currentVersion || v.version === 'v' + currentVersion ? ' (Hazırki)' : ''}`;
-                select.appendChild(opt);
-            });
         }
     } catch(e) {}
 }
 
-async function quickUpdate(version) {
-    const versionObj = systemVersions.find(x => x.version === version);
-    let changesList = '';
-    if(versionObj && versionObj.changes) {
-        changesList = '\n\nYeniliklər:\n• ' + versionObj.changes.join('\n• ');
-    }
-    if(!confirm(`${version} versiyasına yüksəltmək istəyirsiniz?${changesList}\n\nPanel 5-10 saniyə söndürülüb yenidən başladılacaq.`)) return;
-    
-    try {
-        await fetch('/api/system/update', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ version: version })
-        });
-        alert('Yeniləmə başladıldı! 10 saniyə sonra səhifəni yeniləyin.');
-    } catch(e) {
-        alert('Xəta baş verdi!');
-    }
-}
-
 function openSystemUpdateModal() {
     showModal('system-update-modal');
-    updateSelectedVersionChanges();
+    renderVersionCards();
 }
 
-function updateSelectedVersionChanges() {
-    const select = document.getElementById('system-version-select');
-    if(!select) return;
-    const v = select.value;
-    const versionObj = systemVersions.find(x => x.version === v);
-    const div = document.getElementById('selected-version-changes');
-    if(versionObj && versionObj.changes) {
-        div.innerHTML = `<b>Bu versiyadakı yeniliklər:</b><ul style="padding-left:20px;margin-top:5px;margin-bottom:0;">` + versionObj.changes.map(c => `<li>${c}</li>`).join('') + `</ul>`;
-    } else {
-        div.innerHTML = '';
+function renderVersionCards() {
+    const container = document.getElementById('version-cards-list');
+    if (!container) return;
+    if (systemVersions.length === 0) {
+        container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-secondary);">Versiya məlumatı tapılmadı.</div>';
+        return;
     }
+    
+    const currentNum = parseVersionNum(_currentPanelVersion);
+    const latestNum = parseVersionNum(systemVersions[0].version);
+    
+    container.innerHTML = systemVersions.map((v, idx) => {
+        const vNum = parseVersionNum(v.version);
+        const isCurrent = (vNum === currentNum);
+        const isLatest = (idx === 0);
+        const isNewer = vNum > currentNum;
+        const isOlder = vNum < currentNum;
+        
+        // Kart rəng və border
+        let borderColor = 'var(--card-border)';
+        let bgColor = 'var(--card-bg)';
+        if (isCurrent) {
+            borderColor = 'rgba(0, 210, 255, 0.5)';
+            bgColor = 'rgba(0, 210, 255, 0.05)';
+        } else if (isLatest && isNewer) {
+            borderColor = 'rgba(255, 65, 108, 0.4)';
+            bgColor = 'rgba(255, 65, 108, 0.05)';
+        }
+        
+        // Badge
+        let badgeHtml = '';
+        if (isLatest && isNewer) {
+            badgeHtml = `<span style="background: linear-gradient(135deg, #ff416c, #ff4b2b); color: white; border-radius: 4px; padding: 2px 8px; font-size: 0.65rem; font-weight: 700;">⭐ Ən Son</span>`;
+        } else if (isLatest && isCurrent) {
+            badgeHtml = `<span style="background: linear-gradient(135deg, #00c851, #007e33); color: white; border-radius: 4px; padding: 2px 8px; font-size: 0.65rem; font-weight: 700;">⭐ Ən Son</span>`;
+        } else if (isCurrent) {
+            badgeHtml = `<span style="background: rgba(0,210,255,0.2); color: #00d2ff; border: 1px solid rgba(0,210,255,0.4); border-radius: 4px; padding: 2px 8px; font-size: 0.65rem; font-weight: 600;">✅ Hazırki</span>`;
+        }
+        
+        // Düymə
+        let btnHtml = '';
+        if (isCurrent) {
+            btnHtml = `<button class="btn btn-secondary" disabled style="opacity:0.4; cursor:not-allowed; padding: 6px 14px; font-size: 0.8rem;">Hazırki</button>`;
+        } else if (isNewer) {
+            btnHtml = `<button class="btn btn-primary" onclick="confirmVersionSwitch('${v.version}', false)" style="padding: 6px 14px; font-size: 0.8rem; background: linear-gradient(135deg, #ff416c, #ff4b2b);">⬆ Yüksəlt</button>`;
+        } else {
+            btnHtml = `<button class="btn btn-secondary" onclick="confirmVersionSwitch('${v.version}', true)" style="padding: 6px 14px; font-size: 0.8rem;">↩ Qayıt</button>`;
+        }
+        
+        // Changelog sətirləri
+        const changesHtml = v.changes && v.changes.length > 0
+            ? `<ul style="margin: 8px 0 0; padding-left: 18px; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.6;">${v.changes.map(c => `<li>${c}</li>`).join('')}</ul>`
+            : '';
+        
+        return `
+        <div style="
+            background: ${bgColor};
+            border: 1px solid ${borderColor};
+            border-radius: 10px;
+            padding: 14px 16px;
+            transition: all 0.2s ease;
+        ">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <span style="font-weight: 700; font-size: 1rem; color: var(--text-primary); font-family: monospace;">${v.version}</span>
+                    ${badgeHtml}
+                </div>
+                ${btnHtml}
+            </div>
+            ${changesHtml}
+        </div>`;
+    }).join('');
 }
 
-async function confirmSystemUpdate() {
-    const select = document.getElementById('system-version-select');
-    const v = select.value;
-    if(!confirm(`Panelin ${v} versiyasını qurmaq istədiyinizdən əminsiniz? Bu əməliyyat paneli qısa müddətə söndürüb yenidən işə salacaq.`)) return;
+async function confirmVersionSwitch(version, isRollback) {
+    const versionObj = systemVersions.find(x => x.version === version);
+    let changesList = '';
+    if (versionObj && versionObj.changes) {
+        changesList = '\n\nBu versiyada:\n• ' + versionObj.changes.join('\n• ');
+    }
+    const action = isRollback ? 'geri qayıtmaq' : 'yüksəltmək';
+    if (!confirm(`${version} versiyasına ${action} istəyirsiniz?${changesList}\n\nPanel 5-10 saniyə söndürülüb yenidən başladılacaq.`)) return;
     
     closeModal('system-update-modal');
     try {
         await fetch('/api/system/update', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ version: v })
+            body: JSON.stringify({ version: version })
         });
-        alert('Yeniləmə sorğusu göndərildi! Panel 5-10 saniyə ərzində yenidən başladılacaq. Zəhmət olmasa bir az gözləyib səhifəni yeniləyin.');
+        showVersionSwitchProgress();
     } catch(e) {
-        alert('Xəta baş verdi!');
+        alert('Xəta baş verdi: ' + e.message);
     }
 }
+
+function showVersionSwitchProgress() {
+    // Ekranı qarala, gözlə, yenilə
+    const overlay = document.createElement('div');
+    overlay.id = 'update-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;';
+    overlay.innerHTML = `
+        <div style="text-align:center; color:white;">
+            <div style="font-size:3rem; margin-bottom:1rem;">🔄</div>
+            <h2 style="margin:0 0 0.5rem; font-family:monospace;">Panel yenilənir...</h2>
+            <p style="color:rgba(255,255,255,0.6); margin:0 0 1.5rem;">Bir neçə saniyə gözləyin</p>
+            <div style="width:200px; height:4px; background:rgba(255,255,255,0.1); border-radius:2px; overflow:hidden; margin:0 auto;">
+                <div id="progress-bar" style="width:0%; height:100%; background:linear-gradient(90deg,#00d2ff,#7c3aed); border-radius:2px; transition:width 0.3s;"></div>
+            </div>
+            <p id="update-countdown" style="color:rgba(255,255,255,0.4); font-size:0.85rem; margin-top:1rem;">10 saniyə...</p>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    
+    let secs = 10;
+    const interval = setInterval(() => {
+        secs--;
+        const pct = ((10 - secs) / 10) * 100;
+        const bar = document.getElementById('progress-bar');
+        const cd = document.getElementById('update-countdown');
+        if (bar) bar.style.width = pct + '%';
+        if (cd) cd.textContent = secs > 0 ? `${secs} saniyə...` : 'Yenilənir...';
+        if (secs <= 0) {
+            clearInterval(interval);
+            location.reload();
+        }
+    }, 1000);
+}
+
+// Köhnə funksiyalar — uyğunluq üçün saxlanılır
+async function quickUpdate(version) {
+    await confirmVersionSwitch(version, false);
+}
+async function confirmSystemUpdate() {
+    const select = document.getElementById('system-version-select');
+    if (select) await confirmVersionSwitch(select.value, false);
+}
+function updateSelectedVersionChanges() {}
 
 async function openHelpCenter() {
     showModal('help-modal');
@@ -2030,4 +2104,16 @@ function switchHelpTab(tabId) {
 
 document.addEventListener('DOMContentLoaded', () => {
     initSystemUpdates();
+    // Hər 5 dəqiqədən bir versiya yoxla
+    setInterval(initSystemUpdates, 5 * 60 * 1000);
 });
+
+// Pulse animasiyası badge üçün
+const _badgeStyle = document.createElement('style');
+_badgeStyle.textContent = `
+@keyframes pulse-badge {
+    0%, 100% { box-shadow: 0 2px 8px rgba(255,65,108,0.4); }
+    50% { box-shadow: 0 2px 16px rgba(255,65,108,0.8); }
+}
+`;
+document.head.appendChild(_badgeStyle);

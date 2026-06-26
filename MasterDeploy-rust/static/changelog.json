@@ -1,5 +1,23 @@
 [
   {
+    "version": "v1.0.19",
+    "changes": [
+      "Versiya sistemi tam yenidən quruldu — kart əsaslı versiya seçici.",
+      "Sidebar-da UPDATE badge məntiqi düzəldildi.",
+      "Versiyalar modalında hər versiya ayrı kart kimi göstərilir.",
+      "5 dəqiqəlik avtomatik versiya yoxlama intervalı əlavə edildi.",
+      "Rollback (köhnə versiyaya qayıdış) tam işlək edildi."
+    ]
+  },
+  {
+    "version": "v1.0.18",
+    "changes": [
+      "fetchAppVersion() badge race condition düzəldildi.",
+      "initSystemUpdates() mərkəzləşdirildi — tək badge məntiqi.",
+      "Versiya müqayisəsi düzgün sıralanmış versiya rəqəmləri ilə edilir."
+    ]
+  },
+  {
     "version": "v1.0.17",
     "changes": [
       "NEW badge-i silindi - artıq ən son versiyadasınızsa heç nə göstərilmir.",

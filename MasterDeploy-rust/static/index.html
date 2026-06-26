@@ -997,22 +997,19 @@
 
     <!-- System Update Modal -->
     <div id="system-update-modal" class="modal-backdrop">
-        <div class="modal-card" style="max-width: 500px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h2 style="margin: 0;">🔄 Paneli Yenilə / Geri Qaytar</h2>
-                <button onclick="closeModal('system-update-modal')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
-            </div>
-            <div>
-                <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 15px;">Aşağıdakı siyahıdan quraşdırmaq istədiyiniz versiyanı seçin. Ən son versiya həmişə siyahının əvvəlindədir.</p>
-                <div class="form-group">
-                    <label>Mövcud Versiyalar</label>
-                    <select id="system-version-select" style="width: 100%; padding: 10px; background: var(--bg-color); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 8px; margin-bottom: 15px;" onchange="updateSelectedVersionChanges()"></select>
+        <div class="modal-card" style="max-width: 600px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem;">🔄 Versiyalar</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Yeni versiyaya keç və ya köhnəyə qayıt</p>
                 </div>
-                <div id="selected-version-changes" style="font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-color); padding: 10px; border-radius: 8px; margin-bottom: 20px;"></div>
+                <button onclick="closeModal('system-update-modal')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">✕</button>
             </div>
-            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
-                <button class="btn btn-secondary" onclick="closeModal('system-update-modal')">Ləğv et</button>
-                <button class="btn btn-primary" onclick="confirmSystemUpdate()">Seçilən Versiyanı Qur</button>
+            <div id="version-cards-list" style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
+                <div style="text-align:center; padding: 20px; color: var(--text-secondary);">Yüklənir...</div>
+            </div>
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border);">
+                <button class="btn btn-secondary" onclick="closeModal('system-update-modal')">Bağla</button>
             </div>
         </div>
     </div>
