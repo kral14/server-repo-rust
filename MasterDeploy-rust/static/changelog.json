@@ -1,5 +1,11 @@
 [
   {
+    "version": "v1.0.26",
+    "changes": [
+      "Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."
+    ]
+  },
+  {
     "version": "v1.0.23",
     "changes": [
       "Qalan bütün confirm() və alert() pəncərələri premium kart modalları ilə əvəz edildi.",

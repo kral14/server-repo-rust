@@ -15,6 +15,7 @@ def run_cmd(cmd, ignore_error=False):
     return result.returncode == 0
 
 import re
+import json
 
 def bump_cargo_version():
     cargo_path = os.path.join(ROOT_DIR, "MasterDeploy-rust", "Cargo.toml")
@@ -33,6 +34,28 @@ def bump_cargo_version():
         with open(cargo_path, 'w', encoding='utf-8') as f:
             f.write(new_content)
         print(f"BUMPED CARGO VERSION TO: v{new_version}")
+
+        # changelog.json yeniləmək
+        changelog_path = os.path.join(ROOT_DIR, "MasterDeploy-rust", "static", "changelog.json")
+        if os.path.exists(changelog_path):
+            try:
+                with open(changelog_path, 'r', encoding='utf-8') as f:
+                    logs = json.load(f)
+                
+                # Əgər bu versiya artıq yoxdursa əlavə et
+                v_str = f"v{new_version}"
+                if not any(x.get('version') == v_str for x in logs):
+                    new_log = {
+                        "version": v_str,
+                        "changes": ["Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."]
+                    }
+                    logs.insert(0, new_log)
+                    with open(changelog_path, 'w', encoding='utf-8') as f:
+                        json.dump(logs, f, indent=2, ensure_ascii=False)
+                    print(f"Added {v_str} to changelog.json")
+            except Exception as e:
+                print(f"Warning: Failed to update changelog.json: {e}")
+
         return new_version
     return None
 
