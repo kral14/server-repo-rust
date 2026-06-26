@@ -52,9 +52,9 @@
                 <span class="logo-icon">🛸</span>
                 <div style="display: flex; flex-direction: column; gap: 2px;">
                     <h1 style="margin: 0; line-height: 1;">DeployMaster</h1>
-                    <div style="display: flex; align-items: center; gap: 5px;">
-                        <span id="app-version" style="font-size: 0.65rem; color: var(--text-secondary); font-family: monospace; letter-spacing: 1px;">v1.0.0</span>
-                        <span onclick="openHelpCenter()" style="cursor: pointer; background: var(--card-bg); color: var(--text-primary); border: 1px solid var(--card-border); border-radius: 50%; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 0.55rem; font-weight: bold; transition: all 0.2s;" onmouseover="this.style.background='var(--primary-color)'; this.style.color='#fff'" onmouseout="this.style.background='var(--card-bg)'; this.style.color='var(--text-primary)'">?</span>
+                    <div style="display: flex; align-items: center; gap: 5px; margin-top: 2px;">
+                        <span onclick="openHelpCenter()" style="cursor: pointer; opacity: 0.8; font-size: 0.85rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'" title="Kömək Mərkəzi və Versiyalar">ℹ️</span>
+                        <span id="app-version" style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace; letter-spacing: 1px;">v1.0.0</span>
                     </div>
                 </div>
             </div>
@@ -972,13 +972,13 @@
     </div>
 
     <!-- Help Center Modal -->
-    <div id="help-modal" class="modal-overlay">
-        <div class="modal" style="max-width: 800px; width: 95%;">
-            <div class="modal-header">
-                <h2>📚 Kömək Mərkəzi və Versiya Tarixçəsi</h2>
-                <button class="close-btn" onclick="closeModal('help-modal')">✕</button>
+    <div id="help-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 800px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">📚 Kömək Mərkəzi və Versiya Tarixçəsi</h2>
+                <button onclick="closeModal('help-modal')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
             </div>
-            <div class="modal-content" style="padding: 0;">
+            <div style="padding: 0;">
                 <div style="display: flex; border-bottom: 1px solid var(--card-border);">
                     <button class="help-tab-btn active" onclick="switchHelpTab('help-changelog')" style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-primary); cursor: pointer; border-bottom: 2px solid var(--primary-color);">Yeniliklər (Changelog)</button>
                     <button class="help-tab-btn" onclick="switchHelpTab('help-about')" style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Proqram Haqqında</button>
@@ -987,30 +987,30 @@
                 </div>
                 <div style="padding: 20px; max-height: 500px; overflow-y: auto;">
                     <div id="help-changelog" class="help-tab-content">Yüklənir...</div>
-                    <div id="help-about" class="help-tab-content" style="display: none; white-space: pre-wrap;">Yüklənir...</div>
-                    <div id="help-external" class="help-tab-content" style="display: none; white-space: pre-wrap;">Yüklənir...</div>
-                    <div id="help-local" class="help-tab-content" style="display: none; white-space: pre-wrap;">Yüklənir...</div>
+                    <div id="help-about" class="help-tab-content" style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">Yüklənir...</div>
+                    <div id="help-external" class="help-tab-content" style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">Yüklənir...</div>
+                    <div id="help-local" class="help-tab-content" style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">Yüklənir...</div>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- System Update Modal -->
-    <div id="system-update-modal" class="modal-overlay">
-        <div class="modal" style="max-width: 500px;">
-            <div class="modal-header">
-                <h2>🔄 Paneli Yenilə / Geri Qaytar</h2>
-                <button class="close-btn" onclick="closeModal('system-update-modal')">✕</button>
+    <div id="system-update-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 500px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">🔄 Paneli Yenilə / Geri Qaytar</h2>
+                <button onclick="closeModal('system-update-modal')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
             </div>
-            <div class="modal-content">
+            <div>
                 <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 15px;">Aşağıdakı siyahıdan quraşdırmaq istədiyiniz versiyanı seçin. Ən son versiya həmişə siyahının əvvəlindədir.</p>
                 <div class="form-group">
                     <label>Mövcud Versiyalar</label>
-                    <select id="system-version-select" class="form-control" onchange="updateSelectedVersionChanges()"></select>
+                    <select id="system-version-select" style="width: 100%; padding: 10px; background: var(--bg-color); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 8px; margin-bottom: 15px;" onchange="updateSelectedVersionChanges()"></select>
                 </div>
-                <div id="selected-version-changes" style="margin-top: 15px; font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-color); padding: 10px; border-radius: 8px;"></div>
+                <div id="selected-version-changes" style="font-size: 0.85rem; color: var(--text-secondary); background: var(--bg-color); padding: 10px; border-radius: 8px; margin-bottom: 20px;"></div>
             </div>
-            <div class="modal-footer">
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px;">
                 <button class="btn btn-secondary" onclick="closeModal('system-update-modal')">Ləğv et</button>
                 <button class="btn btn-primary" onclick="confirmSystemUpdate()">Seçilən Versiyanı Qur</button>
             </div>

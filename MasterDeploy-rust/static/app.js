@@ -1916,11 +1916,7 @@ async function initSystemUpdates() {
         
         const badgeSpan = document.getElementById('app-version');
         if(badgeSpan) {
-            if (hasNewer) {
-                badgeSpan.innerHTML = `v${currentVersion} <span onclick="openSystemUpdateModal()" style="background: var(--primary-color); color: white; border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.55rem; margin-left: 5px;">YENİLƏ</span>`;
-            } else {
-                badgeSpan.innerHTML = `v${currentVersion} <span onclick="openSystemUpdateModal()" style="background: var(--card-bg); border: 1px solid var(--card-border); color: var(--text-secondary); border-radius: 4px; padding: 2px 6px; cursor: pointer; font-size: 0.55rem; margin-left: 5px;">Versiyalar</span>`;
-            }
+            badgeSpan.innerHTML = `<span onclick="openSystemUpdateModal()" style="cursor: pointer; text-decoration: underline; text-underline-offset: 3px; ${hasNewer ? 'color: var(--primary-color); font-weight: bold;' : ''}">v${currentVersion}</span>`;
         }
         
         const select = document.getElementById('system-version-select');
