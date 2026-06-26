@@ -1,5 +1,11 @@
 [
   {
+    "version": "v1.0.21",
+    "changes": [
+      "Changelog v1.0.20 qeydləri əlavə edildi."
+    ]
+  },
+  {
     "version": "v1.0.20",
     "changes": [
       "Versiya sistemi tam yenidən quruldu — kart əsaslı versiya seçici.",
