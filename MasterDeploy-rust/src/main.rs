@@ -46,6 +46,7 @@ async fn main() {
 
         .route("/api/deploy/cancel/:deploy_id", post(cancel_deployment))
         .route("/api/deployments/:app_id", get(list_deployments))
+        .route("/api/deployments/single/:deploy_id", get(get_deployment))
         .route("/api/runtime-logs/:app_id", get(get_runtime_logs))
         .route("/api/version", get(get_version))
         .route("/api/system/changelog", get(get_changelog))
@@ -958,6 +959,19 @@ async fn list_deployments(State(state): State<AppState>, AxumPath(app_id): AxumP
     Ok(Json(deployments))
 }
 
+async fn get_deployment(State(state): State<AppState>, AxumPath(deploy_id): AxumPath<String>) -> Result<Json<Deployment>, (StatusCode, String)> {
+    let deployment = sqlx::query_as::<_, Deployment>(
+        "SELECT id, application_id, status, logs, CAST(created_at AS TEXT) as created_at \
+         FROM deployments WHERE id = ?"
+    )
+    .bind(&deploy_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Deployment not found".to_string()))?;
+    Ok(Json(deployment))
+}
+
 async fn update_logs_helper(db: &SqlitePool, dep_id: &str, text: &str) {
     let _ = sqlx::query("UPDATE deployments SET logs = ? WHERE id = ?")
         .bind(text)
@@ -1506,7 +1520,11 @@ async fn git_polling_loop(db: SqlitePool) {
     println!("[INFO] Git Auto-Deploy Polling Service is running... 🕵️");
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-        
+
+        // 30 gündən köhnə deployment qeydlərini avtomatik silirik
+        let _ = sqlx::query("DELETE FROM deployments WHERE created_at < datetime('now', '-30 days')")
+            .execute(&db)
+            .await;
         let apps = match sqlx::query_as::<_, Application>(
             "SELECT id, name, repo_url, branch, server_id, status, port, env_vars, build_pack_type, \
              build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \

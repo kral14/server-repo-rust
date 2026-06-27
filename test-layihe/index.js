@@ -27,10 +27,10 @@ const db = new sqlite3.Database(dbPath, (err) => {
 
 // API status endpointi (Versiya 1.5.0)
 app.get('/api/status', (req, res) => {
-    res.json({ 
-        status: "OK", 
-        version: "1.5.0", 
-        message: "MasterDeploy Test API Uğurla İşləyir (Dashboard & SQLite Dəstəyi)!" 
+    res.json({
+        status: "OK",
+        version: "1.6.0",
+        message: "MasterDeploy Test API Uğurla İşləyir (Dashboard & SQLite Dəstəyi)!"
     });
 });
 
@@ -43,8 +43,8 @@ app.post('/api/register', (req, res) => {
 
     const hashedPassword = bcrypt.hashSync(password, 10);
     const query = `INSERT INTO users (username, password) VALUES (?, ?)`;
-    
-    db.run(query, [username, hashedPassword], function(err) {
+
+    db.run(query, [username, hashedPassword], function (err) {
         if (err) {
             if (err.message.includes("UNIQUE constraint failed")) {
                 return res.status(400).json({ error: "Bu istifadəçi adı artıq mövcuddur!" });

@@ -805,16 +805,16 @@ async function cancelActiveDeployment() {
 }
 
 // View Logs in Split-screen Tab (Koyeb-style)
-function viewLogs(appId, switchMainTab = true) {
+function viewLogs(appId, switchMainTab = true, specificDeployId = null) {
     if (switchMainTab) { switchTab('app-details'); switchAppTab('logs'); }
 
     const terminal = document.getElementById('terminal-body');
-    terminal.innerText = 'Yayım başladılır...';
+    terminal.innerText = 'Yayım loqları yüklənir...';
     document.getElementById('cancel-deploy-btn').style.display = 'none';
     document.getElementById('stuck-warning-banner').style.display = 'none';
     document.getElementById('last-update-badge').innerText = '';
-    document.getElementById('stream-status-dot').innerText = 'Real-time stream active ●';
-    document.getElementById('stream-status-dot').style.color = 'var(--success-color)';
+    document.getElementById('stream-status-dot').innerText = 'Loqlar yüklənir...';
+    document.getElementById('stream-status-dot').style.color = '#ccc';
     currentActiveDeploymentId = null;
     currentAppId = appId;
     lastUpdateTime = Date.now();
@@ -843,19 +843,51 @@ function viewLogs(appId, switchMainTab = true) {
         liveIcon.style.background = 'rgba(255,255,255,0.1)';
     }
 
-    // Link building is now handled in openAppDetails
-
     stopLogPolling();
     stopRuntimeLogPolling();
 
-    // Ticker to update "Last update: Xs ago" badge every second
+    // Əgər spesifik bir köhnə deployment loqu istənilibsə
+    if (specificDeployId) {
+        document.getElementById('stream-status-dot').innerText = 'Arxiv Loq (Statik)';
+        document.getElementById('stream-status-dot').style.color = '#9aa0a6';
+        if (updateBadgeTimer) { clearInterval(updateBadgeTimer); updateBadgeTimer = null; }
+
+        fetch(`/api/deployments/single/${specificDeployId}`)
+            .then(res => res.json())
+            .then(deploy => {
+                if (deploy) {
+                    terminal.innerText = deploy.logs ? stripAnsi(deploy.logs) : "[MƏLUMAT] Bu deployment üçün loq tapılmadı.";
+                    updateDeploymentStages(deploy.logs || '');
+                    
+                    const statusDot = document.getElementById('stream-status-dot');
+                    if (statusDot) {
+                        if (deploy.status === 'success') {
+                            statusDot.innerText = 'Uğurlu (Arxiv) ✅';
+                            statusDot.style.color = 'var(--success-color)';
+                        } else if (deploy.status === 'stopped') {
+                            statusDot.innerText = 'Dayandırılıb (Arxiv) ⚪';
+                            statusDot.style.color = '#757575';
+                        } else {
+                            statusDot.innerText = `${deploy.status.toUpperCase()} (Arxiv) ❌`;
+                            statusDot.style.color = 'var(--danger-color)';
+                        }
+                    }
+                }
+            })
+            .catch(err => {
+                console.error("Failed to fetch single deployment", err);
+                terminal.innerText = "❌ Loqları yükləmək mümkün olmadı.";
+            });
+        return;
+    }
+
+    // Ticker to update "Last update: Xs ago" badge every second (Real-time polling üçün)
     if (updateBadgeTimer) clearInterval(updateBadgeTimer);
     updateBadgeTimer = setInterval(() => {
         if (!lastUpdateTime) return;
         const secAgo = Math.floor((Date.now() - lastUpdateTime) / 1000);
         const badge = document.getElementById('last-update-badge');
         const stuckBanner = document.getElementById('stuck-warning-banner');
-        const statusDot = document.getElementById('stream-status-dot');
         if (badge) badge.innerText = `Son yeniləmə: ${secAgo}s əvvəl`;
         if (secAgo >= 180 && stuckBanner) {
             stuckBanner.style.display = 'block';
@@ -2201,6 +2233,25 @@ toggleAccordion = function (contentId, headerElement) {
     }
 };
 
+function downloadLogs(targetId = 'terminal-body', filename = 'logs.txt') {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    const text = el.innerText || el.textContent || '';
+    if (!text.trim()) {
+        alert('Endirmək üçün heç bir loq tapılmadı!');
+        return;
+    }
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 // Also modify copyTerminalLogs to handle specific IDs
 function copyTerminalLogs(targetId = 'terminal-body') {
     const el = document.getElementById(targetId);
@@ -2781,7 +2832,7 @@ async function loadAppDeployments(appId) {
                     </div>
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
                         ${cancelBtn}
-                        <button class="btn btn-secondary" onclick="viewDeploymentLogs('${appId}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">📋 Loqlar</button>
+                        <button class="btn btn-secondary" onclick="viewDeploymentLogs('${appId}', '${d.id}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">📋 Loqlar</button>
                     </div>
                 </div>
             `;
@@ -2801,8 +2852,11 @@ async function loadAppDeployments(appId) {
     }
 }
 
-function viewDeploymentLogs(appId) {
+function viewDeploymentLogs(appId, deployId = null) {
     switchAppTab('logs');
+    if (deployId) {
+        viewLogs(appId, false, deployId);
+    }
 }
 
 async function cancelDeploymentFromOverview(deployId, appId) {
