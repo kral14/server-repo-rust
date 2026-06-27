@@ -175,8 +175,14 @@
                             </a>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 0.8rem;">
+                    <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
                         <button class="btn btn-secondary" onclick="switchTab('applications')">Geri Dön</button>
+
+                        <button id="btn-app-restart" class="btn btn-secondary" onclick="restartApp()" title="Konteyneri yenidən başladır">🔄 Restart</button>
+                        <button id="btn-app-stop" class="btn btn-secondary" onclick="stopApp()" style="color: #ff4444 !important;" title="Konteyneri dayandırır">🛑 Stop</button>
+
+                        <button id="btn-app-save" class="btn btn-secondary" onclick="saveAppSettings()" style="color: var(--accent-color) !important;" title="Ayarları bazaya qeyd edir">💾 Yadda Saxla</button>
+                        <button id="btn-app-redeploy" class="btn btn-primary" style="background: linear-gradient(135deg, #7c3aed, #00d2ff);" onclick="redeployApp()" title="Yeni versiya kimi yayımlayır">🚀 Redeploy</button>
 
                         <div style="position: relative; display: inline-block;">
                             <button class="btn btn-secondary"
@@ -198,12 +204,9 @@
                                 </button>
                             </div>
                         </div>
-
-                        <button id="detail-redeploy-btn" class="btn btn-primary"
-                            style="background: linear-gradient(135deg, #7c3aed, #00d2ff);"
-                            onclick="saveAndRedeploy()">🚀 Yadda Saxla və Yenidən Yayımla (Redeploy)</button>
                     </div>
                 </header>
+
 
                 <!-- Sub-Tabs Navigation -->
                 <div class="app-subtabs"
@@ -264,6 +267,19 @@
                                     <span>🖥️</span> <strong id="detail-overview-server">-</strong>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Deployments Tarixçəsi Bölməsi -->
+                    <div
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.8rem;">
+                            <h3 style="margin: 0;">🚀 Yayım Tarixçəsi (Deployments)</h3>
+                            <button class="btn btn-secondary" onclick="loadAppDeployments(currentAppDetailsId)" style="padding: 0.3rem 0.8rem; font-size: 0.75rem;">🔄 Yenilə</button>
+                        </div>
+                        
+                        <div id="overview-deployments-list" style="display: flex; flex-direction: column; gap: 0.8rem;">
+                            <div class="no-data">Yüklənir...</div>
                         </div>
                     </div>
                 </div>
@@ -413,13 +429,9 @@
                                 </div>
                             </div>
                         </div>
-
-                        <div style="display: flex; justify-content: flex-end;">
-                            <button type="button" class="btn btn-secondary" onclick="saveAppSettings()">💾 Ayarları
-                                Yadda Saxla (Yayımlamadan)</button>
-                        </div>
                     </div>
                 </div>
+
 
                 <div id="subtab-logs" class="subtab-content"
                     style="display: none; flex: 1; min-height: 0; overflow-y: auto;">
@@ -443,56 +455,71 @@
                                 style="display: none; flex-direction: column; flex-grow: 1; border-top: 1px solid var(--card-border);">
                                 <!-- Stages -->
                                 <div id="stages-container"
-                                    style="padding: 0.8rem 1.2rem; display: flex; flex-direction: row; gap: 0.8rem; border-bottom: 1px solid var(--card-border); overflow-x: auto; align-items: center; justify-content: flex-start;">
+                                    style="padding: 0.8rem 1.2rem; display: flex; flex-direction: column; gap: 0.8rem; border-bottom: 1px solid var(--card-border); overflow-x: auto; align-items: stretch; justify-content: flex-start;">
                                     <div class="stage-item" id="stage-1"
-                                        style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.4rem 0.8rem; border-radius: 6px; flex: 1; justify-content: space-between; min-width: 150px;">
-                                        <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                            <span class="stage-icon">⚪</span>
-                                            <strong class="stage-title">Hazırlıq</strong>
-                                        </div>
-                                        <span class="stage-time"
-                                            style="font-family: monospace; font-size: 0.7rem;">--</span>
-                                    </div>
-
-                                    <div class="stage-item" id="stage-2"
-                                        style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.4rem 0.8rem; border-radius: 6px; flex: 1; justify-content: space-between; min-width: 150px;">
-                                        <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                            <span class="stage-icon">⚪</span>
-                                            <strong class="stage-title">Git Klonlama</strong>
-                                        </div>
-                                        <span class="stage-time"
-                                            style="font-family: monospace; font-size: 0.7rem;">--</span>
-                                    </div>
-
-                                    <div class="stage-item" id="stage-3"
-                                        style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.4rem 0.8rem; border-radius: 6px; flex: 1; justify-content: space-between; min-width: 150px;">
-                                        <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                            <span class="stage-icon">⚪</span>
-                                            <strong class="stage-title">Docker Build</strong>
-                                        </div>
-                                        <span class="stage-time"
-                                            style="font-family: monospace; font-size: 0.7rem;">--</span>
-                                    </div>
-
-                                    <div class="stage-item" id="stage-4"
-                                        style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.4rem 0.8rem; border-radius: 6px; flex: 1; justify-content: space-between; min-width: 150px;">
-                                        <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                            <span class="stage-icon">⚪</span>
-                                            <strong class="stage-title">Təmizlik</strong>
-                                        </div>
-                                        <span class="stage-time"
-                                            style="font-family: monospace; font-size: 0.7rem;">--</span>
-                                    </div>
-
-                                    <div class="stage-item" id="stage-5"
-                                        style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.4rem 0.8rem; border-radius: 6px; flex: 1; justify-content: space-between; min-width: 150px;">
-                                        <div style="display: flex; align-items: center; gap: 0.4rem;">
-                                            <span class="stage-icon">⚪</span>
-                                            <strong class="stage-title">İşəsalma</strong>
-                                        </div>
-                                        <span class="stage-time"
-                                            style="font-family: monospace; font-size: 0.7rem;">--</span>
-                                    </div>
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">Hazırlıq</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+ 
+                                     <div class="stage-item" id="stage-2"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">Git Klonlama</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+ 
+                                     <div class="stage-item" id="stage-3"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">Docker Build</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+ 
+                                     <div class="stage-item" id="stage-4"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">Təmizlik</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+ 
+                                     <div class="stage-item" id="stage-5"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">İşəsalma</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
                                 </div>
                                 <!-- Build Terminal -->
                                 <div

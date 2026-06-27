@@ -23,7 +23,13 @@ struct AppState {
 #[tokio::main]
 async fn main() {
     let pool = db::init_db().await.expect("Failed to initialize database");
-    let state = AppState { db: pool };
+    let state = AppState { db: pool.clone() };
+
+    // Verilənlər bazasının avtomatik ehtiyat nüsxəsini (backup) çıxarırıq
+    let _ = std::fs::copy("MasterDeploy-rust/masterdeploy.db", "MasterDeploy-rust/masterdeploy.db.backup");
+
+    // Git repositoriyalarını yeniliklər üçün yoxlayan arxa plan loopunu başladırıq
+    tokio::spawn(git_polling_loop(pool.clone()));
 
     let app = Router::new()
         .nest_service("/", ServeDir::new("static"))
@@ -34,7 +40,10 @@ async fn main() {
         .route("/api/servers/:server_id/check", get(check_server_connection))
         .route("/api/applications", get(list_applications).post(create_application))
         .route("/api/applications/:app_id", get(get_application).put(update_application).delete(delete_application))
+        .route("/api/applications/:app_id/stop", post(stop_application))
+        .route("/api/applications/:app_id/restart", post(restart_application))
         .route("/api/deploy/:app_id", post(trigger_deployment))
+
         .route("/api/deploy/cancel/:deploy_id", post(cancel_deployment))
         .route("/api/deployments/:app_id", get(list_deployments))
         .route("/api/runtime-logs/:app_id", get(get_runtime_logs))
@@ -74,6 +83,16 @@ async fn list_servers(State(state): State<AppState>) -> Result<Json<Vec<Server>>
 }
 
 async fn create_server(State(state): State<AppState>, Json(input): Json<CreateServerInput>) -> Result<(StatusCode, Json<Server>), (StatusCode, String)> {
+    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM servers WHERE ip = ?")
+        .bind(&input.ip)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        
+    if exists.is_some() {
+        return Err((StatusCode::BAD_REQUEST, "Bu IP ünvanına malik server artıq mövcuddur!".to_string()));
+    }
+
     let id = Uuid::new_v4().to_string();
     sqlx::query("INSERT INTO servers (id, name, ip, ssh_user, ssh_key) VALUES (?, ?, ?, ?, ?)")
         .bind(&id).bind(&input.name).bind(&input.ip).bind(&input.ssh_user).bind(&input.ssh_key)
@@ -106,6 +125,17 @@ async fn update_server(
     AxumPath(server_id): AxumPath<String>,
     Json(input): Json<UpdateServerInput>,
 ) -> Result<Json<bool>, (StatusCode, String)> {
+    let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM servers WHERE ip = ? AND id != ?")
+        .bind(&input.ip)
+        .bind(&server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        
+    if exists.is_some() {
+        return Err((StatusCode::BAD_REQUEST, "Bu IP ünvanına malik server artıq mövcuddur!".to_string()));
+    }
+
     sqlx::query("UPDATE servers SET name = ?, ip = ?, ssh_user = ?, ssh_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(&input.name)
         .bind(&input.ip)
@@ -183,8 +213,12 @@ async fn get_server_stats(
         let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
     }
 
-    let cmd = "free -m | awk 'NR==2{print $2,$3}'; nproc";
-    let output = match {
+    let cmd = "free -m | awk 'NR==2{print $2,$3}'; nproc; echo '---'; sudo docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' 2>/dev/null || true";
+    
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+    
+    // 3 saniyəlik qəti gözləmə limiti (timeout) tətbiq edirik
+    let run_future = async {
         if server.ip == "local" || server.ip == "127.0.0.1" {
             let local_cmd = cmd.replace("sudo ", "");
             tokio::process::Command::new("sh")
@@ -193,12 +227,13 @@ async fn get_server_stats(
                 .output()
                 .await
         } else {
-            tokio::process::Command::new("ssh")
+            tokio::process::Command::new(ssh_bin)
                 .args(&[
                     "-o", "StrictHostKeyChecking=no",
-                    "-o", "ConnectTimeout=5",
-                    "-o", "ServerAliveInterval=3",
-                    "-o", "ServerAliveCountMax=2",
+                    "-o", "BatchMode=yes",
+                    "-o", "ConnectTimeout=4",
+                    "-o", "ServerAliveInterval=2",
+                    "-o", "ServerAliveCountMax=1",
                     "-i", &temp_key_path,
                     &format!("{}@{}", server.ssh_user, server.ip),
                     cmd
@@ -206,33 +241,68 @@ async fn get_server_stats(
                 .output()
                 .await
         }
-    } {
-        Ok(out) => out,
-        Err(_) => {
-            let _ = std::fs::remove_file(&temp_key_path);
-            return Ok(Json(serde_json::json!({"total_ram_mb": 0, "used_ram_mb": 0, "cores": 0})));
+    };
+
+    let output_res = tokio::time::timeout(std::time::Duration::from_secs(5), run_future).await;
+    let _ = std::fs::remove_file(&temp_key_path);
+
+    let output = match output_res {
+        Ok(Ok(out)) => out,
+        _ => {
+            // Həm timeout, həm də daxili icra xətası halında boş məlumat qaytarırıq
+            return Ok(Json(serde_json::json!({"total_ram_mb": 0, "used_ram_mb": 0, "cores": 0, "containers": {}})));
         }
     };
 
-    let _ = std::fs::remove_file(&temp_key_path);
-
     if !output.status.success() {
-        return Ok(Json(serde_json::json!({"total_ram_mb": 0, "used_ram_mb": 0, "cores": 0})));
+        return Ok(Json(serde_json::json!({"total_ram_mb": 0, "used_ram_mb": 0, "cores": 0, "containers": {}})));
     }
 
     let result_str = String::from_utf8_lossy(&output.stdout);
-    let parts: Vec<&str> = result_str.trim().split_whitespace().collect();
-    
-    if parts.len() == 3 {
-        let stats = serde_json::json!({
-            "total_ram_mb": parts[0].parse::<u64>().unwrap_or(0),
-            "used_ram_mb": parts[1].parse::<u64>().unwrap_or(0),
-            "cores": parts[2].parse::<u64>().unwrap_or(1)
-        });
-        Ok(Json(stats))
-    } else {
-        Ok(Json(serde_json::json!({"total_ram_mb": 0, "used_ram_mb": 0, "cores": 0})))
+    let sections: Vec<&str> = result_str.split("---").collect();
+
+    let mut total_ram_mb = 0;
+    let mut used_ram_mb = 0;
+    let mut cores = 1;
+    let mut containers = serde_json::json!({});
+
+    if let Some(sys_section) = sections.get(0) {
+        let parts: Vec<&str> = sys_section.trim().split_whitespace().collect();
+        if parts.len() >= 3 {
+            total_ram_mb = parts[0].parse::<u64>().unwrap_or(0);
+            used_ram_mb = parts[1].parse::<u64>().unwrap_or(0);
+            cores = parts[2].parse::<u64>().unwrap_or(1);
+        }
     }
+
+    if let Some(docker_section) = sections.get(1) {
+        let mut container_map = serde_json::Map::new();
+        for line in docker_section.trim().lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let name = parts[0].to_string();
+                let cpu = parts[1].to_string();
+                let mem = parts[2].to_string();
+                container_map.insert(name, serde_json::json!({
+                    "cpu": cpu,
+                    "memory": mem
+                }));
+            }
+        }
+        containers = serde_json::Value::Object(container_map);
+    }
+
+    let stats = serde_json::json!({
+        "total_ram_mb": total_ram_mb,
+        "used_ram_mb": used_ram_mb,
+        "cores": cores,
+        "containers": containers
+    });
+    Ok(Json(stats))
 }
 
 async fn check_server_connection(
@@ -275,28 +345,40 @@ async fn check_server_connection(
     }
 
     let cmd = "echo 'OK'";
-    let output = if server.ip == "local" || server.ip == "127.0.0.1" {
-        tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(cmd)
-            .output()
-            .await
-    } else {
-        tokio::process::Command::new("ssh")
-            .args(&[
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "ConnectTimeout=5",
-                "-o", "ServerAliveInterval=3",
-                "-o", "ServerAliveCountMax=2",
-                "-i", &temp_key_path,
-                &format!("{}@{}", server.ssh_user, server.ip),
-                cmd
-            ])
-            .output()
-            .await
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+
+    let run_future = async {
+        if server.ip == "local" || server.ip == "127.0.0.1" {
+            tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .output()
+                .await
+        } else {
+            tokio::process::Command::new(ssh_bin)
+                .args(&[
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "BatchMode=yes",
+                    "-o", "ConnectTimeout=4",
+                    "-o", "ServerAliveInterval=2",
+                    "-o", "ServerAliveCountMax=1",
+                    "-i", &temp_key_path,
+                    &format!("{}@{}", server.ssh_user, server.ip),
+                    cmd
+                ])
+                .output()
+                .await
+        }
     };
 
+    let output_res = tokio::time::timeout(std::time::Duration::from_secs(5), run_future).await;
     let _ = std::fs::remove_file(&temp_key_path);
+ 
+    let output = match output_res {
+        Ok(Ok(out)) => Ok(out),
+        Ok(Err(e)) => Err(format!("SSH prosesi başladılarkən sistem xətası yarandı: {}", e)),
+        Err(_) => Err("Qoşulma limiti aşdı (Timeout 5s). Serverə qoşulmaq mümkün olmadı.".to_string())
+    };
 
     match output {
         Ok(out) if out.status.success() => {
@@ -468,7 +550,134 @@ async fn get_runtime_logs(
     Ok(Json(output))
 }
 
+async fn run_ssh_command(server: &Server, cmd: &str) -> Result<String, String> {
+    let temp_key_path = format!("temp_cmd_key_{}.key", uuid::Uuid::new_v4());
+    let key_content = if server.ssh_key.contains("BEGIN ") {
+        server.ssh_key.clone()
+    } else {
+        std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+    };
+
+    if let Err(e) = std::fs::write(&temp_key_path, &key_content) {
+        return Err(format!("Failed to write key: {}", e));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
+        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+        let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+        let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+    }
+
+    let output = if server.ip == "local" || server.ip == "127.0.0.1" {
+        let local_cmd = cmd.replace("sudo ", "");
+        tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(&local_cmd)
+            .output()
+            .await
+    } else {
+        let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+        tokio::process::Command::new(ssh_bin)
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "ConnectTimeout=10",
+                "-o", "ServerAliveInterval=3",
+                "-o", "ServerAliveCountMax=2",
+                "-i", &temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                cmd
+            ])
+            .output()
+            .await
+    };
+
+    let _ = std::fs::remove_file(&temp_key_path);
+
+    match output {
+        Ok(out) if out.status.success() => Ok(String::from_utf8_lossy(&out.stdout).to_string()),
+        Ok(out) => Err(format!("Command failed: {}", String::from_utf8_lossy(&out.stderr))),
+        Err(e) => Err(format!("Failed to execute command: {}", e)),
+    }
+}
+
+async fn stop_application(
+    State(state): State<AppState>,
+    AxumPath(app_id): AxumPath<String>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
+        .bind(&app_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
+
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&app.server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
+
+    let cmd = format!("sudo docker stop {}", app.name);
+    let ssh_res = run_ssh_command(&server, &cmd).await;
+
+    // Həmişə statusu bazada yeniləyirik ki, UI blokda qalmasın
+    let _ = sqlx::query("UPDATE applications SET status = 'stopped' WHERE id = ?")
+        .bind(&app_id)
+        .execute(&state.db)
+        .await;
+
+    match ssh_res {
+        Ok(_) => Ok(Json(true)),
+        Err(err) => Err((StatusCode::BAD_REQUEST, format!("SSH xətası (amma status stopped edildi): {}", err))),
+    }
+}
+
+async fn restart_application(
+    State(state): State<AppState>,
+    AxumPath(app_id): AxumPath<String>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
+        .bind(&app_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
+
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&app.server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
+
+    let cmd = format!("sudo docker restart {}", app.name);
+    let ssh_res = run_ssh_command(&server, &cmd).await;
+
+    // Restart uğurludursa running, yoxsa yenə stopped saxlayaq
+    let new_status = if ssh_res.is_ok() { "running" } else { "stopped" };
+    let _ = sqlx::query("UPDATE applications SET status = ? WHERE id = ?")
+        .bind(new_status)
+        .bind(&app_id)
+        .execute(&state.db)
+        .await;
+
+    match ssh_res {
+        Ok(_) => Ok(Json(true)),
+        Err(err) => Err((StatusCode::BAD_REQUEST, format!("SSH xətası: {}", err))),
+    }
+}
+
 async fn setup_server(
+
     State(state): State<AppState>,
     AxumPath(server_id): AxumPath<String>,
 ) -> Result<Json<bool>, (StatusCode, String)> {
@@ -564,10 +773,16 @@ async fn setup_server(
 }
 
 async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec<Application>>, (StatusCode, String)> {
-    let apps = sqlx::query_as::<_, Application>("SELECT * FROM applications ORDER BY created_at DESC")
-        .fetch_all(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let apps = sqlx::query_as::<_, Application>(
+        "SELECT id, name, repo_url, branch, server_id, status, port, env_vars, build_pack_type, \
+         build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
+         privileged, memory_limit, cpu_limit, last_commit_hash, \
+         CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at \
+         FROM applications ORDER BY created_at DESC"
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     Ok(Json(apps))
 }
 
@@ -625,6 +840,7 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
         privileged: Some(input.privileged.unwrap_or(0)),
         memory_limit: input.memory_limit,
         cpu_limit: input.cpu_limit,
+        last_commit_hash: None,
         created_at: String::new(),
         updated_at: String::new(),
     };
@@ -633,12 +849,18 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
 }
 
 async fn get_application(State(state): State<AppState>, AxumPath(app_id): AxumPath<String>) -> Result<Json<Application>, (StatusCode, String)> {
-    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
-        .bind(&app_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
+    let app = sqlx::query_as::<_, Application>(
+        "SELECT id, name, repo_url, branch, server_id, status, port, env_vars, build_pack_type, \
+         build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
+         privileged, memory_limit, cpu_limit, last_commit_hash, \
+         CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at \
+         FROM applications WHERE id = ?"
+    )
+    .bind(&app_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
     Ok(Json(app))
 }
 
@@ -651,9 +873,12 @@ async fn update_application(
         "UPDATE applications SET 
             repo_url = ?, branch = ?, port = ?, env_vars = ?, build_pack_type = ?, 
             build_command = ?, run_command = ?, dockerfile_path = ?, entrypoint = ?, 
-            command = ?, target = ?, work_dir = ?, privileged = ?, memory_limit = ?, cpu_limit = ?
+            command = ?, target = ?, work_dir = ?, privileged = ?, memory_limit = ?, cpu_limit = ?,
+            updated_at = CURRENT_TIMESTAMP
         WHERE id = ?"
     )
+
+
     .bind(&input.repo_url)
     .bind(&input.branch)
     .bind(input.port)
@@ -748,12 +973,43 @@ async fn finalize_deploy(db: &SqlitePool, deploy_id: &str, app_id: &str, status:
         .execute(db)
         .await;
 
+    if status == "success" {
+        // Əvvəlki bütün uğurlu deploy-ları 'stopped' edirik
+        let _ = sqlx::query("UPDATE deployments SET status = 'stopped' WHERE application_id = ? AND status = 'success' AND id != ?")
+            .bind(app_id)
+            .bind(deploy_id)
+            .execute(db)
+            .await;
+    }
+
     let app_status = if status == "success" { "running" } else { "failed" };
     let _ = sqlx::query("UPDATE applications SET status = ? WHERE id = ?")
         .bind(app_status)
         .bind(app_id)
         .execute(db)
         .await;
+
+    // Uğurlu deploy olduqda ən son commit SHA-nı alıb yadda saxlayırıq
+    if status == "success" {
+        if let Ok(Some(app)) = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?").bind(app_id).fetch_optional(db).await {
+            // git ls-remote ilə son commit-i öyrənirik
+            let output = std::process::Command::new("git")
+                .args(["ls-remote", &app.repo_url, &app.branch])
+                .output();
+            if let Ok(out) = output {
+                if out.status.success() {
+                    let result_str = String::from_utf8_lossy(&out.stdout);
+                    if let Some(sha) = result_str.split_whitespace().next() {
+                        let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                            .bind(sha)
+                            .bind(app_id)
+                            .execute(db)
+                            .await;
+                    }
+                }
+            }
+        }
+    }
 }
 
 async fn run_ssh_cmd_stream_helper(
@@ -775,9 +1031,11 @@ async fn run_ssh_cmd_stream_helper(
             .stderr(std::process::Stdio::piped())
             .spawn()?
     } else {
-        tokio::process::Command::new("ssh")
+        let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+        tokio::process::Command::new(ssh_bin)
             .args(&[
                 "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
                 "-o", "ConnectTimeout=15",
                 "-o", "ServerAliveInterval=3",
                 "-o", "ServerAliveCountMax=2",
@@ -802,6 +1060,18 @@ async fn run_ssh_cmd_stream_helper(
 
     // Read both streams in parallel
     loop {
+        // Hər dövrdə ləğv edilmə statusunu yoxlayırıq
+        if let Ok(Some((status,))) = sqlx::query_as::<_, (String,)>("SELECT status FROM deployments WHERE id = ?")
+            .bind(&deploy_id_clone)
+            .fetch_optional(&db_clone)
+            .await 
+        {
+            if status == "cancelled" {
+                let _ = child.kill().await;
+                return Ok(false);
+            }
+        }
+
         tokio::select! {
             line = stdout_reader.next_line() => {
                 if let Ok(Some(l)) = line {
@@ -847,28 +1117,44 @@ async fn trigger_deployment(
     State(state): State<AppState>,
     AxumPath(app_id): AxumPath<String>,
 ) -> Result<Json<Deployment>, (StatusCode, String)> {
+    match trigger_deployment_impl(state.db, app_id).await {
+        Ok(dep) => Ok(Json(dep)),
+        Err(err) => Err((StatusCode::INTERNAL_SERVER_ERROR, err)),
+    }
+}
+
+async fn trigger_deployment_impl(
+    db: SqlitePool,
+    app_id: String,
+) -> Result<Deployment, String> {
     let id = Uuid::new_v4().to_string();
     
     // Fetch application details to get server connection info
     let app = match sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
         .bind(&app_id)
-        .fetch_optional(&state.db)
+        .fetch_optional(&db)
         .await
     {
         Ok(Some(a)) => a,
-        Ok(None) => return Err((StatusCode::NOT_FOUND, "Application not found".to_string())),
-        Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+        Ok(None) => return Err("Application not found".to_string()),
+        Err(e) => return Err(e.to_string()),
     };
 
     let server = match sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
         .bind(&app.server_id)
-        .fetch_optional(&state.db)
+        .fetch_optional(&db)
         .await
     {
         Ok(Some(s)) => s,
-        Ok(None) => return Err((StatusCode::NOT_FOUND, "Target server not found".to_string())),
-        Err(e) => return Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+        Ok(None) => return Err("Target server not found".to_string()),
+        Err(e) => return Err(e.to_string()),
     };
+
+    // Həmin layihə üçün hazırda işləyən hər hansı başqa building/deploying deploy varsa, onu cancel edirik
+    let _ = sqlx::query("UPDATE deployments SET status = 'cancelled' WHERE application_id = ? AND (status = 'building' || status = 'deploying')")
+        .bind(&app_id)
+        .execute(&db)
+        .await;
 
     // Create new deployment record
     let deployment = Deployment {
@@ -879,26 +1165,28 @@ async fn trigger_deployment(
         created_at: String::new(),
     };
 
-    sqlx::query(
+    if let Err(e) = sqlx::query(
         "INSERT INTO deployments (id, application_id, status, logs) VALUES (?, ?, ?, ?)"
     )
     .bind(&deployment.id)
     .bind(&deployment.application_id)
     .bind(&deployment.status)
     .bind(&deployment.logs)
-    .execute(&state.db)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .execute(&db)
+    .await {
+        return Err(e.to_string());
+    }
 
     // Update application status
-    sqlx::query("UPDATE applications SET status = 'deploying' WHERE id = ?")
+    if let Err(e) = sqlx::query("UPDATE applications SET status = 'deploying' WHERE id = ?")
         .bind(&app_id)
-        .execute(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .execute(&db)
+        .await {
+            return Err(e.to_string());
+        }
 
     // Spawn background task to perform actual SSH commands
-    let db_clone = state.db.clone();
+    let db_clone = db.clone();
     let deploy_id = id.clone();
     let app_id_clone = app_id.clone();
     
@@ -1033,11 +1321,11 @@ async fn trigger_deployment(
                      BUILD_CMD=\"{}\"; [ -z \"$BUILD_CMD\" ] && BUILD_CMD=\"cargo build --release -j 1\"; \
                      RUN_CMD=\"{}\"; [ -z \"$RUN_CMD\" ] && RUN_CMD=\"./target/release/$(sed -n 's/^name *= *\"\\(.*\\)\"/\\1/p' Cargo.toml | head -n 1)\"; \
                      rm -f Cargo.lock; \
-                     echo -e \"FROM rust:1-slim AS builder\\nRUN apt-get update && apt-get install -y pkg-config libssl-dev\\nWORKDIR /app\\nCOPY . .\\nRUN $BUILD_CMD\\nFROM debian:bookworm-slim\\nRUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*\\nWORKDIR /app\\nCOPY --from=builder /app/$RUN_CMD ./app_bin\\nEXPOSE {}\\nCMD [\\\"./app_bin\\\"]\" > Dockerfile; \
+                     echo -e \"FROM rust:1-slim AS builder\\nRUN apt-get update && apt-get install -y pkg-config libssl-dev\\nWORKDIR /app\\nCOPY . .\\nRUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/app/target $BUILD_CMD && cp $RUN_CMD ./app_bin\\nFROM debian:bookworm-slim\\nRUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*\\nWORKDIR /app\\nCOPY --from=builder /app/app_bin ./app_bin\\nEXPOSE {}\\nCMD [\\\"./app_bin\\\"]\" > Dockerfile; \
                  else \
                      echo 'Fallback static/generic server.'; \
                      echo -e \"FROM alpine:latest\\nRUN apk add --no-cache curl\\nCMD [\\\"sleep\\\", \\\"3600\\\"]\" > Dockerfile; \
-                 fi && sudo docker build -t {}:latest .",
+                 fi && DOCKER_BUILDKIT=1 sudo docker build -t {}:latest .",
                 app.name, 
                 bc, rc, app.port,
                 bc, rc, app.port,
@@ -1060,7 +1348,7 @@ async fn trigger_deployment(
             };
             
             format!(
-                "cd /data/masterdeploy/apps/{} && ( [ -f \"{}\" ] || echo -e 'FROM alpine\\nRUN apk add --no-cache curl\\nCMD [\"sleep\", \"3600\"]' > \"{}\" ) && sudo docker build {} -f \"{}\" -t {}:latest .",
+                "cd /data/masterdeploy/apps/{} && ( [ -f \"{}\" ] || echo -e 'FROM alpine\\nRUN apk add --no-cache curl\\nCMD [\"sleep\", \"3600\"]' > \"{}\" ) && DOCKER_BUILDKIT=1 sudo docker build {} -f \"{}\" -t {}:latest .",
                 app.name, df_file, df_file, target_arg, df_file, app.name
             )
         };
@@ -1089,8 +1377,8 @@ async fn trigger_deployment(
         }
         
         let cleanup_cmd = format!(
-            "sudo docker stop {} || true && sudo docker rm {} || true",
-            app.name, app.name
+            "sudo docker rm -f {} || true",
+            app.name
         );
         
         let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), cleanup_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await;
@@ -1103,6 +1391,7 @@ async fn trigger_deployment(
         }
         
         let mut env_args = String::new();
+        let mut has_port_env = false;
         if let Some(ref env_vars_str) = app.env_vars {
             for line in env_vars_str.lines() {
                 let trimmed = line.trim();
@@ -1110,16 +1399,22 @@ async fn trigger_deployment(
                     continue;
                 }
                 if trimmed.contains('=') {
+                    if trimmed.starts_with("PORT=") {
+                        has_port_env = true;
+                    }
                     // Tək dırnaqlardan istifadə edirik ki, bash/sh $ kimi xüsusi simvolları dəyişən kimi oxumasın
                     let escaped = trimmed.replace("'", "'\\''");
                     env_args.push_str(&format!(" -e '{}'", escaped));
                 }
             }
         }
+        if !has_port_env {
+            env_args.push_str(&format!(" -e PORT={}", app.port));
+        }
         
         let run_cmd = format!(
-            "sudo docker run -d --name {} --restart always -p {}:{}{} {}:latest",
-            app.name, app.port, app.port, env_args, app.name
+            "sudo docker rm -f {} || true && sudo docker run -d --name {} --restart always -p {}:{}{} {}:latest",
+            app.name, app.name, app.port, app.port, env_args, app.name
         );
         
         match run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), run_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await {
@@ -1141,7 +1436,7 @@ async fn trigger_deployment(
         let _ = std::fs::remove_file(&temp_key_path);
     });
 
-    Ok(Json(deployment))
+    Ok(deployment)
 }
 
 async fn get_changelog() -> axum::response::Response {
@@ -1206,3 +1501,88 @@ async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> Result<Sta
         }
     }
 }
+
+async fn git_polling_loop(db: SqlitePool) {
+    println!("[INFO] Git Auto-Deploy Polling Service is running... 🕵️");
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        
+        let apps = match sqlx::query_as::<_, Application>(
+            "SELECT id, name, repo_url, branch, server_id, status, port, env_vars, build_pack_type, \
+             build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
+             privileged, memory_limit, cpu_limit, last_commit_hash, \
+             CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at \
+             FROM applications"
+        ).fetch_all(&db).await {
+            Ok(list) => list,
+            Err(e) => {
+                eprintln!("[ERROR] Polling loop DB error: {}", e);
+                continue;
+            }
+        };
+
+        for app in apps {
+            // Əgər repo manual deyil, GitHub/Git linkidirsə
+            if app.repo_url.is_empty() || app.repo_url.starts_with("DOCKER_IMAGE:") {
+                continue;
+            }
+
+            // Uzaq repodakı ən son commit SHA-nı alırıq
+            let output = tokio::time::timeout(
+                tokio::time::Duration::from_secs(15),
+                tokio::process::Command::new("git")
+                    .env("GIT_TERMINAL_PROMPT", "0")
+                    .args(["ls-remote", &app.repo_url, &app.branch])
+                    .output()
+            ).await;
+
+            match output {
+                Ok(Ok(out)) if out.status.success() => {
+                    let result_str = String::from_utf8_lossy(&out.stdout);
+                    if let Some(remote_sha) = result_str.split_whitespace().next() {
+                        let remote_sha = remote_sha.to_string();
+                        
+                        match app.last_commit_hash {
+                            None => {
+                                // İlk dəfə qoşulduqda sadəcə commit hash-i yazaq, lazımsız deploy başlamasın
+                                let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                    .bind(&remote_sha)
+                                    .bind(&app.id)
+                                    .execute(&db)
+                                    .await;
+                            }
+                            Some(ref local_sha) if local_sha != &remote_sha => {
+                                // Fərqli commit tapıldı! Yeni deployment-i başladırıq.
+                                println!("[AUTO-DEPLOY] Yeni commit tapıldı ({} -> {}), layihə: {}", local_sha, remote_sha, app.name);
+                                
+                                // Yeniləyirik
+                                let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                    .bind(&remote_sha)
+                                    .bind(&app.id)
+                                    .execute(&db)
+                                    .await;
+
+                                // Dərhal deploy et
+                                if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone()).await {
+                                    eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger deployment for {}: {}", app.name, e);
+                                }
+                            }
+                            _ => {} // Dəyişiklik yoxdur
+                        }
+                    }
+                }
+                Ok(Ok(out)) => {
+                    let err_str = String::from_utf8_lossy(&out.stderr);
+                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote failed for {}: {}", app.name, err_str.trim());
+                }
+                Ok(Err(e)) => {
+                    eprintln!("[AUTO-DEPLOY ERROR] Failed to execute git command for {}: {}", app.name, e);
+                }
+                Err(_) => {
+                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out (5s limit) for {}", app.name);
+                }
+            }
+        }
+    }
+}
+

@@ -131,3 +131,126 @@ input:focus, select:focus { outline: 1px solid var(--accent-color); box-shadow: 
 .log-accordion-header { border-radius: 8px; font-size: 1.1rem; font-weight: 600; background: var(--card-bg) !important; border-width: medium !important; border-style: none !important; border-color: currentcolor !important; border-image: initial !important; box-shadow: var(--shadow-btn) !important; padding: 1rem 1.5rem !important; }
 .log-accordion-header:active { box-shadow: var(--shadow-btn-active) !important; }
 .terminal, .live-terminal-container { background: var(--card-bg) !important; border-width: medium !important; border-style: none !important; border-color: currentcolor !important; border-image: initial !important; box-shadow: var(--shadow-in) !important; border-radius: 12px !important; }
+
+/* Grouped Server Headers & Load Monitor styling */
+.server-group {
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.server-group-header {
+    background: var(--card-bg) !important;
+    box-shadow: var(--shadow-out) !important;
+    border-radius: 10px;
+    padding: 0.8rem 1.2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.3rem;
+    border-left: 4px solid var(--accent-color);
+}
+.server-group-header h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.server-group-header h3 span.ip {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: normal;
+}
+.server-group-header-info {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+}
+.server-stats-badge {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    background: rgba(255,255,255,0.02);
+    box-shadow: var(--shadow-in);
+    padding: 0.3rem 0.6rem;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.server-stats-badge strong {
+    color: var(--accent-color);
+}
+.server-header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+.server-action-link {
+    font-size: 0.8rem;
+    color: var(--accent-color);
+    text-decoration: none;
+    padding: 0.3rem 0.6rem;
+    background: rgba(0, 210, 255, 0.05);
+    border-radius: 6px;
+    box-shadow: var(--shadow-btn);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+.server-action-link:hover {
+    box-shadow: var(--shadow-prominent);
+    transform: scale(1.02);
+}
+.app-load-badge {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.15);
+    padding: 0.2rem 0.5rem;
+    border-radius: 5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-family: monospace;
+}
+.app-load-badge strong {
+    color: var(--accent-color);
+}
+
+/* Pending Redeploy — kənar boyunca fırlanan qırmızı işıq */
+@keyframes pendingBorderSpin {
+    0%   { --pending-angle: 0deg; }
+    100% { --pending-angle: 360deg; }
+}
+@property --pending-angle {
+    syntax: '<angle>';
+    initial-value: 0deg;
+    inherits: false;
+}
+.pending-redeploy {
+    position: relative;
+    overflow: visible;
+    z-index: 1;
+}
+.pending-redeploy::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(
+        from var(--pending-angle),
+        transparent 0%,
+        transparent 55%,
+        #ff1744 70%,
+        #ff4466 80%,
+        #ff1744 90%,
+        transparent 100%
+    );
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: pendingBorderSpin 2.2s linear infinite;
+    pointer-events: none;
+    z-index: -1;
+}

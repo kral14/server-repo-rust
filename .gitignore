@@ -4,10 +4,13 @@ target/
 *.pem
 temp_*.key
 **/temp_*.key
+server_*.key
+ssh-key-*.key
 
 node_modules/
 __pycache__/
 *.log
 .vscode/
-
-
+repo_manager_config.json
+masterdeploy.db
+*.db

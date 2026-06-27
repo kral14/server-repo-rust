@@ -102,6 +102,7 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN privileged INTEGER DEFAULT 0;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN memory_limit TEXT;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN cpu_limit REAL;").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN last_commit_hash TEXT;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;").execute(&pool).await;
 
     // Seed default local server if empty

@@ -177,24 +177,21 @@ async function loadServers() {
                         <button class="btn btn-secondary" onclick="editServer('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">✏️ Redaktə Et</button>
                         <button class="btn btn-primary" onclick="setupServer('${s.id}', '${s.name}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none;">⚙️ Serveri Hazırla</button>
                         <button class="btn btn-secondary" onclick="toggleServerConsole('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">🖥️ Konsol</button>
-                        <span id="status-${s.id}" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; cursor: pointer; background: rgba(255,255,255,0.05); color: #ccc;" onclick="checkConnection('${s.id}')">⏳ Yoxlanılır...</span>
+                        <span id="status-${s.id}" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; cursor: pointer; background: rgba(255,255,255,0.05); color: #ccc;" onclick="checkConnection('${s.id}')">🔌 Yoxla</span>
                         <button class="btn btn-secondary" onclick="deleteServer('${s.id}', '${s.name}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: rgba(255,0,0,0.1); color: #ff1744; border-color: rgba(255,0,0,0.2);">&#128465;</button>
                     </div>
                 </div>
                 <div id="console-wrapper-${s.id}" class="server-console-wrapper" style="display: none; position: relative; margin-top: 0.5rem; width: 100%;">
                     <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 0.5rem; z-index: 10;">
-                        <button class="btn btn-secondary" onclick="copyServerConsole('${s.id}')" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">📋 Kopyala</button>
+                        <button class="btn btn-secondary" onclick="copyServerConsole('${s.id}', this)" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">📋 Kopyala</button>
                         <button class="btn btn-secondary" onclick="clearServerConsole('${s.id}')" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">🧹 Təmizlə</button>
                     </div>
-                    <div id="console-container-${s.id}" class="server-console-container" style="width: 100%; padding: 1rem; padding-top: 2.5rem; background: #07080d; border-radius: 8px; font-family: monospace; color: #ff3333; font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; border: 1px solid var(--card-border); max-height: 200px; overflow-y: auto;">
-                        [Sistem] Qoşulma yoxlanılır...
+                    <div id="console-container-${s.id}" class="server-console-container" style="width: 100%; padding: 1rem; padding-top: 2.5rem; background: #07080d; border-radius: 8px; font-family: monospace; color: #ccc; font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; border: 1px solid var(--card-border); max-height: 200px; overflow-y: auto;">
+                        [Sistem] Bağlantı hələ yoxlanılmayıb. Yoxlamaq üçün "🔌 Yoxla" düyməsinə klikləyin.
                     </div>
                 </div>
             </div>
         `).join('');
-
-        // Trigger connection check for each server
-        servers.forEach(s => checkConnection(s.id));
 
         if (document.body.classList.contains('debug-mode')) {
             updateDebugDimensions();
@@ -215,8 +212,12 @@ async function loadApplications() {
         const servers = await srvRes.json();
 
         const serverMap = {};
+        const serverObjects = {};
         if (Array.isArray(servers)) {
-            servers.forEach(s => serverMap[s.id] = s.ip);
+            servers.forEach(s => {
+                serverMap[s.id] = s.ip;
+                serverObjects[s.id] = s;
+            });
         }
 
         const appsList = document.getElementById('apps-list');
@@ -227,41 +228,109 @@ async function loadApplications() {
             return;
         }
 
-        appsList.innerHTML = apps.map(app => {
-            const shortUrl = (app.repo_url || '').replace('https://github.com/', '').replace('https://', '');
-            const statusColors = {
-                'running': '#00e676', 'success': '#00e676',
-                'failed': '#ff1744', 'deploying': '#00d2ff',
-                'building': '#00d2ff', 'cancelled': '#ff9800', 'idle': '#9aa0a6'
-            };
-            const sc = statusColors[app.status] || '#9aa0a6';
-            const srvIp = serverMap[app.server_id] || 'localhost';
-            const apiLink = `http://${srvIp}:${app.port}`;
+        // Group apps by server_id
+        const groupedApps = {};
+        apps.forEach(app => {
+            const sid = app.server_id || 'unknown';
+            if (!groupedApps[sid]) {
+                groupedApps[sid] = [];
+            }
+            groupedApps[sid].push(app);
+        });
 
-            return `
-            <div class="list-item" onclick="openAppDetails('${app.id}')" style="cursor: pointer; transition: all 0.2s ease;">
-                <div class="item-info" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                            🚀 ${app.name}
-                            ${app.status === 'success' || app.status === 'running' ? `
-                            <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: var(--accent-color); text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 210, 255, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                🔗 API Keçidi
-                            </a>
-                            ` : ''}
-                        </h3>
-                        <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 1rem; align-items: center;">
-                            <span style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${app.repo_url}">🐱 ${shortUrl} (${app.branch})</span>
-                            <span>🔌 Port: <strong>${app.port}</strong></span>
-                        </p>
-                    </div>
-                    <div style="display:inline-flex; align-items:center; gap:0.5rem; background: rgba(255,255,255,0.05); padding: 0.4rem 0.8rem; border-radius: 8px;">
-                        <span style="width:8px; height:8px; border-radius:50%; background:${sc}; display:inline-block; box-shadow: 0 0 5px ${sc};"></span>
-                        <span style="color:${sc}; font-weight:500;">${app.status.toUpperCase()}</span>
+        let html = '';
+        for (const sid of Object.keys(groupedApps)) {
+            const srv = serverObjects[sid];
+            const srvName = srv ? srv.name : 'Naməlum Server';
+            const srvIp = srv ? srv.ip : 'localhost';
+
+            // Server Header
+            html += `
+            <div class="server-group" data-server-id="${sid}">
+                <div class="server-group-header">
+                    <h3>
+                        🖥️ ${srvName} <span class="ip">(${srvIp})</span>
+                    </h3>
+                    <div class="server-group-header-info">
+                        <span class="server-stats-badge" id="srv-stats-cpu-${sid}">
+                            CPU: <strong>--</strong>
+                        </span>
+                        <span class="server-stats-badge" id="srv-stats-ram-${sid}">
+                            RAM: <strong>-- / -- MB</strong>
+                        </span>
+                        <div class="server-header-actions">
+                            <span class="server-action-link" onclick="goToServerSettings('${sid}')">⚙️ Sazlamalar</span>
+                        </div>
                     </div>
                 </div>
+                <div class="server-apps-list" style="display:flex; flex-direction:column; gap:6px;">
+            `;
+
+            // Apps under this server
+            groupedApps[sid].forEach(app => {
+                const shortUrl = (app.repo_url || '').replace('https://github.com/', '').replace('https://', '');
+                const statusColors = {
+                    'running': '#00e676', 'success': '#00e676',
+                    'failed': '#ff1744', 'deploying': '#00d2ff',
+                    'building': '#00d2ff', 'cancelled': '#ff9800', 'idle': '#9aa0a6'
+                };
+                const sc = statusColors[app.status] || '#9aa0a6';
+                const apiLink = `http://${srvIp}:${app.port}`;
+
+                const cached = serverStatsCache[sid];
+                let cpuVal = '0%';
+                let memVal = '0MB';
+                if (cached && cached.containers && cached.containers[app.name]) {
+                    const cstats = cached.containers[app.name];
+                    cpuVal = cstats.cpu;
+                    memVal = cstats.memory;
+                }
+
+                const appStatsHtml = `
+                <span class="app-load-badge" data-app-name="${app.name}" id="app-load-${app.id}">
+                    ⚡ CPU: <strong>${cpuVal}</strong> | 💾 RAM: <strong>${memVal}</strong>
+                </span>
+                `;
+
+
+                html += `
+                <div class="list-item" onclick="openAppDetails('${app.id}')" style="cursor: pointer; transition: all 0.2s ease;">
+                    <div class="item-info" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                🚀 ${app.name}
+                                ${app.status === 'success' || app.status === 'running' ? `
+                                <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: var(--accent-color); text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 210, 255, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
+                                    🔗 API Keçidi
+                                </a>
+                                ` : ''}
+                                ${appStatsHtml}
+                            </h3>
+                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 1rem; align-items: center;">
+                                <span style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${app.repo_url}">🐱 ${shortUrl} (${app.branch})</span>
+                                <span>🔌 Port: <strong>${app.port}</strong></span>
+                            </p>
+                        </div>
+                        <div style="display:inline-flex; align-items:center; gap:0.5rem; background: rgba(255,255,255,0.05); padding: 0.4rem 0.8rem; border-radius: 8px;">
+                            <span style="width:8px; height:8px; border-radius:50%; background:${sc}; display:inline-block; box-shadow: 0 0 5px ${sc};"></span>
+                            <span style="color:${sc}; font-weight:500;">${app.status.toUpperCase()}</span>
+                        </div>
+                    </div>
+                </div>
+                `;
+            });
+
+            html += `
+                </div>
             </div>
-        `}).join('');
+            `;
+        }
+
+        appsList.innerHTML = html;
+
+        // Immediately update stats UI with cache if populated
+        updateStatsUI(servers);
+
         if (document.body.classList.contains('debug-mode')) {
             updateDebugDimensions();
         }
@@ -269,6 +338,7 @@ async function loadApplications() {
         console.error("Failed to load applications", e);
     }
 }
+
 
 // Handle server creation
 async function handleCreateServer(event) {
@@ -292,6 +362,10 @@ async function handleCreateServer(event) {
             document.getElementById('server-form').reset();
             addActivityLog(`Server əlavə edildi: ${payload.name} (${payload.ip})`, 'server');
             loadServers();
+        } else {
+            const errText = await res.text();
+            addActivityLog(`Server yaratma uğursuz: ${errText}`, 'error');
+            showInfoCard('❌ Xəta', 'Server əlavə edilə bilmədi', errText);
         }
     } catch (e) {
         addActivityLog(`Server yaratma uğursuz: ${e.message}`, 'error');
@@ -365,7 +439,10 @@ async function checkConnection(id) {
     }
 
     try {
-        const res = await fetch(`/api/servers/${id}/check`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+        const res = await fetch(`/api/servers/${id}/check`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (res.ok) {
             const data = await res.json();
             if (data.success) {
@@ -388,19 +465,31 @@ async function checkConnection(id) {
                     consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ❌ Qoşulma Xətası:\n${data.error}`;
                     consoleEl.style.color = '#ff1744';
                 }
+                const wrapper = document.getElementById(`console-wrapper-${id}`);
+                if (wrapper) {
+                    wrapper.style.display = 'block';
+                }
             }
         } else {
             throw new Error(`HTTP Error ${res.status}`);
         }
     } catch (e) {
+        let errMsg = e.message;
+        if (e.name === 'AbortError') {
+            errMsg = 'Bağlantı yoxlaması üçün gözləmə vaxtı bitdi (Timeout 15s).';
+        }
         if (statusEl) {
             statusEl.innerHTML = `Xəta var ❌`;
             statusEl.style.color = '#ff1744';
             statusEl.style.background = 'rgba(255, 23, 68, 0.1)';
         }
         if (consoleEl) {
-            consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ❌ Qoşulma Xətası:\n${e.message}`;
+            consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ❌ Qoşulma Xətası:\n${errMsg}`;
             consoleEl.style.color = '#ff1744';
+        }
+        const wrapper = document.getElementById(`console-wrapper-${id}`);
+        if (wrapper) {
+            wrapper.style.display = 'block';
         }
     }
 }
@@ -418,17 +507,18 @@ function toggleServerConsole(id) {
 }
 
 // Copy server console content to clipboard
-function copyServerConsole(id) {
+function copyServerConsole(id, btn) {
     const el = document.getElementById(`console-container-${id}`);
     if (!el) return;
     const text = el.innerText || el.textContent;
     
     if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(() => {
-            const btn = event.currentTarget;
-            const orig = btn.innerHTML;
-            btn.innerHTML = '✅ Kopyalandı!';
-            setTimeout(() => { btn.innerHTML = orig; }, 2000);
+            if (btn) {
+                const orig = btn.innerHTML;
+                btn.innerHTML = '✅ Kopyalandı!';
+                setTimeout(() => { btn.innerHTML = orig; }, 2000);
+            }
         }).catch(err => console.error("Copy failed", err));
     }
 }
@@ -872,30 +962,54 @@ function updateDeploymentStages(logText) {
             startPattern: 'Connecting to server',
             endPattern: '[SUCCESS] Workspace directory created',
             errorPattern: '[ERROR] Directory prep failed',
+            pendingDesc: 'Uzaq server hazırlanır...',
+            successDesc: 'Uzaq server hazırlandı',
+            failedDesc: 'Hazırlıq alınmadı',
+            defaultTime: '2s'
         },
         {
             id: 'stage-2',
             startPattern: '[2/5] Git repository',
             endPattern: '[SUCCESS] Repository cloned',
             errorPattern: '[ERROR] Git checkout failed',
+            pendingDesc: 'Git repozitoriya klonlanır...',
+            successDesc: 'Repozitoriya uğurla klonlandı',
+            failedDesc: 'Klonlama alınmadı',
+            defaultTime: '2s'
         },
         {
             id: 'stage-3',
             startPattern: '[3/5] Docker image build',
             endPattern: '[SUCCESS] Docker image',
             errorPattern: '[ERROR] Docker build failed',
+            pendingDesc: 'Docker imici yığılır...',
+            successDesc: 'Docker imici yığıldı',
+            failedDesc: 'Build uğursuz oldu',
+            getTime: (text) => {
+                // Docker build done saniyəsini axtarır (məs: DONE 8.9s və ya DONE 129s)
+                const match = text.match(/DONE\s+([\d.]+(?:s|ms))/i);
+                return match ? match[1] : '93s';
+            }
         },
         {
             id: 'stage-4',
             startPattern: '[4/5]',
             endPattern: '[5/5]',
             errorPattern: null,
+            pendingDesc: 'Köhnə konteynerlər silinir...',
+            successDesc: 'Köhnə konteynerlər təmizləndi',
+            failedDesc: 'Təmizlik alınmadı',
+            defaultTime: '1s'
         },
         {
             id: 'stage-5',
             startPattern: '[5/5] Yeni konteyner',
             endPattern: '[SUCCESS] T', // matches Tətbiq or TЙ™tbiq
             errorPattern: '[ERROR] Docker run command failed',
+            pendingDesc: 'Yeni konteyner başladılır...',
+            successDesc: 'Tətbiq uğurla işə salındı',
+            failedDesc: 'Başlatmaq alınmadı',
+            defaultTime: '1s'
         }
     ];
 
@@ -906,6 +1020,7 @@ function updateDeploymentStages(logText) {
         if (!el) return;
 
         const iconEl = el.querySelector('.stage-icon');
+        const descEl = el.querySelector('.stage-desc');
         const timeEl = el.querySelector('.stage-time');
 
         const hasStarted = logText.includes(stage.startPattern);
@@ -916,22 +1031,32 @@ function updateDeploymentStages(logText) {
             el.style.opacity = '1.0';
             el.style.color = '#ff1744'; // danger color
             iconEl.innerHTML = '❌';
+            if (descEl) descEl.innerText = stage.failedDesc;
             timeEl.innerText = 'Xəta';
             if (hasFailed) anyFailed = true;
         } else if (hasEnded) {
             el.style.opacity = '1.0';
             el.style.color = '#00e676'; // success color
             iconEl.innerHTML = '✅';
-            timeEl.innerText = 'Tamamlandı';
+            if (descEl) descEl.innerText = stage.successDesc;
+            
+            // Vaxtı təyin etmək
+            if (stage.getTime) {
+                timeEl.innerText = stage.getTime(logText);
+            } else {
+                timeEl.innerText = stage.defaultTime;
+            }
         } else if (hasStarted) {
             el.style.opacity = '1.0';
             el.style.color = '#00d2ff'; // accent color
             iconEl.innerHTML = '<span class="spin-icon">🔄</span>';
+            if (descEl) descEl.innerText = stage.pendingDesc;
             timeEl.innerText = 'Gedir...';
         } else {
             el.style.opacity = '0.4';
             el.style.color = 'var(--text-secondary)';
             iconEl.innerHTML = '⚪';
+            if (descEl) descEl.innerText = 'Gözlənilir';
             timeEl.innerText = '--';
         }
     });
@@ -1030,58 +1155,110 @@ function buildSettingsPayload() {
     };
 }
 
-async function saveAppSettings() {
-    if (!currentSettingsAppId) return;
-    const payload = buildSettingsPayload();
-    try {
-        const res = await fetch(`/api/applications/${currentSettingsAppId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (res.ok) {
-            loadApplications();
-            // Show brief success flash
-            const btn = document.querySelector('#app-settings-modal .btn-secondary[onclick="saveAppSettings()"]');
-            if (btn) {
-                const orig = btn.innerHTML;
-                btn.innerHTML = '✅ Saxlandı!';
-                setTimeout(() => btn.innerHTML = orig, 1800);
-            }
-        } else {
-            const err = await res.text();
-            alert('Xəta: ' + err);
-        }
-    } catch (e) {
-        console.error('saveAppSettings error', e);
-    }
-}
 
-async function saveAndRedeploy() {
-    if (!currentSettingsAppId) {
+
+async function saveAppSettings() {
+    const appId = currentSettingsAppId || currentAppId;
+    if (!appId) {
         alert("Layihə seçilməyib!");
         return;
     }
     const payload = buildSettingsPayload();
     try {
-        const res = await fetch(`/api/applications/${currentSettingsAppId}`, {
+        const res = await fetch(`/api/applications/${appId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         if (res.ok) {
-
+            alert('Ayarlar uğurla yadda saxlanıldı!');
             loadApplications();
-            deployApp(currentSettingsAppId);
+            // Pending redeploy bayrağını qoy
+            localStorage.setItem(`pending_redeploy_${appId}`, 'true');
+            markRedeployPending(true);
         } else {
             const err = await res.text();
             alert('Yadda saxlamaqda xəta: ' + err);
         }
     } catch (e) {
-        console.error('saveAndRedeploy error', e);
+        console.error('saveAppSettings error', e);
         alert('Serverlə əlaqə xətası: ' + e);
     }
 }
+
+async function redeployApp() {
+    const appId = currentSettingsAppId || currentAppId;
+    if (!appId) {
+        alert("Layihə seçilməyib!");
+        return;
+    }
+    // Pending redeploy bayrağını sıfırla
+    localStorage.removeItem(`pending_redeploy_${appId}`);
+    markRedeployPending(false);
+    deployApp(appId);
+}
+
+// Redeploy düyməsinə pending sinifini əlavə et / sil
+function markRedeployPending(isPending) {
+    const btn = document.getElementById('btn-app-redeploy');
+    if (!btn) return;
+    if (isPending) {
+        btn.classList.add('pending-redeploy');
+    } else {
+        btn.classList.remove('pending-redeploy');
+    }
+}
+
+async function stopApp() {
+    const appId = currentSettingsAppId || currentAppId;
+    if (!appId) return;
+    const btn = document.getElementById('btn-app-stop');
+    const orig = btn.innerText;
+    btn.innerText = '⏳ Dayandırılır...';
+    btn.disabled = true;
+    try {
+        const res = await fetch(`/api/applications/${appId}/stop`, { method: 'POST' });
+        if (res.ok) {
+            alert('Layihə uğurla dayandırıldı!');
+            loadApplications();
+            if (typeof openAppDetails === 'function') openAppDetails(appId);
+        } else {
+            const err = await res.text();
+            alert('Dayandırmaqda xəta: ' + err);
+        }
+    } catch (e) {
+        alert('Serverlə əlaqə xətası: ' + e);
+    } finally {
+        btn.innerText = orig;
+        btn.disabled = false;
+    }
+}
+
+async function restartApp() {
+    const appId = currentSettingsAppId || currentAppId;
+    if (!appId) return;
+    const btn = document.getElementById('btn-app-restart');
+    const orig = btn.innerText;
+    btn.innerText = '⏳ Yenidən başladılır...';
+    btn.disabled = true;
+    try {
+        const res = await fetch(`/api/applications/${appId}/restart`, { method: 'POST' });
+        if (res.ok) {
+            alert('Layihə uğurla yenidən başladıldı!');
+            loadApplications();
+            if (typeof openAppDetails === 'function') openAppDetails(appId);
+        } else {
+            const err = await res.text();
+            alert('Yenidən başlatmaqda xəta: ' + err);
+        }
+    } catch (e) {
+        alert('Serverlə əlaqə xətası: ' + e);
+    } finally {
+        btn.innerText = orig;
+        btn.disabled = false;
+    }
+}
+
 
 // Copy terminal logs to clipboard
 function copyTerminalLogs() {
@@ -1797,45 +1974,95 @@ window.addEventListener('resize', () => {
 });
 
 // Server Stats fetching logic
-let activeServerId = null;
+let serverStatsCache = {};
 
 async function fetchServerStats() {
-    // Only fetch if applications tab is active and there's a server we can query
-    if (!activeServerId) {
-        try {
-            const res = await fetch('/api/servers');
-            const servers = await res.json();
-            if (servers.length > 0) activeServerId = servers[0].id;
-        } catch (e) { }
+    if (!document.getElementById('tab-applications').classList.contains('active')) {
+        setTimeout(fetchServerStats, 10000);
+        return;
     }
 
-    if (activeServerId && document.getElementById('tab-applications').classList.contains('active')) {
-        try {
-            const res = await fetch(`/api/servers/${activeServerId}/stats`);
-            if (res.ok) {
-                const stats = await res.json();
-                document.getElementById('server-stats-banner').style.display = 'flex';
-                document.getElementById('stat-ram').innerText = `${stats.used_ram_mb} / ${stats.total_ram_mb} MB`;
-                document.getElementById('stat-cpu').innerText = `${stats.cores}`;
+    try {
+        const res = await fetch('/api/servers');
+        if (!res.ok) throw new Error("Failed to fetch servers list");
+        const servers = await res.json();
 
-                // Color warnings
-                const ramPercent = stats.used_ram_mb / stats.total_ram_mb;
-                if (ramPercent > 0.85) {
-                    document.getElementById('stat-ram').style.color = '#ff1744'; // Red
-                } else if (ramPercent > 0.6) {
-                    document.getElementById('stat-ram').style.color = '#ffb300'; // Orange
-                } else {
-                    document.getElementById('stat-ram').style.color = '#00e676'; // Green
+        await Promise.all(servers.map(async (server) => {
+            try {
+                const statsRes = await fetch(`/api/servers/${server.id}/stats`);
+                if (statsRes.ok) {
+                    const stats = await statsRes.json();
+                    serverStatsCache[server.id] = stats;
                 }
+            } catch (e) {
+                console.error(`Failed to fetch stats for server ${server.id}:`, e);
             }
-        } catch (e) {
-            console.error("Failed to fetch stats", e);
-        }
+        }));
+
+        updateStatsUI(servers);
+    } catch (e) {
+        console.error("Failed to fetch server stats in loop:", e);
     }
-    
-    // Recursive setTimeout to prevent overlapping requests
+
     setTimeout(fetchServerStats, 10000);
 }
+
+function updateStatsUI(servers) {
+    if (!Array.isArray(servers)) return;
+
+    servers.forEach(server => {
+        const stats = serverStatsCache[server.id];
+        if (!stats) return;
+
+        // Update CPU badge
+        const cpuEl = document.getElementById(`srv-stats-cpu-${server.id}`);
+        if (cpuEl) {
+            cpuEl.innerHTML = `CPU: <strong>${stats.cores} Nüvə</strong>`;
+        }
+
+        // Update RAM badge
+        const ramEl = document.getElementById(`srv-stats-ram-${server.id}`);
+        if (ramEl) {
+            ramEl.innerHTML = `RAM: <strong>${stats.used_ram_mb} / ${stats.total_ram_mb} MB</strong>`;
+
+            const ramPercent = stats.used_ram_mb / stats.total_ram_mb;
+            if (ramPercent > 0.85) {
+                ramEl.style.color = '#ff1744'; // Red
+            } else if (ramPercent > 0.6) {
+                ramEl.style.color = '#ffb300'; // Orange
+            } else {
+                ramEl.style.color = '#00e676'; // Green
+            }
+        }
+
+        // Update individual application badges under this server
+        const srvGroup = document.querySelector(`.server-group[data-server-id="${server.id}"]`);
+        if (srvGroup) {
+            const badges = srvGroup.querySelectorAll(`.app-load-badge`);
+            badges.forEach(badge => {
+                badge.innerHTML = `⚡ CPU: <strong>0%</strong> | 💾 RAM: <strong>0MB</strong>`;
+            });
+        }
+
+        if (stats.containers) {
+            Object.keys(stats.containers).forEach(appName => {
+                const cstats = stats.containers[appName];
+                const badges = document.querySelectorAll(`.app-load-badge[data-app-name="${appName}"]`);
+                badges.forEach(badge => {
+                    badge.innerHTML = `⚡ CPU: <strong>${cstats.cpu}</strong> | 💾 RAM: <strong>${cstats.memory}</strong>`;
+                });
+            });
+        }
+
+    });
+}
+
+function goToServerSettings(serverId) {
+    if (event) event.stopPropagation();
+    switchTab('servers');
+    editServer(serverId);
+}
+
 
 // Accordion toggle logic
 function toggleAccordion(contentId, headerElement) {
@@ -1884,7 +2111,10 @@ async function updateServerStatsAdvisor(selectId, advisorDivId, memInputId, cpuI
     advisorDiv.innerHTML = '⏳ Serverin boş resursları yoxlanılır...';
 
     try {
-        const res = await fetch(`/api/servers/${serverId}/stats`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        const res = await fetch(`/api/servers/${serverId}/stats`, { signal: controller.signal });
+        clearTimeout(timeoutId);
         if (!res.ok) throw new Error("Stats fetch failed");
         const stats = await res.json();
 
@@ -1913,8 +2143,10 @@ async function updateServerStatsAdvisor(selectId, advisorDivId, memInputId, cpuI
             </div>
         `;
     } catch (e) {
-        console.error(e);
-        advisorDiv.innerHTML = '⚠️ Server məlumatları alına bilmədi. Serverin aktiv olduğuna əmin olun.';
+        if (e.name !== 'AbortError') {
+            console.error(e);
+        }
+        advisorDiv.innerHTML = '⚠️ Server məlumatları alına bilmədi (Gözləmə vaxtı bitdi). Serverin aktiv olduğuna əmin olun.';
     }
 }
 let runtimeLogTimeout = null;
@@ -2018,7 +2250,8 @@ async function openAppDetails(appId) {
         const statusColors = {
             'running': '#00e676', 'success': '#00e676',
             'failed': '#ff1744', 'deploying': '#00d2ff',
-            'building': '#00d2ff', 'cancelled': '#ff9800', 'idle': '#9aa0a6'
+            'building': '#00d2ff', 'cancelled': '#ff9800', 'idle': '#9aa0a6',
+            'stopped': '#757575'
         };
         const sc = statusColors[app.status] || '#9aa0a6';
         const statBadge = document.getElementById('detail-app-status');
@@ -2053,6 +2286,13 @@ async function openAppDetails(appId) {
 
         // Populate Settings inputs using existing function but bypassing modal
         openAppSettings(appId, false); // false = don't show modal
+
+        // Pending redeploy bayrağını yoxla
+        const hasPending = localStorage.getItem(`pending_redeploy_${appId}`) === 'true';
+        markRedeployPending(hasPending);
+
+        // Deployments tarixçəsini yüklə
+        loadAppDeployments(appId);
 
         switchTab('app-details');
         switchAppTab('overview');
@@ -2492,3 +2732,129 @@ _badgeStyle.textContent = `
 }
 `;
 document.head.appendChild(_badgeStyle);
+
+// Deployments Polling Timer for Overview Tab
+let overviewDeploymentsInterval = null;
+
+async function loadAppDeployments(appId) {
+    if (!appId) return;
+    const container = document.getElementById('overview-deployments-list');
+    if (!container) return;
+
+    try {
+        const res = await fetch(`/api/deployments/${appId}`);
+        if (!res.ok) throw new Error("Failed to fetch deployments");
+        const deployments = await res.json();
+
+        if (deployments.length === 0) {
+            container.innerHTML = `<div class="no-data">Hələ heç bir deployment yoxdur.</div>`;
+            return;
+        }
+
+        const statusColors = {
+            'success': '#00e676',
+            'failed': '#ff1744',
+            'deploying': '#00d2ff',
+            'building': '#00d2ff',
+            'cancelled': '#ff9800',
+            'pending': '#9aa0a6',
+            'stopped': '#757575'
+        };
+
+        container.innerHTML = deployments.map(d => {
+            const color = statusColors[d.status] || '#9aa0a6';
+            const date = new Date(d.created_at).toLocaleString('az-AZ');
+            
+            // Show Cancel button if building or deploying
+            const showCancel = d.status === 'building' || d.status === 'deploying';
+            const cancelBtn = showCancel ? 
+                `<button class="btn btn-secondary" onclick="cancelDeploymentFromOverview('${d.id}', '${appId}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem; color: #ff9100; border-color: rgba(255,145,0,0.3); background: rgba(255,145,0,0.05);">🛑 Ləğv Et</button>` : '';
+
+            return `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); border: 1px solid var(--card-border); padding: 0.8rem 1rem; border-radius: 8px; gap: 1rem; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+                        <span style="font-family: monospace; font-size: 0.8rem; background: rgba(255,255,255,0.05); padding: 0.2rem 0.5rem; border-radius: 4px; color: #94a3b8;">#${d.id.substring(0, 8)}</span>
+                        <span style="font-size: 0.75rem; color: var(--text-secondary);">${date}</span>
+                        <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: ${color}; background: ${color}15; border: 1px solid ${color}40; padding: 0.15rem 0.5rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
+                            ${d.status === 'building' || d.status === 'deploying' ? '🔄 ' : ''}${d.status}
+                        </span>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        ${cancelBtn}
+                        <button class="btn btn-secondary" onclick="viewDeploymentLogs('${appId}')" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">📋 Loqlar</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        // Set up periodic polling for overview deployments if tab is active and there's a building deploy
+        const hasActiveDeploy = deployments.some(d => d.status === 'building' || d.status === 'deploying');
+        if (hasActiveDeploy) {
+            startOverviewDeploymentsPolling(appId);
+        } else {
+            stopOverviewDeploymentsPolling();
+        }
+
+    } catch (e) {
+        console.error("Failed to load deployments for overview", e);
+        container.innerHTML = `<div class="no-data" style="color: var(--danger-color);">Tarixçə yüklənərkən xəta baş verdi.</div>`;
+    }
+}
+
+function viewDeploymentLogs(appId) {
+    switchAppTab('logs');
+}
+
+async function cancelDeploymentFromOverview(deployId, appId) {
+    showConfirmCard({
+        icon: '🛑',
+        title: 'Yayımı Ləğv Et?',
+        subtitle: 'Seçilmiş deployment dayandırılacaq',
+        body: 'Bu deployment-i ləğv etmək istədiyinizdən əminsiniz?',
+        confirmText: '🛑 Bəli, Ləğv Et',
+        confirmStyle: 'background: #ff9100; color: white;',
+        onConfirm: async () => {
+            try {
+                const res = await fetch(`/api/deploy/cancel/${deployId}`, { method: 'POST' });
+                if (res.ok) {
+                    addActivityLog('Yayım ləğv edildi', 'delete');
+                    loadAppDeployments(appId);
+                    loadApplications();
+                }
+            } catch (e) {
+                console.error("Failed to cancel deployment from overview", e);
+            }
+        }
+    });
+}
+
+function startOverviewDeploymentsPolling(appId) {
+    if (overviewDeploymentsInterval) return;
+    overviewDeploymentsInterval = setInterval(() => {
+        const overviewTab = document.getElementById('subtab-overview');
+        if (overviewTab && overviewTab.style.display === 'block' && currentAppDetailsId === appId) {
+            loadAppDeployments(appId);
+        } else {
+            stopOverviewDeploymentsPolling();
+        }
+    }, 3000);
+}
+
+function stopOverviewDeploymentsPolling() {
+    if (overviewDeploymentsInterval) {
+        clearInterval(overviewDeploymentsInterval);
+        overviewDeploymentsInterval = null;
+    }
+}
+
+// Modify switchAppTab to stop/start polling appropriately
+const originalSwitchAppTab = switchAppTab;
+switchAppTab = function(tabId) {
+    originalSwitchAppTab(tabId);
+    if (tabId === 'overview' && currentAppDetailsId) {
+        loadAppDeployments(currentAppDetailsId);
+    } else {
+        stopOverviewDeploymentsPolling();
+    }
+};
+
