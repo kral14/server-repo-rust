@@ -1339,7 +1339,7 @@ async fn trigger_deployment_impl(
                  else \
                      echo 'Fallback static/generic server.'; \
                      echo -e \"FROM alpine:latest\\nRUN apk add --no-cache curl\\nCMD [\\\"sleep\\\", \\\"3600\\\"]\" > Dockerfile; \
-                 fi && DOCKER_BUILDKIT=1 sudo docker build -t {}:latest .",
+                 fi && DOCKER_BUILDKIT=0 sudo docker build -t {}:latest .",
                 app.name, 
                 bc, rc, app.port,
                 bc, rc, app.port,
@@ -1362,7 +1362,7 @@ async fn trigger_deployment_impl(
             };
             
             format!(
-                "cd /data/masterdeploy/apps/{} && ( [ -f \"{}\" ] || echo -e 'FROM alpine\\nRUN apk add --no-cache curl\\nCMD [\"sleep\", \"3600\"]' > \"{}\" ) && DOCKER_BUILDKIT=1 sudo docker build {} -f \"{}\" -t {}:latest .",
+                "cd /data/masterdeploy/apps/{} && ( [ -f \"{}\" ] || echo -e 'FROM alpine\\nRUN apk add --no-cache curl\\nCMD [\"sleep\", \"3600\"]' > \"{}\" ) && DOCKER_BUILDKIT=0 sudo docker build {} -f \"{}\" -t {}:latest .",
                 app.name, df_file, df_file, target_arg, df_file, app.name
             )
         };
