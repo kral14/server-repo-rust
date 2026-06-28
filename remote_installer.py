@@ -231,42 +231,65 @@ class RemoteInstallerGUI:
     # LOCAL TAB (YERLİ PC)
     # ==========================================
     def setup_local_tab(self):
-        form_frame = tk.Frame(self.tab_local, bg=CARD_COLOR, bd=0, relief=tk.FLAT, highlightbackground="#333", highlightthickness=1)
-        form_frame.pack(fill=tk.X, pady=10, ipady=10, ipadx=10)
+        # 1. Giriş Məlumatları və Konfiqurasiya YANA-YANA (Horizontal Split)
+        top_split_frame = tk.Frame(self.tab_local, bg=BG_COLOR)
+        top_split_frame.pack(fill=tk.X, pady=5)
         
-        tk.Label(form_frame, text="Sudo (Admin) Parolu:", font=self.font_label, bg=CARD_COLOR, fg=TEXT_COLOR).grid(row=0, column=0, sticky=tk.W, pady=5, padx=10)
-        self.local_pass_entry = tk.Entry(form_frame, width=35, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT, show="*")
-        self.local_pass_entry.grid(row=0, column=1, pady=5, padx=10, ipady=4)
+        # Sol tərəf: Sudo Parolu
+        cred_lf = tk.LabelFrame(top_split_frame, text=" 🔐 Yerli Admin Girişi ", font=(self.font_label[0], 9, "bold"), bg=BG_COLOR, fg=ACCENT_COLOR, bd=1, relief=tk.GROOVE)
+        cred_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5), ipady=5)
         
-        tk.Label(form_frame, text="Swap (GB):", font=self.font_label, bg=CARD_COLOR, fg=BTN_CHECK).grid(row=1, column=0, sticky=tk.W, pady=5, padx=10)
-        self.local_swap_entry = tk.Entry(form_frame, width=15, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
-        self.local_swap_entry.insert(0, "2")
-        self.local_swap_entry.grid(row=1, column=1, sticky=tk.W, pady=5, padx=10, ipady=4)
+        tk.Label(cred_lf, text="Sudo Parolu:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=0, column=0, sticky=tk.W, pady=8, padx=8)
+        self.local_pass_entry = tk.Entry(cred_lf, width=28, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT, show="*")
+        self.local_pass_entry.grid(row=0, column=1, pady=8, padx=8, ipady=3)
+        
+        # Sağ tərəf: Konfiqurasiyalar
+        config_lf = tk.LabelFrame(top_split_frame, text=" ⚙️ Konfiqurasiya ", font=(self.font_label[0], 9, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
+        config_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0), ipady=5)
 
-        tk.Label(form_frame, text="Panel Portu:", font=self.font_label, bg=CARD_COLOR, fg=TEXT_COLOR).grid(row=2, column=0, sticky=tk.W, pady=5, padx=10)
-        self.local_panel_port_entry = tk.Entry(form_frame, width=15, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
-        self.local_panel_port_entry.grid(row=2, column=1, sticky=tk.W, pady=5, padx=10, ipady=4)
+        tk.Label(config_lf, text="Swap (GB):", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=0, column=0, sticky=tk.W, pady=4, padx=8)
+        self.local_swap_entry = tk.Entry(config_lf, width=12, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.local_swap_entry.grid(row=0, column=1, sticky=tk.W, pady=4, padx=8, ipady=3)
 
-        tk.Label(form_frame, text="Portainer Portu:", font=self.font_label, bg=CARD_COLOR, fg=TEXT_COLOR).grid(row=3, column=0, sticky=tk.W, pady=5, padx=10)
-        self.local_portainer_port_entry = tk.Entry(form_frame, width=15, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
-        self.local_portainer_port_entry.grid(row=3, column=1, sticky=tk.W, pady=5, padx=10, ipady=4)
+        tk.Label(config_lf, text="Panel Portu:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=1, column=0, sticky=tk.W, pady=4, padx=8)
+        self.local_panel_port_entry = tk.Entry(config_lf, width=12, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.local_panel_port_entry.grid(row=1, column=1, sticky=tk.W, pady=4, padx=8, ipady=3)
 
-        # Düymələr
+        tk.Label(config_lf, text="Portainer Port:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=2, column=0, sticky=tk.W, pady=4, padx=8)
+        self.local_portainer_port_entry = tk.Entry(config_lf, width=12, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.local_portainer_port_entry.grid(row=2, column=1, sticky=tk.W, pady=4, padx=8, ipady=3)
+
+        # Monitor (Lokal PC resurslarını izləmək üçün)
+        self.local_monitor_frame = tk.Frame(self.tab_local, bg="#1a1a1a", highlightbackground=ACCENT_COLOR, highlightthickness=1)
+        self.local_monitor_frame.pack(fill=tk.X, pady=(5, 10))
+        
+        self.lbl_local_cpu = tk.Label(self.local_monitor_frame, text="🟢 CPU: --", bg="#1a1a1a", fg=ACCENT_COLOR, font=("Consolas", 10, "bold"))
+        self.lbl_local_cpu.pack(side=tk.LEFT, expand=True, pady=6)
+        self.lbl_local_ram = tk.Label(self.local_monitor_frame, text="💾 RAM: -- / --", bg="#1a1a1a", fg="#00FF00", font=("Consolas", 10, "bold"))
+        self.lbl_local_ram.pack(side=tk.LEFT, expand=True, pady=6)
+        self.lbl_local_swap = tk.Label(self.local_monitor_frame, text="🔄 SWAP: -- / --", bg="#1a1a1a", fg="#FFCC00", font=("Consolas", 10, "bold"))
+        self.lbl_local_swap.pack(side=tk.LEFT, expand=True, pady=6)
+
+        # 3. Düymələr Qrupu - YANA-YANA (Horizontal Flow Layout)
         btn_frame = tk.Frame(self.tab_local, bg=BG_COLOR)
-        btn_frame.pack(fill=tk.X, pady=15)
+        btn_frame.pack(fill=tk.X, pady=5)
         
-        self.btn_local_check = self.create_button(btn_frame, "🔐 İcazəni Yoxla", BTN_CHECK, self.test_local_connection)
-        self.btn_local_check.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        # Quraşdırma & İdarəetmə Düymələri
+        local_setup_lf = tk.LabelFrame(btn_frame, text=" 🛠️ Quraşdırma ", font=(self.font_label[0], 8, "bold"), bg=BG_COLOR, fg="#00FF00", bd=1, relief=tk.GROOVE)
+        local_setup_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
         
-        self.btn_local_swap = self.create_button(btn_frame, "🔄 Swap Qur", "#E67E22", lambda: self.run_local_task(self.get_cmd_swap))
-        self.btn_local_swap.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        self.btn_local_check = self.create_button(local_setup_lf, "🔐 İcazəni Yoxla", BTN_CHECK, self.test_local_connection)
+        self.btn_local_check.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
         
-        self.btn_local_git = self.create_button(btn_frame, "🐙 Git Qur", "#9B59B6", lambda: self.run_local_task(self.get_cmd_git))
-        self.btn_local_git.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        self.btn_local_swap = self.create_button(local_setup_lf, "🔄 Swap Qur", "#E67E22", lambda: self.run_local_task(self.get_cmd_swap))
+        self.btn_local_swap.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        
+        self.btn_local_git = self.create_button(local_setup_lf, "🐙 Git Qur", "#9B59B6", lambda: self.run_local_task(self.get_cmd_git))
+        self.btn_local_git.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
         
         # Docker üçün xüsusi panel
-        local_docker_frame = tk.Frame(btn_frame, bg=BG_COLOR)
-        local_docker_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        local_docker_frame = tk.Frame(local_setup_lf, bg=BG_COLOR)
+        local_docker_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5)
         
         self.btn_local_docker = self.create_button(local_docker_frame, "🐳 Docker Qur", BTN_PREP, lambda: self.run_local_task(self.get_cmd_docker))
         self.btn_local_docker.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4)
@@ -274,29 +297,40 @@ class RemoteInstallerGUI:
         self.btn_local_docker_settings = self.create_button(local_docker_frame, "⚙️", "#444", self.open_docker_settings)
         self.btn_local_docker_settings.pack(side=tk.LEFT, padx=(2, 0), ipady=4, ipadx=4)
         
-        self.btn_local_panel = self.create_button(btn_frame, "🚀 Paneli Qur", BTN_PANEL, lambda: self.run_local_task(self.get_cmd_panel))
-        self.btn_local_panel.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        self.btn_local_panel = self.create_button(local_setup_lf, "🚀 Paneli Qur", BTN_PANEL, lambda: self.run_local_task(self.get_cmd_panel))
+        self.btn_local_panel.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
         
-        self.btn_local_all = self.create_button(btn_frame, "🌟 Tam Qur", BTN_ALL, lambda: self.run_local_task(self.get_cmd_all))
-        self.btn_local_all.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        self.btn_local_all = self.create_button(local_setup_lf, "🌟 Tam Qur", BTN_ALL, lambda: self.run_local_task(self.get_cmd_all))
+        self.btn_local_all.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
 
-        extra_btn_frame = tk.Frame(self.tab_local, bg=BG_COLOR)
-        extra_btn_frame.pack(fill=tk.X, pady=5)
-        self.btn_local_clean = self.create_button(extra_btn_frame, "🗑️ Təmizlə", BTN_CLEAN, lambda: self.run_local_task(self.get_cmd_clean, confirm="Bütün sistemi təmizləmək istədiyinizə əminsiniz?"))
-        self.btn_local_clean.grid(row=0, column=0, padx=3, ipady=4, ipadx=5)
-        self.btn_local_portainer = self.create_button(extra_btn_frame, "🐳 Portainer", "#00A2D3", lambda: self.run_local_task(self.get_cmd_portainer))
-        self.btn_local_portainer.grid(row=0, column=1, padx=3, ipady=4, ipadx=5)
-        self.btn_local_token = self.create_button(extra_btn_frame, "🔑 Token Yarat", "#8E44AD", lambda: self.trigger_portainer_token(is_local=True))
-        self.btn_local_token.grid(row=0, column=2, padx=3, ipady=4, ipadx=5)
+        # Sistem & Xidmətlər Düymələri
+        local_sys_lf = tk.LabelFrame(btn_frame, text=" 🖥️ Server & Servislər ", font=(self.font_label[0], 8, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
+        local_sys_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
+
+        self.btn_local_clean = self.create_button(local_sys_lf, "🗑️ Təmizlə", BTN_CLEAN, lambda: self.run_local_task(self.get_cmd_clean, confirm="Bütün sistemi təmizləmək istədiyinizə əminsiniz?"))
+        self.btn_local_clean.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        self.btn_local_portainer = self.create_button(local_sys_lf, "🐳 Portainer", "#00A2D3", lambda: self.run_local_task(self.get_cmd_portainer))
+        self.btn_local_portainer.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        self.btn_local_token = self.create_button(local_sys_lf, "🔑 Token Yarat", "#8E44AD", lambda: self.trigger_portainer_token(is_local=True))
+        self.btn_local_token.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
 
         self.local_action_btns = [self.btn_local_swap, self.btn_local_git, self.btn_local_docker, self.btn_local_docker_settings, self.btn_local_panel, self.btn_local_all, self.btn_local_clean, self.btn_local_portainer, self.btn_local_token]
         self.toggle_local_buttons(tk.DISABLED)
 
-        # Konsol
-        tk.Label(self.tab_local, text="Lokal PC Çıxışı:", font=self.font_label, bg=BG_COLOR, fg=ACCENT_COLOR).pack(anchor=tk.W, pady=(10, 0))
-        self.console_local = scrolledtext.ScrolledText(self.tab_local, height=13, bg="#0A0A0A", fg="#00FF00", font=self.font_console, relief=tk.FLAT, padx=5, pady=5)
+        # Konsol İdarəetmə Alətləri
+        console_header = tk.Frame(self.tab_local, bg=BG_COLOR)
+        console_header.pack(fill=tk.X, pady=(10, 0))
+        
+        tk.Label(console_header, text="Yerli PC Çıxışı:", font=self.font_label, bg=BG_COLOR, fg=ACCENT_COLOR).pack(side=tk.LEFT)
+        
+        # Düymələr sağ tərəfdə
+        self.create_button(console_header, "📄 Kopyala", "#444", lambda: self.copy_console(self.console_local)).pack(side=tk.RIGHT, padx=2)
+        self.create_button(console_header, "🗑️ Konsolu Təmizlə", "#C0392B", lambda: self.console_local.delete("1.0", tk.END)).pack(side=tk.RIGHT, padx=2)
+        self.create_button(console_header, "🔍 -", "#444", self.zoom_out_local).pack(side=tk.RIGHT, padx=2, ipadx=4)
+        self.create_button(console_header, "🔍 +", "#444", self.zoom_in_local).pack(side=tk.RIGHT, padx=2, ipadx=4)
+
+        self.console_local = scrolledtext.ScrolledText(self.tab_local, height=9, bg="#0A0A0A", fg="#00FF00", font=self.font_console, relief=tk.FLAT, padx=5, pady=5)
         self.console_local.pack(fill=tk.BOTH, expand=True, pady=5)
-        self.create_button(self.tab_local, "📄 Kopyala", "#444", lambda: self.copy_console(self.console_local)).pack(anchor=tk.E)
 
     # ==========================================
     # LOGGING & CONFIG
@@ -1329,29 +1363,89 @@ EOF
         import time
         ip, user, key_path = self.ip_entry.get().strip(), self.user_entry.get().strip(), self.key_entry.get().strip()
         cmd = "free -m | awk 'NR==2{print $2,$3}; NR==3{print $2,$3}'; cat /proc/loadavg | awk '{print $1}'"
+        
+        # Yerli PC monitorinqini də arxa planda başladaq
+        threading.Thread(target=self.local_monitor_loop, daemon=True).start()
+        
         while self.monitoring_active:
             try:
-                ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=3", "-i", key_path, f"{user}@{ip}", cmd]
-                creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                process = subprocess.Popen(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=creationflags)
-                # Python-un sonsuz kilidlənməsinin qarşısını almaq üçün 4 saniyə timeout təyin edirik
-                out, _ = process.communicate(timeout=4)
-                if process.returncode == 0:
-                    lines = out.strip().split('\n')
-                    if len(lines) >= 3:
-                        r_tot, r_used = float(lines[0].split()[0])/1024, float(lines[0].split()[1])/1024
-                        s_tot, s_used = float(lines[1].split()[0])/1024, float(lines[1].split()[1])/1024
-                        cpu = lines[2]
-                        self.root.after(0, self.update_monitor, r_used, r_tot, s_used, s_tot, cpu)
-            except Exception as e:
+                if ip:
+                    ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=3", "-i", key_path, f"{user}@{ip}", cmd]
+                    creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                    process = subprocess.Popen(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, creationflags=creationflags)
+                    out, _ = process.communicate(timeout=4)
+                    if process.returncode == 0:
+                        lines = out.strip().split('\n')
+                        if len(lines) >= 3:
+                            r_tot, r_used = float(lines[0].split()[0])/1024, float(lines[0].split()[1])/1024
+                            s_tot, s_used = float(lines[1].split()[0])/1024, float(lines[1].split()[1])/1024
+                            cpu = lines[2]
+                            self.root.after(0, self.update_monitor, r_used, r_tot, s_used, s_tot, cpu, False)
+            except Exception:
                 pass
             time.sleep(6)
 
-    def update_monitor(self, ram_u, ram_t, swap_u, swap_t, cpu):
-        self.lbl_cpu.config(text=f"🟢 CPU: {cpu}")
-        self.lbl_ram.config(text=f"💾 RAM: {ram_u:.2f}GB / {ram_t:.2f}GB")
-        if swap_t > 0: self.lbl_swap.config(text=f"🔄 SWAP: {swap_u:.2f}GB / {swap_t:.2f}GB")
-        else: self.lbl_swap.config(text="🔄 SWAP: Yoxdur")
+    def local_monitor_loop(self):
+        import time
+        # Linux Mint/Lokal Linux üçün resurs yoxlama əmri
+        cmd = "free -m | awk 'NR==2{print $2,$3}; NR==3{print $2,$3}'; cat /proc/loadavg | awk '{print $1}'"
+        while self.monitoring_active:
+            try:
+                if os.name != 'nt': # Yalnız Linux sistemlərdə işləsin
+                    process = subprocess.Popen(["bash", "-c", cmd], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                    out, _ = process.communicate(timeout=3)
+                    if process.returncode == 0:
+                        lines = out.strip().split('\n')
+                        if len(lines) >= 3:
+                            r_tot, r_used = float(lines[0].split()[0])/1024, float(lines[0].split()[1])/1024
+                            s_tot, s_used = float(lines[1].split()[0])/1024, float(lines[1].split()[1])/1024
+                            cpu = lines[2]
+                            self.root.after(0, self.update_monitor, r_used, r_tot, s_used, s_tot, cpu, True)
+            except Exception:
+                pass
+            time.sleep(6)
+
+    def update_monitor(self, ram_u, ram_t, swap_u, swap_t, cpu, is_local=False):
+        lbl_c = self.lbl_local_cpu if is_local else self.lbl_cpu
+        lbl_r = self.lbl_local_ram if is_local else self.lbl_ram
+        lbl_s = self.lbl_local_swap if is_local else self.lbl_swap
+        
+        lbl_c.config(text=f"🟢 CPU: {cpu}")
+        lbl_r.config(text=f"💾 RAM: {ram_u:.2f}GB / {ram_t:.2f}GB")
+        if swap_t > 0: 
+            lbl_s.config(text=f"🔄 SWAP: {swap_u:.2f}GB / {swap_t:.2f}GB")
+        else: 
+            lbl_s.config(text="🔄 SWAP: Yoxdur")
+
+    # Zoom funksiyaları (Konsol font ölçüsünü tənzimləmək üçün)
+    def zoom_in_remote(self):
+        self.change_font_size(self.console_remote, 1)
+
+    def zoom_out_remote(self):
+        self.change_font_size(self.console_remote, -1)
+
+    def zoom_in_local(self):
+        self.change_font_size(self.console_local, 1)
+
+    def zoom_out_local(self):
+        self.change_font_size(self.console_local, -1)
+
+    def change_font_size(self, text_widget, delta):
+        try:
+            current_font = text_widget.cget("font")
+            # Font adı və ölçüsünü parse edirik
+            if isinstance(current_font, str):
+                parts = current_font.split()
+                if len(parts) >= 2:
+                    font_family = parts[0]
+                    font_size = max(6, min(24, int(parts[1]) + delta))
+                    text_widget.config(font=(font_family, font_size))
+            elif isinstance(current_font, tuple) or isinstance(current_font, list):
+                font_family = current_font[0]
+                font_size = max(6, min(24, current_font[1] + delta))
+                text_widget.config(font=(font_family, font_size))
+        except Exception:
+            pass
 
 if __name__ == "__main__":
     root = tk.Tk()
