@@ -1490,17 +1490,30 @@ async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> Result<Sta
     let version = payload.version;
     let image = format!("ghcr.io/kral14/server-repo-rust:{}", version);
     
-    // 1. Docker image pull edirik. Əgər ghcr-da bu tag yoxdursa (yəni actions hələ build etməyibsə), pull uğursuz olacaq.
+    // 1. Docker image pull edirik.
     let pull_status = std::process::Command::new("docker")
         .args(["pull", &image])
         .status();
         
     match pull_status {
         Ok(status) if status.success() => {
-            // Pull uğurludursa, yenilənmə skriptini işə salırıq
+            // Cari panelin işlədiyi xarici portu öyrənirik (Inspect vasitəsilə)
+            let port_output = std::process::Command::new("docker")
+                .args(["inspect", "--format", "{{(index (index .NetworkSettings.Ports \"3000/tcp\") 0).HostPort}}", "masterdeploy"])
+                .output();
+            
+            let host_port = if let Ok(out) = port_output {
+                String::from_utf8_lossy(&out.stdout).trim().to_string()
+            } else {
+                "3000".to_string() # Fallback port
+            };
+            
+            let host_port = if host_port.is_empty() { "3000".to_string() } else { host_port };
+
+            // Pull uğurludursa, yenilənmə skriptini işə salırıq (düzgün volume və dinamik port ilə)
             let script = format!(
-                "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && docker run -d --name masterdeploy --restart always -p 3000:3000 -v masterdeploy-data:/app/data -v /var/run/docker.sock:/var/run/docker.sock {}",
-                image
+                "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && docker run -d --name masterdeploy --restart always -p {}:3000 -v /data/masterdeploy:/app/data -v /var/run/docker.sock:/var/run/docker.sock -v ~/.ssh:/root/.ssh {}",
+                host_port, image
             );
 
             let _ = std::process::Command::new("docker")
@@ -1510,7 +1523,6 @@ async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> Result<Sta
             Ok(StatusCode::OK)
         }
         _ => {
-            // Docker pull alınmadı (Actions hələ build etməyib və ya şəbəkə xətası)
             Err((StatusCode::BAD_REQUEST, "Seçilən versiya üçün Docker imici tapılmadı (GitHub Actions build-i hələ bitməyib).".to_string()))
         }
     }
