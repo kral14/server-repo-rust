@@ -817,21 +817,12 @@ sudo docker run -d --name masterdeploy -p {panel_p}:3000 \
     -v ~/.ssh:/root/.ssh \
     --restart unless-stopped ghcr.io/kral14/server-repo-rust:latest;
 
-echo 'Watchtower qurulur (avto-yenileme sistemi)...';
+echo 'Köhnə Watchtower silinir (əgər varsa)...';
 sudo docker stop watchtower 2>/dev/null || true;
 sudo docker rm watchtower 2>/dev/null || true;
-sudo docker run -d \
-    --name watchtower \
-    --restart unless-stopped \
-    -e DOCKER_API_VERSION=1.40 \
-    -e WATCHTOWER_POLL_INTERVAL=60 \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    containrrr/watchtower:1.5.3 \
-    masterdeploy;
 
 echo '=========================================';
 echo 'PANEL QURULDU! Link: http://'$(curl -s ifconfig.me)':{panel_p}';
-echo 'Watchtower aktiv edildi!';
 echo '=========================================';
 """
 
@@ -889,16 +880,9 @@ sudo docker rm masterdeploy 2>/dev/null || true;
 sudo docker build -t masterdeploy-app . && \
 sudo docker run -d --name masterdeploy -p {panel_p}:3000 -v /var/run/docker.sock:/var/run/docker.sock -v /data/masterdeploy:/app/data -v ~/.ssh:/root/.ssh --restart unless-stopped masterdeploy-app;
 
-echo 'Watchtower qurulur...';
+echo 'Köhnə Watchtower silinir (əgər varsa)...';
 sudo docker stop watchtower 2>/dev/null || true;
 sudo docker rm watchtower 2>/dev/null || true;
-sudo docker run -d \
-    --name watchtower \
-    --restart unless-stopped \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    containrrr/watchtower \
-    --interval 60 \
-    masterdeploy;
 
 echo '=========================================';
 echo 'PANEL QURULDU! Link: http://'$(curl -s ifconfig.me)':{panel_p}';
