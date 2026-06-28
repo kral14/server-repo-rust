@@ -220,6 +220,23 @@ class RemoteInstallerGUI:
         self.console_remote = scrolledtext.ScrolledText(self.tab_remote, height=9, bg="#0A0A0A", fg="#00FF00", font=self.font_console, relief=tk.FLAT, padx=5, pady=5)
         self.console_remote.pack(fill=tk.BOTH, expand=True, pady=5)
 
+        # SSH Terminal Command Executer
+        cmd_exec_frame = tk.Frame(self.tab_remote, bg=BG_COLOR)
+        cmd_exec_frame.pack(fill=tk.X, pady=(2, 5))
+        tk.Label(cmd_exec_frame, text="💻 SSH Terminal:", font=self.font_label, bg=BG_COLOR, fg="#FFCC00").pack(side=tk.LEFT, padx=5)
+        self.remote_cmd_entry = tk.Entry(cmd_exec_frame, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.remote_cmd_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5, ipady=3)
+        
+        def run_custom_remote():
+            cmd = self.remote_cmd_entry.get().strip()
+            if cmd:
+                self.backend.run_custom_remote_command(cmd)
+                self.remote_cmd_entry.delete(0, tk.END)
+        
+        self.btn_remote_cmd_run = self.create_button(cmd_exec_frame, "Göndər 🚀", BTN_ALL, run_custom_remote)
+        self.btn_remote_cmd_run.pack(side=tk.RIGHT, padx=5, ipady=1)
+        self.remote_cmd_entry.bind("<Return>", lambda e: run_custom_remote())
+
     def setup_local_tab(self):
         top_split_frame = tk.Frame(self.tab_local, bg=BG_COLOR)
         top_split_frame.pack(fill=tk.X, pady=5)
@@ -340,6 +357,23 @@ class RemoteInstallerGUI:
 
         self.console_local = scrolledtext.ScrolledText(self.tab_local, height=9, bg="#0A0A0A", fg="#00FF00", font=self.font_console, relief=tk.FLAT, padx=5, pady=5)
         self.console_local.pack(fill=tk.BOTH, expand=True, pady=5)
+
+        # Local Terminal Command Executer
+        local_cmd_exec_frame = tk.Frame(self.tab_local, bg=BG_COLOR)
+        local_cmd_exec_frame.pack(fill=tk.X, pady=(2, 5))
+        tk.Label(local_cmd_exec_frame, text="💻 Yerli Terminal:", font=self.font_label, bg=BG_COLOR, fg="#FFCC00").pack(side=tk.LEFT, padx=5)
+        self.local_cmd_entry = tk.Entry(local_cmd_exec_frame, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.local_cmd_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5, ipady=3)
+        
+        def run_custom_local():
+            cmd = self.local_cmd_entry.get().strip()
+            if cmd:
+                self.backend.run_custom_local_command(cmd)
+                self.local_cmd_entry.delete(0, tk.END)
+                
+        self.btn_local_cmd_run = self.create_button(local_cmd_exec_frame, "Göndər 🚀", BTN_ALL, run_custom_local)
+        self.btn_local_cmd_run.pack(side=tk.RIGHT, padx=5, ipady=1)
+        self.local_cmd_entry.bind("<Return>", lambda e: run_custom_local())
 
     def browse_key(self):
         file_path = filedialog.askopenfilename(title="SSH Açarını Seçin")

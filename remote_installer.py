@@ -814,6 +814,54 @@ echo '✅ Portainer quruldu! Port: {port_p}';
             
         threading.Thread(target=task, daemon=True).start()
 
+    def run_custom_remote_command(self, cmd):
+        if not self.gui: return
+        ip = self.gui.ip_entry.get().strip()
+        user = self.gui.user_entry.get().strip()
+        key_path = self.gui.key_entry.get().strip()
+        if not ip or not user or not key_path:
+            messagebox.showwarning("Xəta", "Server məlumatlarını doldurun!")
+            return
+            
+        self.log_remote(f"\n💻 [Terminal CMD] {user}@{ip}:~$ {cmd}")
+        self.gui.toggle_remote_buttons(tk.DISABLED)
+        
+        def task():
+            ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=15", "-i", key_path, f"{user}@{ip}", cmd]
+            try:
+                creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', creationflags=creationflags)
+                self.log_remote(proc.stdout)
+            except Exception as e:
+                self.log_remote(f"❌ Xəta baş verdi: {e}")
+            self.gui.root.after(0, lambda: self.gui.toggle_remote_buttons(tk.NORMAL))
+            
+        threading.Thread(target=task, daemon=True).start()
+
+    def run_custom_local_command(self, cmd):
+        if not self.gui: return
+        if os.name == 'nt':
+            messagebox.showerror("Xəta", "Yerli terminal yalnız Linux sistemləri üçündür!")
+            return
+            
+        sudo_pass = self.gui.local_pass_entry.get().strip()
+        self.log_local(f"\n💻 [Terminal Local]:~$ {cmd}")
+        self.gui.toggle_local_buttons(tk.DISABLED)
+        
+        # Əgər əmr sudo tələb edirsə, parolu avtomatik ötürə bilək
+        if "sudo " in cmd and sudo_pass:
+            cmd = cmd.replace("sudo ", f"echo '{sudo_pass}' | sudo -S ")
+            
+        def task():
+            try:
+                proc = subprocess.run(["bash", "-c", cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace')
+                self.log_local(proc.stdout)
+            except Exception as e:
+                self.log_local(f"❌ Xəta: {e}")
+            self.gui.root.after(0, lambda: self.gui.toggle_local_buttons(tk.NORMAL))
+            
+        threading.Thread(target=task, daemon=True).start()
+
     def trigger_portainer_token(self, is_local=False):
         ip = "127.0.0.1" if is_local else self.gui.ip_entry.get().strip()
         port = self.gui.local_portainer_port_entry.get().strip() if is_local else self.gui.portainer_port_entry.get().strip()
