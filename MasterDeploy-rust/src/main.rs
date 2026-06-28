@@ -28,6 +28,9 @@ async fn main() {
     // Verilənlər bazasının avtomatik ehtiyat nüsxəsini (backup) çıxarırıq
     let _ = std::fs::copy("MasterDeploy-rust/masterdeploy.db", "MasterDeploy-rust/masterdeploy.db.backup");
 
+    // Start-up zamanı köhnə MasterDeploy yenilənmə köməkçi konteynerlərini tamamilə silirik
+    let _ = std::process::Command::new("docker").args(["rm", "-f", "masterdeploy-updater"]).status();
+
     // Git repositoriyalarını yeniliklər üçün yoxlayan arxa plan loopunu başladırıq
     tokio::spawn(git_polling_loop(pool.clone()));
 
@@ -1582,6 +1585,9 @@ async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> Result<Sta
             
             let host_port = if host_port.is_empty() { "3000".to_string() } else { host_port };
 
+            // Clean up any leftover masterdeploy-updater helper containers
+            let _ = std::process::Command::new("docker").args(["rm", "-f", "masterdeploy-updater"]).status();
+
             // Pull uğurludursa, yenilənmə skriptini işə salırıq (düzgün volume və dinamik port ilə)
             let script = format!(
                 "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && docker run -d --name masterdeploy --restart always -p {}:3000 -v /data/masterdeploy:/app/data -v /var/run/docker.sock:/var/run/docker.sock -v ~/.ssh:/root/.ssh {}",
@@ -1589,7 +1595,7 @@ async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> Result<Sta
             );
 
             let _ = std::process::Command::new("docker")
-                .args(["run", "-d", "--rm", "-v", "/var/run/docker.sock:/var/run/docker.sock", &image, "sh", "-c", &script])
+                .args(["run", "-d", "--rm", "--name", "masterdeploy-updater", "-v", "/var/run/docker.sock:/var/run/docker.sock", &image, "sh", "-c", &script])
                 .spawn();
 
             Ok(StatusCode::OK)

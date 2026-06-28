@@ -2326,7 +2326,8 @@ async function openAppDetails(appId) {
             document.getElementById('detail-overview-server').innerText = app.server_id;
         }
 
-        const appUrl = `http://${serverIp}:${app.port}`;
+        const resolvedIp = (serverIp === 'local' || serverIp === 'localhost') ? 'localhost' : serverIp;
+        const appUrl = `http://${resolvedIp}:${app.port}`;
         document.getElementById('detail-app-url').innerText = appUrl;
         document.getElementById('detail-app-link').href = appUrl;
 
