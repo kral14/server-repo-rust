@@ -813,7 +813,7 @@ fi;
 
 sudo docker run -d --name masterdeploy -p {panel_p}:3000 \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -v /data/masterdeploy:/data/masterdeploy \
+    -v /data/masterdeploy:/app/data \
     -v ~/.ssh:/root/.ssh \
     --restart unless-stopped ghcr.io/kral14/server-repo-rust:latest;
 
@@ -887,7 +887,7 @@ sudo ufw allow {panel_p}/tcp 2>/dev/null || true;
 sudo docker stop masterdeploy 2>/dev/null || true;
 sudo docker rm masterdeploy 2>/dev/null || true;
 sudo docker build -t masterdeploy-app . && \
-sudo docker run -d --name masterdeploy -p {panel_p}:3000 -v /var/run/docker.sock:/var/run/docker.sock -v /data/masterdeploy:/data/masterdeploy -v ~/.ssh:/root/.ssh --restart unless-stopped masterdeploy-app;
+sudo docker run -d --name masterdeploy -p {panel_p}:3000 -v /var/run/docker.sock:/var/run/docker.sock -v /data/masterdeploy:/app/data -v ~/.ssh:/root/.ssh --restart unless-stopped masterdeploy-app;
 
 echo 'Watchtower qurulur...';
 sudo docker stop watchtower 2>/dev/null || true;
