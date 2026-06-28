@@ -1481,8 +1481,8 @@ async fn trigger_deployment_impl(
         }
         
         let run_cmd = format!(
-            "sudo docker rm -f {} || true && sudo docker run -d --name {} --restart always -p {}:{} -p {}:3000{} {}:latest",
-            app.name, app.name, app.port, app.port, app.port, env_args, app.name
+            "sudo docker rm -f {} || true && sudo docker run -d --name {} --restart always -p {}:3000{} {}:latest",
+            app.name, app.name, app.port, env_args, app.name
         );
         
         match run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), run_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await {
