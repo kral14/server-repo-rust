@@ -1,5 +1,11 @@
 [
   {
+    "version": "v1.0.62",
+    "changes": [
+      "Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."
+    ]
+  },
+  {
     "version": "v1.0.61",
     "changes": [
       "Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."
