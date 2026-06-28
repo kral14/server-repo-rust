@@ -154,7 +154,7 @@ class RemoteInstallerLogic:
             ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", "-i", key_path, f"{user}@{ip}", "echo 'Bağlantı Uğurludur!'"]
             try:
                 creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=creationflags)
+                proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', creationflags=creationflags)
                 if proc.returncode == 0:
                     self.log_remote("✅ QOŞULMA UĞURLUDUR!")
                     self.gui.root.after(0, lambda: self.gui.toggle_remote_buttons(tk.NORMAL))
@@ -343,7 +343,7 @@ class RemoteInstallerLogic:
         def task():
             ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", "-i", key_path, f"{user}@{ip}", cmd]
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=creationflags)
+            proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', creationflags=creationflags)
             self.log_remote(proc.stdout)
             
         threading.Thread(target=task, daemon=True).start()
@@ -359,7 +359,7 @@ class RemoteInstallerLogic:
             cmd = "sudo docker logs --tail 15 masterdeploy 2>/dev/null || echo 'masterdeploy adında docker konteyneri tapılmadı!'"
             ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=5", "-i", key_path, f"{user}@{ip}", cmd]
             creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-            proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=creationflags)
+            proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', creationflags=creationflags)
             if proc.returncode == 0:
                 self.log_remote(proc.stdout)
             else:
@@ -803,7 +803,7 @@ echo '✅ Portainer quruldu! Port: {port_p}';
             ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10", "-i", key_path, f"{user}@{ip}", f"bash -s"]
             try:
                 creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                proc = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, creationflags=creationflags)
+                proc = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', creationflags=creationflags)
                 out, _ = proc.communicate(input=cmd)
                 self.log_remote(out)
                 self.log_remote("✅ UZAR SERVERDƏ ƏMƏLİYYAT BİTDİ!")

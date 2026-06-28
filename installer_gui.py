@@ -211,6 +211,7 @@ class RemoteInstallerGUI:
         tk.Label(console_header, text="Uzaq Server Çıxışı:", font=self.font_label, bg=BG_COLOR, fg=ACCENT_COLOR).pack(side=tk.LEFT)
         
         self.create_button(console_header, "🔄 Logları Yenilə", "#2980B9", self.backend.refresh_remote_logs).pack(side=tk.RIGHT, padx=2)
+        self.create_button(console_header, "🔓 Düymələri Aç (Reset)", "#D35400", lambda: self.toggle_remote_buttons(tk.NORMAL)).pack(side=tk.RIGHT, padx=2)
         self.create_button(console_header, "📄 Kopyala", "#444", lambda: self.backend.copy_console(self.console_remote)).pack(side=tk.RIGHT, padx=2)
         self.create_button(console_header, "🗑️ Konsolu Təmizlə", "#C0392B", self.backend.clear_remote_console).pack(side=tk.RIGHT, padx=2)
         self.create_button(console_header, "🔍 -", "#444", self.zoom_out_remote).pack(side=tk.RIGHT, padx=2, ipadx=4)
@@ -331,6 +332,7 @@ class RemoteInstallerGUI:
         
         tk.Label(console_header, text="Yerli PC Çıxışı:", font=self.font_label, bg=BG_COLOR, fg=ACCENT_COLOR).pack(side=tk.LEFT)
         
+        self.create_button(console_header, "🔓 Düymələri Aç (Reset)", "#D35400", lambda: self.toggle_local_buttons(tk.NORMAL)).pack(side=tk.RIGHT, padx=2)
         self.create_button(console_header, "📄 Kopyala", "#444", lambda: self.backend.copy_console(self.console_local)).pack(side=tk.RIGHT, padx=2)
         self.create_button(console_header, "🗑️ Konsolu Təmizlə", "#C0392B", lambda: self.console_local.delete("1.0", tk.END)).pack(side=tk.RIGHT, padx=2)
         self.create_button(console_header, "🔍 -", "#444", self.zoom_out_local).pack(side=tk.RIGHT, padx=2, ipadx=4)
