@@ -715,21 +715,22 @@ class RemoteInstallerGUI:
 
     def get_cmd_swap(self, swap_gb, panel_p, port_p):
         swap_mb = int(swap_gb) * 1024
-        return f"""
-echo 'Swap ({swap_gb}GB) Sazlanır...';
+        cmd = """
+echo 'Swap (SWAP_GBGB) Sazlanır...';
 if grep -q '/swapfile' /proc/swaps; then
     echo 'Mövcud Swap söndürülür...';
     sudo swapoff /swapfile;
     sudo rm -f /swapfile;
 fi;
-sudo fallocate -l {swap_gb}G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count={swap_mb};
+sudo fallocate -l SWAP_GBG /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=SWAP_MB;
 sudo chmod 600 /swapfile;
 sudo mkswap /swapfile;
 sudo swapon /swapfile;
 grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab;
 sudo sysctl vm.swappiness=10;
-echo '✅ {swap_gb}GB Swap uğurla quruldu və aktivləşdirildi!';
+echo '✅ SWAP_GBGB Swap uğurla quruldu və aktivləşdirildi!';
 """
+        return cmd.replace("SWAP_GB", str(swap_gb)).replace("SWAP_MB", str(swap_mb))
 
     def get_cmd_git(self, swap_gb, panel_p, port_p):
         return """
@@ -753,7 +754,6 @@ fi;
 """
 
     def get_cmd_docker(self, swap_gb, panel_p, port_p):
-        # Seçilən komponentlərin siyahısını hazırlayırıq
         pkgs = []
         if self.docker_engine_var.get(): pkgs.append("docker-ce")
         if self.docker_cli_var.get(): pkgs.append("docker-ce-cli")
@@ -763,47 +763,51 @@ fi;
         
         pkg_str = " ".join(pkgs)
         
-        return f"""
-echo 'Seçilmiş Docker komponentləri qurulur: {pkg_str}';
+        buildx_check = ""
+        if self.docker_buildx_var.get():
+            buildx_check = "if ! docker buildx version > /dev/null 2>&1 && command -v apt-get > /dev/null 2>&1; then sudo apt-get install -y docker-buildx || true; fi"
+            
+        cmd = """
+echo 'Seçilmiş Docker komponentləri qurulur: PKG_STR';
 if command -v apt-get > /dev/null 2>&1; then
-    # Linux Mint / Ubuntu xüsusi repozitoriya bərpası
     OS_ID=$(. /etc/os-release && echo "$ID")
     OS_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
     if [ "$OS_ID" = "linuxmint" ]; then
         OS_ID="ubuntu"
-        # Mint zena version noble bazasındadır
         if [ "$OS_CODENAME" = "zena" ]; then
             OS_CODENAME="noble"
         fi
     fi
 
+    # Köhnə və səhv qeydləri silirik ki, apt update xəta verib skripti dayandırmasın
+    sudo rm -f /etc/apt/sources.list.d/docker.list 2>/dev/null || true
+    sudo rm -f /etc/apt/keyrings/docker.gpg 2>/dev/null || true
+    
     sudo apt-get update && \
     sudo apt-get install -y ca-certificates curl gnupg lsb-release && \
     sudo mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/$OS_ID/gpg | sudo gpg --dearmor -y --o /etc/apt/keyrings/docker.gpg 2>/dev/null || true && \
+    curl -fsSL https://download.docker.com/linux/$OS_ID/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_ID $OS_CODENAME stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     sudo apt-get update && \
-    sudo apt-get install -y {pkg_str};
+    sudo apt-get install -y PKG_STR;
 else
     echo 'APT tapılmadı. Skript ilə standart Docker quraşdırılır...';
     curl -fsSL https://get.docker.com -o get-docker.sh;
     sudo sh get-docker.sh;
 fi;
 
-# Docker daemon qovluq zədələnməsini (mkdir no such file) bərpa etmək üçün daemon-u təmizləyirik
+BUILDX_CHECK_PLACEHOLDER
+
 sudo systemctl stop docker 2>/dev/null || true;
 sudo systemctl stop docker.socket 2>/dev/null || true;
 sudo systemctl start docker 2>/dev/null || true;
-"""
-
-# Əgər buildx seçilibsə və apt-dən əlavə edilməyibsə, əlavə yoxlama
-{"if ! docker buildx version > /dev/null 2>&1 && command -v apt-get > /dev/null 2>&1; then sudo apt-get install -y docker-buildx || true; fi" if self.docker_buildx_var.get() else ""}
 
 sudo systemctl enable docker 2>/dev/null || true;
 sudo systemctl start docker 2>/dev/null || true;
 sudo usermod -aG docker $USER 2>/dev/null || true;
 echo '✅ Docker quraşdırılması seçilmiş komponentlərlə tamamlandı!';
 """
+        return cmd.replace("PKG_STR", pkg_str).replace("BUILDX_CHECK_PLACEHOLDER", buildx_check)
 
     def get_cmd_panel(self, swap_gb, panel_p, port_p):
         return f"""

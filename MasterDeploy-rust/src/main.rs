@@ -1242,6 +1242,60 @@ async fn trigger_deployment_impl(
             let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
         }
 
+        // Step 0: Port Toqquşması və Firewall (UFW) Yoxlanışı
+        {
+            let mut lock = logs.lock().await;
+            lock.push_str(&format!("[0/5] Port toqquşması və Firewall icazəsi yoxlanılır (Port: {})...\n", app.port));
+            update_logs_helper(&db_clone, &deploy_id, &lock).await;
+        }
+
+        let port_check_cmd = format!(
+            "if sudo ss -tuln | grep -q \":{} \"; then \
+                # Əgər portu istifadə edən elə bu tətbiqdirsə (update/redeploy), toqquşma saymırıq \
+                if sudo docker ps --filter \"name={}\" --format \"{{{{.Ports}}}}\" | grep -q \"{}\"; then \
+                    echo \"===PORT_OK===\"; \
+                else \
+                    echo \"===PORT_CONFLICT===\"; \
+                fi; \
+             elif sudo ufw status | grep -q \"Status: active\" && ! sudo ufw status | grep -q \"{}/tcp\"; then \
+                echo \"===FIREWALL_BLOCKED===\"; \
+             else \
+                echo \"===PORT_OK===\"; \
+             fi",
+            app.port, app.name, app.port, app.port
+        );
+
+        let mut port_ok = false;
+        let mut err_msg = String::new();
+
+        // SSH üzərindən port statusunu öyrənirik
+        let check_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+        let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), port_check_cmd, db_clone.clone(), deploy_id.clone(), check_logs.clone()).await;
+        
+        let check_output = check_logs.lock().await;
+        if check_output.contains("===PORT_CONFLICT===") {
+            err_msg = format!("[ERROR] Port {} artıq başqa bir xidmət tərəfindən istifadə olunur! Başqa port seçin.\n", app.port);
+        } else if check_output.contains("===FIREWALL_BLOCKED===") {
+            err_msg = format!("[ERROR] Port {} uzaq server firewall-u (UFW) tərəfindən bloklanıb! Zəhmət olmasa portu açın.\n", app.port);
+        } else {
+            port_ok = true;
+        }
+
+        if !port_ok {
+            let mut lock = logs.lock().await;
+            lock.push_str(&err_msg);
+            update_logs_helper(&db_clone, &deploy_id, &lock).await;
+            let _ = std::fs::remove_file(&temp_key_path);
+            finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+            return;
+        }
+
+        {
+            let mut lock = logs.lock().await;
+            lock.push_str("✅ Port yoxlanışı uğurla keçdi (Port toqquşması və ya bloklanma yoxdur).\n");
+            update_logs_helper(&db_clone, &deploy_id, &lock).await;
+        }
+
         // Step 1: Ensure workspace dir and install git/docker if needed
         {
             let mut lock = logs.lock().await;
@@ -1427,8 +1481,8 @@ async fn trigger_deployment_impl(
         }
         
         let run_cmd = format!(
-            "sudo docker rm -f {} || true && sudo docker run -d --name {} --restart always -p {}:{}{} {}:latest",
-            app.name, app.name, app.port, app.port, env_args, app.name
+            "sudo docker rm -f {} || true && sudo docker run -d --name {} --restart always -p {}:{} -p {}:3000{} {}:latest",
+            app.name, app.name, app.port, app.port, app.port, env_args, app.name
         );
         
         match run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), run_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await {
