@@ -904,16 +904,34 @@ async fn update_application(
 }
 
 async fn delete_application(State(state): State<AppState>, AxumPath(app_id): AxumPath<String>) -> Result<Json<bool>, (StatusCode, String)> {
+    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
+        .bind(&app_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
+
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&app.server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
+
+    // 1. Docker konteynerini serverdən silirik
+    let cleanup_cmd = format!("sudo docker rm -f {} || true", app.name);
+    let _ = run_ssh_command(&server, &cleanup_cmd).await;
+
     let mut tx = state.db.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // 1. Delete all deployments of this application
+    // 2. Delete all deployments of this application
     sqlx::query("DELETE FROM deployments WHERE application_id = ?")
         .bind(&app_id)
         .execute(&mut *tx)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // 2. Delete the application itself
+    // 3. Delete the application itself
     sqlx::query("DELETE FROM applications WHERE id = ?")
         .bind(&app_id)
         .execute(&mut *tx)
