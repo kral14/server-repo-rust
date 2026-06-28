@@ -1505,7 +1505,7 @@ async fn trigger_system_update(Json(payload): Json<UpdatePayload>) -> Result<Sta
             let host_port = if let Ok(out) = port_output {
                 String::from_utf8_lossy(&out.stdout).trim().to_string()
             } else {
-                "3000".to_string() # Fallback port
+                "3000".to_string() // Fallback port
             };
             
             let host_port = if host_port.is_empty() { "3000".to_string() } else { host_port };
