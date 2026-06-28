@@ -24,6 +24,13 @@ class RemoteInstallerGUI:
         self.root.title("MasterDeploy Quraşdırıcı 🚀 (Remote & Local)")
         self.root.configure(bg=BG_COLOR, padx=20, pady=10)
         
+        # Docker Komponent Seçimləri (Default hamısı aktivdir)
+        self.docker_engine_var = tk.BooleanVar(value=True)
+        self.docker_cli_var = tk.BooleanVar(value=True)
+        self.docker_buildx_var = tk.BooleanVar(value=True)
+        self.docker_compose_var = tk.BooleanVar(value=True)
+        self.docker_containerd_var = tk.BooleanVar(value=True)
+        
         # Fontlar
         self.font_title = ("Segoe UI", 16, "bold")
         self.font_label = ("Segoe UI", 10, "bold")
@@ -164,13 +171,29 @@ class RemoteInstallerGUI:
         setup_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
         
         self.btn_check = self.create_button(setup_lf, "🔗 Yoxla", BTN_CHECK, self.test_connection)
-        self.btn_check.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3, pady=5, ipady=4)
-        self.btn_prep = self.create_button(setup_lf, "🛠️ Hazırla", BTN_PREP, lambda: self.run_remote_task(self.get_cmd_prep))
-        self.btn_prep.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3, pady=5, ipady=4)
+        self.btn_check.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        
+        self.btn_swap = self.create_button(setup_lf, "🔄 Swap Qur", "#E67E22", lambda: self.run_remote_task(self.get_cmd_swap))
+        self.btn_swap.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        
+        self.btn_git = self.create_button(setup_lf, "🐙 Git Qur", "#9B59B6", lambda: self.run_remote_task(self.get_cmd_git))
+        self.btn_git.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        
+        # Docker üçün xüsusi yan-yana panel (Düymə + ⚙️)
+        docker_btn_frame = tk.Frame(setup_lf, bg=BG_COLOR)
+        docker_btn_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5)
+        
+        self.btn_docker = self.create_button(docker_btn_frame, "🐳 Docker Qur", BTN_PREP, lambda: self.run_remote_task(self.get_cmd_docker))
+        self.btn_docker.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4)
+        
+        self.btn_docker_settings = self.create_button(docker_btn_frame, "⚙️", "#444", self.open_docker_settings)
+        self.btn_docker_settings.pack(side=tk.LEFT, padx=(2, 0), ipady=4, ipadx=4)
+        
         self.btn_panel = self.create_button(setup_lf, "🚀 Paneli Qur", BTN_PANEL, lambda: self.run_remote_task(self.get_cmd_panel))
-        self.btn_panel.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3, pady=5, ipady=4)
+        self.btn_panel.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+        
         self.btn_all = self.create_button(setup_lf, "🌟 Tam Qur", BTN_ALL, lambda: self.run_remote_task(self.get_cmd_all))
-        self.btn_all.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=3, pady=5, ipady=4)
+        self.btn_all.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
 
         # Sistem & Xidmətlər Düymələri
         sys_lf = tk.LabelFrame(btn_action_frame, text=" 🖥️ Server & Servislər ", font=(self.font_label[0], 8, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
@@ -185,7 +208,7 @@ class RemoteInstallerGUI:
         self.btn_token = self.create_button(sys_lf, "🔑 Token Yarat", "#8E44AD", lambda: self.trigger_portainer_token(is_local=False))
         self.btn_token.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
 
-        self.remote_action_btns = [self.btn_prep, self.btn_panel, self.btn_all, self.btn_reboot, self.btn_clean, self.btn_portainer, self.btn_token, self.btn_port_open, self.btn_port_close, self.btn_port_list]
+        self.remote_action_btns = [self.btn_swap, self.btn_git, self.btn_docker, self.btn_docker_settings, self.btn_panel, self.btn_all, self.btn_reboot, self.btn_clean, self.btn_portainer, self.btn_token, self.btn_port_open, self.btn_port_close, self.btn_port_list]
         self.toggle_remote_buttons(tk.DISABLED)
 
         # Konsol İdarəetmə Alətləri (Zoom In, Zoom Out, Təmizlə, Kopyala, Yenilə)
@@ -233,13 +256,29 @@ class RemoteInstallerGUI:
         btn_frame.pack(fill=tk.X, pady=15)
         
         self.btn_local_check = self.create_button(btn_frame, "🔐 İcazəni Yoxla", BTN_CHECK, self.test_local_connection)
-        self.btn_local_check.grid(row=0, column=0, padx=3, ipady=4, ipadx=3)
-        self.btn_local_prep = self.create_button(btn_frame, "🛠️ Hazırla", BTN_PREP, lambda: self.run_local_task(self.get_cmd_prep))
-        self.btn_local_prep.grid(row=0, column=1, padx=3, ipady=4, ipadx=3)
+        self.btn_local_check.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        
+        self.btn_local_swap = self.create_button(btn_frame, "🔄 Swap Qur", "#E67E22", lambda: self.run_local_task(self.get_cmd_swap))
+        self.btn_local_swap.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        
+        self.btn_local_git = self.create_button(btn_frame, "🐙 Git Qur", "#9B59B6", lambda: self.run_local_task(self.get_cmd_git))
+        self.btn_local_git.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        
+        # Docker üçün xüsusi panel
+        local_docker_frame = tk.Frame(btn_frame, bg=BG_COLOR)
+        local_docker_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2)
+        
+        self.btn_local_docker = self.create_button(local_docker_frame, "🐳 Docker Qur", BTN_PREP, lambda: self.run_local_task(self.get_cmd_docker))
+        self.btn_local_docker.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4)
+        
+        self.btn_local_docker_settings = self.create_button(local_docker_frame, "⚙️", "#444", self.open_docker_settings)
+        self.btn_local_docker_settings.pack(side=tk.LEFT, padx=(2, 0), ipady=4, ipadx=4)
+        
         self.btn_local_panel = self.create_button(btn_frame, "🚀 Paneli Qur", BTN_PANEL, lambda: self.run_local_task(self.get_cmd_panel))
-        self.btn_local_panel.grid(row=0, column=2, padx=3, ipady=4, ipadx=3)
+        self.btn_local_panel.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
+        
         self.btn_local_all = self.create_button(btn_frame, "🌟 Tam Qur", BTN_ALL, lambda: self.run_local_task(self.get_cmd_all))
-        self.btn_local_all.grid(row=0, column=3, padx=3, ipady=4, ipadx=3)
+        self.btn_local_all.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, ipady=4)
 
         extra_btn_frame = tk.Frame(self.tab_local, bg=BG_COLOR)
         extra_btn_frame.pack(fill=tk.X, pady=5)
@@ -250,7 +289,7 @@ class RemoteInstallerGUI:
         self.btn_local_token = self.create_button(extra_btn_frame, "🔑 Token Yarat", "#8E44AD", lambda: self.trigger_portainer_token(is_local=True))
         self.btn_local_token.grid(row=0, column=2, padx=3, ipady=4, ipadx=5)
 
-        self.local_action_btns = [self.btn_local_prep, self.btn_local_panel, self.btn_local_all, self.btn_local_clean, self.btn_local_portainer, self.btn_local_token]
+        self.local_action_btns = [self.btn_local_swap, self.btn_local_git, self.btn_local_docker, self.btn_local_docker_settings, self.btn_local_panel, self.btn_local_all, self.btn_local_clean, self.btn_local_portainer, self.btn_local_token]
         self.toggle_local_buttons(tk.DISABLED)
 
         # Konsol
@@ -368,7 +407,10 @@ class RemoteInstallerGUI:
             if state == tk.DISABLED:
                 btn.config(bg="#333333", fg="#888888")
             else:
-                if btn == self.btn_prep: btn.config(bg=BTN_PREP, fg="white")
+                if btn == self.btn_swap: btn.config(bg="#E67E22", fg="white")
+                elif btn == self.btn_git: btn.config(bg="#9B59B6", fg="white")
+                elif btn == self.btn_docker: btn.config(bg=BTN_PREP, fg="white")
+                elif btn == self.btn_docker_settings: btn.config(bg="#444", fg="white")
                 elif btn == self.btn_panel: btn.config(bg=BTN_PANEL, fg="white")
                 elif btn == self.btn_all: btn.config(bg=BTN_ALL, fg="white")
                 elif btn == self.btn_reboot: btn.config(bg=BTN_REBOOT, fg="black")
@@ -382,7 +424,10 @@ class RemoteInstallerGUI:
             if state == tk.DISABLED:
                 btn.config(bg="#333333", fg="#888888")
             else:
-                if btn == self.btn_local_prep: btn.config(bg=BTN_PREP, fg="white")
+                if btn == self.btn_local_swap: btn.config(bg="#E67E22", fg="white")
+                elif btn == self.btn_local_git: btn.config(bg="#9B59B6", fg="white")
+                elif btn == self.btn_local_docker: btn.config(bg=BTN_PREP, fg="white")
+                elif btn == self.btn_local_docker_settings: btn.config(bg="#444", fg="white")
                 elif btn == self.btn_local_panel: btn.config(bg=BTN_PANEL, fg="white")
                 elif btn == self.btn_local_all: btn.config(bg=BTN_ALL, fg="white")
                 elif btn == self.btn_local_clean: btn.config(bg=BTN_CLEAN, fg="white")
@@ -545,41 +590,105 @@ class RemoteInstallerGUI:
     # ==========================================
     # COMMAND GENERATORS
     # ==========================================
-    def get_cmd_prep(self, swap_gb, panel_p, port_p):
+    def open_docker_settings(self):
+        win = tk.Toplevel(self.root)
+        win.title("🐳 Docker Komponent Ayarları")
+        win.geometry("380x280")
+        win.configure(bg=CARD_COLOR)
+        win.resizable(False, False)
+        
+        # Pəncərənin mərkəzdə açılması
+        win.transient(self.root)
+        win.grab_set()
+        
+        tk.Label(win, text="Quraşdırılacaq Komponentlər:", font=self.font_label, bg=CARD_COLOR, fg=ACCENT_COLOR).pack(pady=10)
+        
+        frame = tk.Frame(win, bg=CARD_COLOR)
+        frame.pack(fill=tk.BOTH, expand=True, padx=20)
+        
+        style_check = {"bg": CARD_COLOR, "fg": TEXT_COLOR, "selectcolor": "#2D2D2D", "activebackground": CARD_COLOR, "activeforeground": TEXT_COLOR, "font": self.font_label}
+        
+        tk.Checkbutton(frame, text="Docker Engine (Əsas mühərrik)", variable=self.docker_engine_var, **style_check).pack(anchor=tk.W, pady=3)
+        tk.Checkbutton(frame, text="Docker CLI (Terminal əmrləri)", variable=self.docker_cli_var, **style_check).pack(anchor=tk.W, pady=3)
+        tk.Checkbutton(frame, text="Docker Buildx Plugin (Geniş build)", variable=self.docker_buildx_var, **style_check).pack(anchor=tk.W, pady=3)
+        tk.Checkbutton(frame, text="Docker Compose Plugin (Konfiqurasiya)", variable=self.docker_compose_var, **style_check).pack(anchor=tk.W, pady=3)
+        tk.Checkbutton(frame, text="containerd.io (Konteyner idarəçi)", variable=self.docker_containerd_var, **style_check).pack(anchor=tk.W, pady=3)
+        
+        self.create_button(win, "💾 Yadda Saxla", BTN_ALL, win.destroy).pack(pady=15, ipady=4, ipadx=15)
+
+    def get_cmd_swap(self, swap_gb, panel_p, port_p):
         swap_mb = int(swap_gb) * 1024
         return f"""
-echo '[1/3] Swap ({swap_gb}GB) Yoxlanılır və Qurulur...';
+echo 'Swap ({swap_gb}GB) Sazlanır...';
 if grep -q '/swapfile' /proc/swaps; then
-    echo 'Köhnə Swap söndürülür və silinir...';
+    echo 'Mövcud Swap söndürülür...';
     sudo swapoff /swapfile;
     sudo rm -f /swapfile;
 fi;
-if [ ! -f /swapfile ]; then
-    sudo fallocate -l {swap_gb}G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count={swap_mb};
-    sudo chmod 600 /swapfile;
-    sudo mkswap /swapfile;
-    sudo swapon /swapfile;
-    grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab;
-    echo 'Yeni {swap_gb}GB Swap quruldu!';
-fi;
+sudo fallocate -l {swap_gb}G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count={swap_mb};
+sudo chmod 600 /swapfile;
+sudo mkswap /swapfile;
+sudo swapon /swapfile;
+grep -q '/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab;
 sudo sysctl vm.swappiness=10;
+echo '✅ {swap_gb}GB Swap uğurla quruldu və aktivləşdirildi!';
+"""
 
-echo '[2/3] Git Yenilənir...';
+    def get_cmd_git(self, swap_gb, panel_p, port_p):
+        return """
+echo 'Git yoxlanılır...';
 if ! command -v git > /dev/null 2>&1; then
-    sudo apt-get update && sudo apt-get install -y git;
+    echo 'Git tapılmadı. Quraşdırılır...';
+    if command -v apt-get > /dev/null 2>&1; then
+        sudo apt-get update && sudo apt-get install -y git;
+    elif command -v yum > /dev/null 2>&1; then
+        sudo yum install -y git;
+    elif command -v apk > /dev/null 2>&1; then
+        sudo apk add git;
+    else
+        echo '❌ Dəstəklənməyən paket meneceri! Git-i əllə qurun.';
+        exit 1;
+    fi;
+    echo '✅ Git uğurla quraşdırıldı!';
+else
+    echo '✅ Git artıq mövcuddur: '$(git --version);
+fi;
+"""
+
+    def get_cmd_docker(self, swap_gb, panel_p, port_p):
+        # Seçilən komponentlərin siyahısını hazırlayırıq
+        pkgs = []
+        if self.docker_engine_var.get(): pkgs.append("docker-ce")
+        if self.docker_cli_var.get(): pkgs.append("docker-ce-cli")
+        if self.docker_containerd_var.get(): pkgs.append("containerd.io")
+        if self.docker_buildx_var.get(): pkgs.append("docker-buildx-plugin")
+        if self.docker_compose_var.get(): pkgs.append("docker-compose-plugin")
+        
+        pkg_str = " ".join(pkgs)
+        
+        return f"""
+echo 'Seçilmiş Docker komponentləri qurulur: {pkg_str}';
+if command -v apt-get > /dev/null 2>&1; then
+    sudo apt-get update && \
+    sudo apt-get install -y ca-certificates curl gnupg lsb-release && \
+    sudo mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/$(. /etc/os-release && echo "$ID")/gpg | sudo gpg --dearmor -y --o /etc/apt/keyrings/docker.gpg 2>/dev/null || true && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    sudo apt-get update && \
+    sudo apt-get install -y {pkg_str};
+else
+    echo 'APT tapılmadı. Skript ilə standart Docker quraşdırılır...';
+    curl -fsSL https://get.docker.com -o get-docker.sh;
+    sudo sh get-docker.sh;
 fi;
 
-echo '[3/3] Docker Yoxlanılır və Qurulur...';
-if ! command -v docker > /dev/null 2>&1; then 
-    curl -fsSL https://get.docker.com -o get-docker.sh; 
-    sudo sh get-docker.sh; 
-    sudo systemctl enable docker; 
-    sudo systemctl start docker; 
-    sudo usermod -aG docker $USER;
-    echo 'Docker uğurla quruldu!';
-else
-    echo 'Docker artıq mövcuddur.';
-fi;
+# Əgər buildx seçilibsə və apt-dən əlavə edilməyibsə, əlavə yoxlama
+{"if ! docker buildx version > /dev/null 2>&1 && command -v apt-get > /dev/null 2>&1; then sudo apt-get install -y docker-buildx || true; fi" if self.docker_buildx_var.get() else ""}
+
+sudo systemctl enable docker 2>/dev/null || true;
+sudo systemctl start docker 2>/dev/null || true;
+sudo usermod -aG docker $USER 2>/dev/null || true;
+echo '✅ Docker quraşdırılması seçilmiş komponentlərlə tamamlandı!';
 """
 
     def get_cmd_panel(self, swap_gb, panel_p, port_p):
@@ -643,8 +752,30 @@ fi;
 sudo sysctl vm.swappiness=10;
 
 if ! command -v docker > /dev/null 2>&1; then 
-    curl -fsSL https://get.docker.com -o get-docker.sh; sudo sh get-docker.sh; 
+    if command -v apt-get > /dev/null 2>&1; then
+        sudo apt-get update && \
+        sudo apt-get install -y ca-certificates curl gnupg lsb-release && \
+        sudo mkdir -p /etc/apt/keyrings && \
+        curl -fsSL https://download.docker.com/linux/$(. /etc/os-release && echo "$ID")/gpg | sudo gpg --dearmor -y --o /etc/apt/keyrings/docker.gpg 2>/dev/null || true && \
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+        sudo apt-get update && \
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin;
+    else
+        curl -fsSL https://get.docker.com -o get-docker.sh; 
+        sudo sh get-docker.sh;
+    fi;
+    if ! docker buildx version > /dev/null 2>&1; then
+        if command -v apt-get > /dev/null 2>&1; then
+            sudo apt-get install -y docker-buildx || sudo apt-get install -y docker-buildx-plugin || true;
+        fi;
+    fi;
     sudo systemctl enable docker; sudo systemctl start docker; sudo usermod -aG docker $USER;
+else
+    if ! docker buildx version > /dev/null 2>&1; then
+        if command -v apt-get > /dev/null 2>&1; then
+            sudo apt-get update && (sudo apt-get install -y docker-buildx-plugin || sudo apt-get install -y docker-buildx || true);
+        fi;
+    fi;
 fi;
 if ! command -v git > /dev/null 2>&1; then
     sudo apt-get update && sudo apt-get install -y git;
