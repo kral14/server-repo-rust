@@ -259,6 +259,23 @@ class RemoteInstallerGUI:
         self.local_portainer_port_entry = tk.Entry(config_lf, width=12, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
         self.local_portainer_port_entry.grid(row=2, column=1, sticky=tk.W, pady=4, padx=8, ipady=3)
 
+        # 2. Port İdarəetmə Paneli (Lokal UFW / Iptables)
+        port_mgmt_lf = tk.LabelFrame(self.tab_local, text=" 🔌 Firewall Port İdarəetməsi (UFW / Iptables) ", font=(self.font_label[0], 9, "bold"), bg=BG_COLOR, fg="#E74C3C", bd=1, relief=tk.GROOVE)
+        port_mgmt_lf.pack(fill=tk.X, pady=5, ipady=5, ipadx=5)
+
+        tk.Label(port_mgmt_lf, text="Port:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).pack(side=tk.LEFT, padx=(10, 5))
+        self.local_target_port_entry = tk.Entry(port_mgmt_lf, width=8, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
+        self.local_target_port_entry.pack(side=tk.LEFT, padx=5, ipady=3)
+
+        self.btn_local_port_open = self.create_button(port_mgmt_lf, "🔓 Portu Aç", "#27AE60", self.local_open_port)
+        self.btn_local_port_open.pack(side=tk.LEFT, padx=5, ipady=3, ipadx=10)
+
+        self.btn_local_port_close = self.create_button(port_mgmt_lf, "🔒 Portu Bağla", "#C0392B", self.local_close_port)
+        self.btn_local_port_close.pack(side=tk.LEFT, padx=5, ipady=3, ipadx=10)
+
+        self.btn_local_port_list = self.create_button(port_mgmt_lf, "📋 Portları Listələ", "#2980B9", self.local_list_ports)
+        self.btn_local_port_list.pack(side=tk.LEFT, padx=10, ipady=3, ipadx=10)
+
         # Monitor (Lokal PC resurslarını izləmək üçün)
         self.local_monitor_frame = tk.Frame(self.tab_local, bg="#1a1a1a", highlightbackground=ACCENT_COLOR, highlightthickness=1)
         self.local_monitor_frame.pack(fill=tk.X, pady=(5, 10))
@@ -314,7 +331,7 @@ class RemoteInstallerGUI:
         self.btn_local_token = self.create_button(local_sys_lf, "🔑 Token Yarat", "#8E44AD", lambda: self.trigger_portainer_token(is_local=True))
         self.btn_local_token.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
 
-        self.local_action_btns = [self.btn_local_swap, self.btn_local_git, self.btn_local_docker, self.btn_local_docker_settings, self.btn_local_panel, self.btn_local_all, self.btn_local_clean, self.btn_local_portainer, self.btn_local_token]
+        self.local_action_btns = [self.btn_local_swap, self.btn_local_git, self.btn_local_docker, self.btn_local_docker_settings, self.btn_local_panel, self.btn_local_all, self.btn_local_clean, self.btn_local_portainer, self.btn_local_token, self.btn_local_port_open, self.btn_local_port_close, self.btn_local_port_list]
         self.toggle_local_buttons(tk.DISABLED)
 
         # Konsol İdarəetmə Alətləri
@@ -430,6 +447,49 @@ class RemoteInstallerGUI:
                 json.dump(data, f)
         except: pass
 
+    # ==========================================
+    # FIREWALL PORT MANAGEMENT (REMOTE & LOCAL)
+    # ==========================================
+    def remote_open_port(self):
+        port = self.target_port_entry.get().strip()
+        if not port:
+            messagebox.showwarning("Xəta", "Açılacaq port nömrəsini daxil edin!")
+            return
+        cmd = f"sudo ufw allow {port}/tcp 2>/dev/null || sudo iptables -I INPUT -p tcp --dport {port} -j ACCEPT"
+        self.run_remote_task(lambda s, p, pr: f"echo 'Uzaq serverdə {port} portu açılır...'; {cmd} && echo '✅ Port {port} uğurla açıldı!'")
+
+    def remote_close_port(self):
+        port = self.target_port_entry.get().strip()
+        if not port:
+            messagebox.showwarning("Xəta", "Bağlanacaq port nömrəsini daxil edin!")
+            return
+        cmd = f"sudo ufw delete allow {port}/tcp 2>/dev/null || sudo iptables -D INPUT -p tcp --dport {port} -j ACCEPT"
+        self.run_remote_task(lambda s, p, pr: f"echo 'Uzaq serverdə {port} portu bağlanır...'; {cmd} && echo '✅ Port {port} bağlandı!'")
+
+    def remote_list_ports(self):
+        cmd = "sudo ufw status verbose 2>/dev/null || sudo iptables -L -n -v"
+        self.run_remote_task(lambda s, p, pr: f"echo 'Uzaq serverdə aktiv portlar listələnir...'; {cmd}")
+
+    def local_open_port(self):
+        port = self.local_target_port_entry.get().strip()
+        if not port:
+            messagebox.showwarning("Xəta", "Açılacaq port nömrəsini daxil edin!")
+            return
+        cmd = f"sudo ufw allow {port}/tcp 2>/dev/null || sudo iptables -I INPUT -p tcp --dport {port} -j ACCEPT"
+        self.run_local_task(lambda s, p, pr: f"echo 'Lokal PC-də {port} portu açılır...'; {cmd} && echo '✅ Port {port} uğurla açıldı!'")
+
+    def local_close_port(self):
+        port = self.local_target_port_entry.get().strip()
+        if not port:
+            messagebox.showwarning("Xəta", "Bağlanacaq port nömrəsini daxil edin!")
+            return
+        cmd = f"sudo ufw delete allow {port}/tcp 2>/dev/null || sudo iptables -D INPUT -p tcp --dport {port} -j ACCEPT"
+        self.run_local_task(lambda s, p, pr: f"echo 'Lokal PC-də {port} portu bağlanır...'; {cmd} && echo '✅ Port {port} bağlandı!'")
+
+    def local_list_ports(self):
+        cmd = "sudo ufw status verbose 2>/dev/null || sudo iptables -L -n -v"
+        self.run_local_task(lambda s, p, pr: f"echo 'Lokal PC-də aktiv portlar listələnir...'; {cmd}")
+
 
 
     # ==========================================
@@ -467,6 +527,9 @@ class RemoteInstallerGUI:
                 elif btn == self.btn_local_clean: btn.config(bg=BTN_CLEAN, fg="white")
                 elif btn == self.btn_local_portainer: btn.config(bg="#00A2D3", fg="white")
                 elif btn == getattr(self, 'btn_local_token', None): btn.config(bg="#8E44AD", fg="white")
+                elif btn == self.btn_local_port_open: btn.config(bg="#27AE60", fg="white")
+                elif btn == self.btn_local_port_close: btn.config(bg="#C0392B", fg="white")
+                elif btn == self.btn_local_port_list: btn.config(bg="#2980B9", fg="white")
 
     # ==========================================
     # API & TOKEN GENERATION
