@@ -98,9 +98,9 @@ docker rm masterdeploy 2>/dev/null || true
 echo "======================================"
 echo "[SETUP] MasterDeploy işə salınır..."
 echo "======================================"
-# Mounting a volume for masterdeploy.db so data persists across container restarts
+# CRITICAL: DO NOT CHANGE THIS VOLUME MAPPING. IT MUST REMAIN /data/masterdeploy:/app/data TO PREVENT DATA LOSS DURING UPGRADES.
 docker run -d --name masterdeploy --restart always -p 3000:3000 \
-  -v masterdeploy-data:/app/data \
+  -v /data/masterdeploy:/app/data \
   -v /var/run/docker.sock:/var/run/docker.sock \
   ghcr.io/kral14/server-repo-rust:latest
 
