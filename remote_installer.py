@@ -766,11 +766,22 @@ fi;
         return f"""
 echo 'Seçilmiş Docker komponentləri qurulur: {pkg_str}';
 if command -v apt-get > /dev/null 2>&1; then
+    # Linux Mint / Ubuntu xüsusi repozitoriya bərpası
+    OS_ID=$(. /etc/os-release && echo "$ID")
+    OS_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+    if [ "$OS_ID" = "linuxmint" ]; then
+        OS_ID="ubuntu"
+        # Mint zena version noble bazasındadır
+        if [ "$OS_CODENAME" = "zena" ]; then
+            OS_CODENAME="noble"
+        fi
+    fi
+
     sudo apt-get update && \
     sudo apt-get install -y ca-certificates curl gnupg lsb-release && \
     sudo mkdir -p /etc/apt/keyrings && \
-    curl -fsSL https://download.docker.com/linux/$(. /etc/os-release && echo "$ID")/gpg | sudo gpg --dearmor -y --o /etc/apt/keyrings/docker.gpg 2>/dev/null || true && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release && echo "$ID") $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && \
+    curl -fsSL https://download.docker.com/linux/$OS_ID/gpg | sudo gpg --dearmor -y --o /etc/apt/keyrings/docker.gpg 2>/dev/null || true && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$OS_ID $OS_CODENAME stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && \
     sudo apt-get update && \
     sudo apt-get install -y {pkg_str};
 else
@@ -778,6 +789,12 @@ else
     curl -fsSL https://get.docker.com -o get-docker.sh;
     sudo sh get-docker.sh;
 fi;
+
+# Docker daemon qovluq zədələnməsini (mkdir no such file) bərpa etmək üçün daemon-u təmizləyirik
+sudo systemctl stop docker 2>/dev/null || true;
+sudo systemctl stop docker.socket 2>/dev/null || true;
+sudo systemctl start docker 2>/dev/null || true;
+"""
 
 # Əgər buildx seçilibsə və apt-dən əlavə edilməyibsə, əlavə yoxlama
 {"if ! docker buildx version > /dev/null 2>&1 && command -v apt-get > /dev/null 2>&1; then sudo apt-get install -y docker-buildx || true; fi" if self.docker_buildx_var.get() else ""}
