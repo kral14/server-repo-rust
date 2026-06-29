@@ -1725,7 +1725,7 @@ async fn create_cloudflare_tunnel(
             format!(
                 "docker rm -f cf-tunnel-{} || true; \
                  docker run -d --name cf-tunnel-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{} && \
-                 sleep 4 && \
+                 sleep 8 && \
                  docker logs cf-tunnel-{}",
                 app_id, app_id, port, app_id
             ),
@@ -1736,7 +1736,7 @@ async fn create_cloudflare_tunnel(
             format!(
                 "sudo docker rm -f cf-tunnel-{} || true; \
                  sudo docker run -d --name cf-tunnel-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{} && \
-                 sleep 4 && \
+                 sleep 8 && \
                  sudo docker logs cf-tunnel-{}",
                 app_id, app_id, port, app_id
             ),
