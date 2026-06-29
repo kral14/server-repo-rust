@@ -66,6 +66,7 @@
                 <button class="nav-btn" onclick="showModal('github-modal')"
                     style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">⚙️
                     GitHub Ayarları</button>
+                <button class="nav-btn" onclick="showModal('plugins-modal')" style="margin-top: 0.5rem;">🧩 Modullar (Plugins)</button>
                 <button class="nav-btn" onclick="showModal('activity-log-modal')" style="margin-top: 0.5rem;">📋 Fəaliyyət Jurnalı</button>
             </nav>
 
@@ -752,6 +753,21 @@
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" onclick="closeModal('github-modal')">Ləğv Et</button>
                 <button type="button" class="btn btn-primary" onclick="saveGithubToken()">Yadda Saxla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modullar Modalı -->
+    <div id="plugins-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 600px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem;">🧩 Modullar Mərkəzi</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Əlavə imkanları buradan yükləyin və aktivləşdirin</p>
+                </div>
+            </div>
+            <div id="plugins-list" style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px;">
+                <!-- Dinamik yüklənən modullar bura gələcək -->
             </div>
         </div>
     </div>

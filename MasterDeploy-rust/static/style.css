@@ -820,3 +820,107 @@ input:focus, select:focus { outline: 1px solid var(--accent-color); box-shadow: 
 [data-theme="light"] .win-body label {
     color: #1a202c !important;
 }
+
+/* Modullar (Plugins) Center UI Styles */
+.plugin-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.02) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-in) !important;
+}
+.plugin-card:hover {
+    border-color: var(--accent-color);
+}
+.plugin-info-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.plugin-info-block h3 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+.plugin-info-block p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+.plugin-version {
+    font-size: 0.7rem;
+    font-family: monospace;
+    background: rgba(255,255,255,0.06);
+    padding: 2px 6px;
+    border-radius: 4px;
+    align-self: flex-start;
+}
+
+/* 3 xətt drop menyusu */
+.app-menu-btn {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: var(--text-secondary) !important;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+.app-menu-btn:hover {
+    color: var(--text-primary) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+}
+.app-dropdown-menu {
+    display: none;
+    position: absolute;
+    right: 12px;
+    top: 40px;
+    background: rgba(20, 22, 30, 0.96) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 8px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5) !important;
+    z-index: 9999;
+    min-width: 160px;
+    overflow: hidden;
+    flex-direction: column;
+}
+.app-dropdown-menu button {
+    width: 100%;
+    text-align: left;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: var(--text-primary) !important;
+    padding: 10px 14px !important;
+    font-size: 0.85rem !important;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.2s;
+    border-radius: 0 !important;
+}
+.app-dropdown-menu button:hover {
+    background: rgba(0, 210, 255, 0.1) !important;
+}
+.app-dropdown-menu button.danger:hover {
+    background: rgba(255, 23, 68, 0.1) !important;
+    color: var(--danger-color) !important;
+}
+
+/* Yükləmə animasiyası */
+.plugin-loading-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255,255,255,0.1);
+    border-top: 2px solid var(--accent-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    display: inline-block;
+}

@@ -203,7 +203,8 @@ function initializeWindow(backdropId, titleText) {
     if (!card.style.top || card.style.top === '') {
         card.style.top = '100px';
         const cardWidth = card.offsetWidth || 530;
-        card.style.left = `calc(50vw - ${cardWidth / 2}px)`;
+        // Pəncərənin sağ tərəfə girməməsi üçün 60px sola çəkirik
+        card.style.left = `calc(50vw - ${cardWidth / 2}px - 60px)`;
     }
     
     // Reconstruct card layout with standard Header, Body, and Resizers
@@ -219,20 +220,20 @@ function initializeWindow(backdropId, titleText) {
                 <div class="win-btn-max-container">
                     <button class="win-btn-max" title="Böyüt"></button>
                     <div class="snap-layout-menu">
-                        <!-- Split Layout Block with Left and Right active hover zones -->
-                        <div class="snap-block split-layout">
-                            <div class="snap-zone zone-left" onclick="snapWindow('${backdropId}', 'left'); event.stopPropagation();" title="Sola yerləşdir"></div>
-                            <div class="snap-zone zone-right" onclick="snapWindow('${backdropId}', 'right'); event.stopPropagation();" title="Sağa yerləşdir"></div>
+                        <!-- Split Layout Block (Sola / Sağa 2 Böyük Pəncərə Seçimi) -->
+                        <div class="snap-block split-layout" style="display: flex; flex-direction: row; gap: 4px; padding: 4px; width: 60px; height: 45px;">
+                            <div class="snap-zone zone-left" onclick="snapWindow('${backdropId}', 'left'); event.stopPropagation();" title="Sola yerləşdir (50%)" style="flex: 1; height: 100%; background: rgba(255, 255, 255, 0.2); border-radius: 3px; cursor: pointer; transition: all 0.2s;"></div>
+                            <div class="snap-zone zone-right" onclick="snapWindow('${backdropId}', 'right'); event.stopPropagation();" title="Sağa yerləşdir (50%)" style="flex: 1; height: 100%; background: rgba(255, 255, 255, 0.2); border-radius: 3px; cursor: pointer; transition: all 0.2s;"></div>
                         </div>
                         
                         <!-- Full Screen Layout Block -->
-                        <div class="snap-block full-layout" onclick="snapWindow('${backdropId}', 'full'); event.stopPropagation();" title="Tam Ekran">
-                            <div class="snap-zone zone-full"></div>
+                        <div class="snap-block full-layout" onclick="snapWindow('${backdropId}', 'full'); event.stopPropagation();" title="Tam Ekran" style="display: block; padding: 4px; width: 60px; height: 45px;">
+                            <div class="snap-zone zone-full" style="width: 100%; height: 100%; background: rgba(255, 255, 255, 0.2); border-radius: 3px; cursor: pointer; transition: all 0.2s;"></div>
                         </div>
                         
                         <!-- Centered Layout Block -->
-                        <div class="snap-block center-layout" onclick="snapWindow('${backdropId}', 'center'); event.stopPropagation();" title="Mərkəzə yerləşdir">
-                            <div class="snap-zone zone-center"></div>
+                        <div class="snap-block center-layout" onclick="snapWindow('${backdropId}', 'center'); event.stopPropagation();" title="Mərkəzə yerləşdir" style="display: flex; justify-content: center; align-items: center; padding: 4px; width: 60px; height: 45px;">
+                            <div class="snap-zone zone-center" style="width: 70%; height: 100%; background: rgba(255, 255, 255, 0.2); border-radius: 3px; cursor: pointer; transition: all 0.2s;"></div>
                         </div>
                     </div>
                 </div>
@@ -610,6 +611,17 @@ async function loadServers() {
 // Load applications from Rust API
 async function loadApplications() {
     try {
+        // Layihələri çəkməzdən əvvəl plugin statuslarını alırıq ki, installedPlugins dolsun
+        try {
+            const pRes = await fetch('/api/plugins');
+            const plugins = await pRes.json();
+            plugins.forEach(p => {
+                installedPlugins[p.id] = p.installed;
+            });
+        } catch (e) {
+            console.error("Plugins fetch failed", e);
+        }
+
         const [appRes, srvRes] = await Promise.all([
             fetch('/api/applications'),
             fetch('/api/servers')
@@ -699,11 +711,13 @@ async function loadApplications() {
                 `;
 
 
+                const isCfInstalled = installedPlugins['cloudflare'] || false;
+
                 html += `
-                <div class="list-item" onclick="openAppDetails('${app.id}')" style="cursor: pointer; transition: all 0.2s ease;">
+                <div class="list-item" onclick="openAppDetails('${app.id}')" style="cursor: pointer; transition: all 0.2s ease; position: relative;">
                     <div class="item-info" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <div style="flex: 1; min-width: 0;">
+                            <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
                                 🚀 ${app.name}
                                 ${app.status === 'success' || app.status === 'running' ? `
                                 <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: var(--accent-color); text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 210, 255, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
@@ -714,9 +728,11 @@ async function loadApplications() {
                                     ☁️ Cloudflare Keçidi
                                 </a>
                                 ` : ''}
+                                ${isCfInstalled ? `
                                 <button onclick="generateCloudflareTunnel(event, '${app.id}')" style="font-size: 0.75rem; color: #fff; background: #e67e22; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem;" title="Cloudflare Tunelini İşə Sal / Link Al">
                                     🔄 ☁️ Tunnel Al
                                 </button>
+                                ` : ''}
                                 ` : ''}
                                 ${appStatsHtml}
                             </h3>
@@ -725,9 +741,20 @@ async function loadApplications() {
                                 <span>🔌 Port: <strong>${app.port}</strong></span>
                             </p>
                         </div>
-                        <div style="display:inline-flex; align-items:center; gap:0.5rem; background: rgba(255,255,255,0.05); padding: 0.4rem 0.8rem; border-radius: 8px;">
-                            <span style="width:8px; height:8px; border-radius:50%; background:${sc}; display:inline-block; box-shadow: 0 0 5px ${sc};"></span>
-                            <span style="color:${sc}; font-weight:500;">${app.status.toUpperCase()}</span>
+                        <div style="display:flex; align-items:center; gap:0.8rem;">
+                            <div style="display:inline-flex; align-items:center; gap:0.5rem; background: rgba(255,255,255,0.05); padding: 0.4rem 0.8rem; border-radius: 8px;">
+                                <span style="width:8px; height:8px; border-radius:50%; background:${sc}; display:inline-block; box-shadow: 0 0 5px ${sc};"></span>
+                                <span style="color:${sc}; font-weight:500;">${app.status.toUpperCase()}</span>
+                            </div>
+                            
+                            <!-- 3 xətt menyusu -->
+                            <div style="position: relative;">
+                                <button class="app-menu-btn" onclick="toggleAppMenu(event, '${app.id}')">⋮</button>
+                                <div id="app-menu-${app.id}" class="app-dropdown-menu">
+                                    <button onclick="event.stopPropagation(); openAppDetails('${app.id}')">👁️ Detallara Bax</button>
+                                    <button class="danger" onclick="event.stopPropagation(); deleteApp('${app.id}', '${app.name}')">🗑️ Sil</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1286,7 +1313,7 @@ async function closeCloudflareModal(shouldStop) {
     
     if (shouldStop && currentCfAppId) {
         try {
-            await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/stop`, { method: 'POST' });
+            await fetch(`/api/plugins/cloudflare/stop/${currentCfAppId}`, { method: 'POST' });
             addActivityLog("Cloudflare tuneli istifadəçi tərəfindən dayandırıldı", 'info');
         } catch (e) {
             console.error(e);
@@ -1320,7 +1347,7 @@ async function runCfCommand(cmdType) {
         document.getElementById('cf-tunnel-url-container').innerText = '🔗 Başladılır...';
         
         try {
-            const res = await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/start`, { method: 'POST' });
+            const res = await fetch(`/api/plugins/cloudflare/start/${currentCfAppId}`, { method: 'POST' });
             if (res.ok) {
                 appendCfLog('[SİSTEM] Konteyner uğurla işə salındı! Canlı loqlar izlənilir...', '#00e676');
                 startCfLogsPolling();
@@ -1344,7 +1371,7 @@ async function runCfCommand(cmdType) {
         document.getElementById('cf-tunnel-url-container').innerText = '🛑 Tünel dayandırıldı';
         
         try {
-            const res = await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/stop`, { method: 'POST' });
+            const res = await fetch(`/api/plugins/cloudflare/stop/${currentCfAppId}`, { method: 'POST' });
             if (res.ok) {
                 appendCfLog('[SİSTEM] Konteyner tamamilə dayandırıldı və silindi.', '#ff1744');
                 loadApplications();
@@ -1376,7 +1403,7 @@ function startCfLogsPolling() {
     cfPollingInterval = setInterval(async () => {
         if (!currentCfAppId) return;
         try {
-            const logRes = await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/logs`);
+            const logRes = await fetch(`/api/plugins/cloudflare/logs/${currentCfAppId}`);
             if (logRes.ok) {
                 const data = await logRes.json();
                 
@@ -3737,4 +3764,101 @@ viewLogs = function(appId, switchMainTab = true, specificDeployId = null) {
     originalViewLogs(appId, switchMainTab, specificDeployId);
     setTimeout(initDebugTooltips, 500);
 };
+
+// --- Modul (Plugins) Menecment Sistemi ---
+let installedPlugins = {};
+
+async function loadPlugins() {
+    try {
+        const res = await fetch('/api/plugins');
+        const plugins = await res.json();
+        const container = document.getElementById('plugins-list');
+        if (!container) return;
+
+        container.innerHTML = plugins.map(p => {
+            installedPlugins[p.id] = p.installed;
+            return `
+            <div class="plugin-card">
+                <div class="plugin-info-block">
+                    <h3>${p.name} <span class="plugin-version">v${p.version}</span></h3>
+                    <p>${p.description}</p>
+                </div>
+                <div>
+                    ${p.installed ? 
+                        `<button class="btn btn-secondary" onclick="uninstallPlugin('${p.id}')" style="color: var(--danger-color) !important;">Uninstall</button>` : 
+                        `<button class="btn btn-primary" onclick="installPlugin('${p.id}')">Install</button>`
+                    }
+                </div>
+            </div>
+            `;
+        }).join('');
+    } catch (e) {
+        console.error("Failed to load plugins", e);
+    }
+}
+
+async function installPlugin(id) {
+    const card = event.target.closest('.plugin-card');
+    const btnContainer = event.target.parentElement;
+    btnContainer.innerHTML = `<span class="plugin-loading-spinner"></span> <span style="font-size:0.8rem; color:var(--text-secondary);">Quraşdırılır...</span>`;
+    
+    try {
+        const res = await fetch(`/api/plugins/${id}/install`, { method: 'POST' });
+        if (res.ok) {
+            setTimeout(async () => {
+                await loadPlugins();
+                loadApplications();
+                addActivityLog(`Modul quraşdırıldı: ${id}`, 'setup');
+            }, 1500); // Vizual gözəllik üçün animasiyanı 1.5s saxlayırıq
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function uninstallPlugin(id) {
+    const card = event.target.closest('.plugin-card');
+    const btnContainer = event.target.parentElement;
+    btnContainer.innerHTML = `<span class="plugin-loading-spinner" style="border-top-color:var(--danger-color);"></span> <span style="font-size:0.8rem; color:var(--text-secondary);">Silinir...</span>`;
+    
+    try {
+        const res = await fetch(`/api/plugins/${id}/uninstall`, { method: 'POST' });
+        if (res.ok) {
+            setTimeout(async () => {
+                await loadPlugins();
+                loadApplications();
+                addActivityLog(`Modul silindi: ${id}`, 'delete');
+            }, 1500);
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+// 3 xətt menyusunu açmaq
+function toggleAppMenu(event, appId) {
+    event.stopPropagation();
+    // Bütün digər açıq menyuları bağla
+    document.querySelectorAll('.app-dropdown-menu').forEach(m => m.style.display = 'none');
+    
+    const menu = document.getElementById(`app-menu-${appId}`);
+    if (menu) {
+        menu.style.display = menu.style.display === 'flex' ? 'none' : 'flex';
+    }
+}
+
+// Global click event ilə drop menyularını kənara basanda bağlamaq
+document.addEventListener('click', () => {
+    document.querySelectorAll('.app-dropdown-menu').forEach(m => m.style.display = 'none');
+});
+
+// Modallar açılanda pluginləri yüklə
+const originalShowModal = showModal;
+showModal = function(id) {
+    originalShowModal(id);
+    if (id === 'plugins-modal') {
+        loadPlugins();
+    }
+};
+
 

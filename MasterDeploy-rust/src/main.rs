@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path as AxumPath, State},
     http::StatusCode,
-    routing::{get, post, delete},
+    routing::{get, post},
     Json, Router,
 };
 use sqlx::SqlitePool;
@@ -12,6 +12,7 @@ use uuid::Uuid;
 
 mod db;
 mod models;
+mod plugins;
 
 use models::{Application, CreateApplicationInput, CreateServerInput, UpdateServerInput, Deployment, Server, ActivityLog, CreateActivityLogInput};
 
@@ -46,9 +47,12 @@ async fn main() {
         .route("/api/applications/:app_id/stop", post(stop_application))
         .route("/api/applications/:app_id/restart", post(restart_application))
         .route("/api/deploy/:app_id", post(trigger_deployment))
-        .route("/api/applications/:app_id/cloudflare-tunnel/start", post(start_cloudflare_tunnel))
-        .route("/api/applications/:app_id/cloudflare-tunnel/logs", get(get_cloudflare_tunnel_logs))
-        .route("/api/applications/:app_id/cloudflare-tunnel/stop", post(stop_cloudflare_tunnel))
+        .nest("/api/plugins/cloudflare", Router::new()
+            .route("/start/:app_id", post(plugins::cloudflare::start_cloudflare_tunnel))
+            .route("/logs/:app_id", get(plugins::cloudflare::get_cloudflare_tunnel_logs))
+            .route("/stop/:app_id", post(plugins::cloudflare::stop_cloudflare_tunnel))
+        )
+        .merge(plugins::router())
 
         .route("/api/deploy/cancel/:deploy_id", post(cancel_deployment))
         .route("/api/deployments/:app_id", get(list_deployments))
@@ -1698,281 +1702,5 @@ async fn git_polling_loop(db: SqlitePool) {
     }
 }
 
-async fn start_cloudflare_tunnel(
-    State(state): State<AppState>,
-    AxumPath(app_id): AxumPath<String>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
-        .bind(&app_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
-
-    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
-        .bind(&app.server_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
-
-    let port = app.port;
-    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
-
-    let (bash_cmd, is_local) = if server.ip == "local" || server.ip == "127.0.0.1" {
-        (
-            format!(
-                "docker rm -f cf-tunnel-{} || true; \
-                 docker run -d --name cf-tunnel-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{}",
-                app_id, app_id, port
-            ),
-            true,
-        )
-    } else {
-        (
-            format!(
-                "sudo docker rm -f cf-tunnel-{} || true; \
-                 sudo docker run -d --name cf-tunnel-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{}",
-                app_id, app_id, port
-            ),
-            false,
-        )
-    };
-
-    if is_local {
-        tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(&bash_cmd)
-            .output()
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Local command execution failed: {}", e)))?;
-    } else {
-        let temp_key_path = format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4());
-        let key_content = if server.ssh_key.contains("BEGIN ") {
-            server.ssh_key.clone()
-        } else {
-            std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
-        };
-
-        std::fs::write(&temp_key_path, &key_content)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Key write error: {}", e)))?;
-
-        #[cfg(target_os = "windows")]
-        {
-            let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-            let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-            let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
-            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
-            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
-        }
-
-        let out_res = tokio::process::Command::new(ssh_bin)
-            .args(&[
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=10",
-                "-i", &temp_key_path,
-                &format!("{}@{}", server.ssh_user, server.ip),
-                &bash_cmd
-            ])
-            .output()
-            .await;
-
-        let _ = std::fs::remove_file(&temp_key_path);
-        out_res.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("SSH command execution failed: {}", e)))?;
-    }
-
-    Ok(Json(serde_json::json!({ "success": true })))
-}
-
-async fn get_cloudflare_tunnel_logs(
-    State(state): State<AppState>,
-    AxumPath(app_id): AxumPath<String>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
-        .bind(&app_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
-
-    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
-        .bind(&app.server_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
-
-    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
-
-    let (bash_cmd, is_local) = if server.ip == "local" || server.ip == "127.0.0.1" {
-        (format!("docker logs cf-tunnel-{}", app_id), true)
-    } else {
-        (format!("sudo docker logs cf-tunnel-{}", app_id), false)
-    };
-
-    let output_str = if is_local {
-        let out = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(&bash_cmd)
-            .output()
-            .await
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Local command execution failed: {}", e)))?;
-        format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
-    } else {
-        let temp_key_path = format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4());
-        let key_content = if server.ssh_key.contains("BEGIN ") {
-            server.ssh_key.clone()
-        } else {
-            std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
-        };
-
-        std::fs::write(&temp_key_path, &key_content)
-            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Key write error: {}", e)))?;
-
-        #[cfg(target_os = "windows")]
-        {
-            let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-            let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-            let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
-            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
-            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
-        }
-
-        let out_res = tokio::process::Command::new(ssh_bin)
-            .args(&[
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=10",
-                "-i", &temp_key_path,
-                &format!("{}@{}", server.ssh_user, server.ip),
-                &bash_cmd
-            ])
-            .output()
-            .await;
-
-        let _ = std::fs::remove_file(&temp_key_path);
-        let out = out_res.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("SSH command execution failed: {}", e)))?;
-        String::from_utf8_lossy(&out.stdout).to_string() + "\n" + &String::from_utf8_lossy(&out.stderr)
-    };
-
-    // Extract trycloudflare URL
-    let mut cloudflare_url = None;
-    for line in output_str.lines() {
-        if line.contains(".trycloudflare.com") {
-            if let Some(start_idx) = line.find("https://") {
-                let rest = &line[start_idx..];
-                let end_idx = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
-                let url = &rest[..end_idx];
-                cloudflare_url = Some(url.to_string());
-                break;
-            }
-        }
-    }
-
-    if let Some(ref url) = cloudflare_url {
-        // Save to database
-        let _ = sqlx::query("UPDATE applications SET cloudflare_url = ? WHERE id = ?")
-            .bind(url)
-            .bind(&app_id)
-            .execute(&state.db)
-            .await;
-    }
-
-    Ok(Json(serde_json::json!({
-        "logs": output_str,
-        "cloudflare_url": cloudflare_url
-    })))
-}
-
-async fn stop_cloudflare_tunnel(
-    State(state): State<AppState>,
-    AxumPath(app_id): AxumPath<String>,
-) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
-        .bind(&app_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
-
-    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
-        .bind(&app.server_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
-
-    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
-
-    let (bash_cmd, is_local) = if server.ip == "local" || server.ip == "127.0.0.1" {
-        (format!("docker rm -f cf-tunnel-{} || true", app_id), true)
-    } else {
-        (format!("sudo docker rm -f cf-tunnel-{} || true", app_id), false)
-    };
-
-    if is_local {
-        let _ = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(&bash_cmd)
-            .output()
-            .await;
-    } else {
-        let temp_key_path = format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4());
-        let key_content = if server.ssh_key.contains("BEGIN ") {
-            server.ssh_key.clone()
-        } else {
-            std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
-        };
-
-        let _ = std::fs::write(&temp_key_path, &key_content);
-
-        #[cfg(target_os = "windows")]
-        {
-            let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-            let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-            let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
-            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
-            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
-        }
-
-        let _ = tokio::process::Command::new(ssh_bin)
-            .args(&[
-                "-o", "StrictHostKeyChecking=no",
-                "-o", "BatchMode=yes",
-                "-o", "ConnectTimeout=10",
-                "-i", &temp_key_path,
-                &format!("{}@{}", server.ssh_user, server.ip),
-                &bash_cmd
-            ])
-            .output()
-            .await;
-
-        let _ = std::fs::remove_file(&temp_key_path);
-    }
-
-    // Clear from database
-    sqlx::query("UPDATE applications SET cloudflare_url = NULL WHERE id = ?")
-        .bind(&app_id)
-        .execute(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-
-    Ok(Json(serde_json::json!({ "success": true })))
-}
+// Cloudflare functions moved to plugins/cloudflare.rs
 
