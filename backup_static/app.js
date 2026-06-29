@@ -9,31 +9,6 @@ document.addEventListener('DOMContentLoaded', () => {
     fetchAppVersion();
     renderActivityLogs();
 
-    // Inject Taskbar / Footer
-    const taskbar = document.createElement('div');
-    taskbar.id = 'desktop-taskbar';
-    taskbar.style.cssText = `
-        position: fixed; bottom: 10px; left: 10px; right: 10px; height: 36px; 
-        background: rgba(30, 30, 30, 0.85); backdrop-filter: blur(12px); 
-        border: 1px solid #333; border-radius: 8px; display: flex; align-items: center; 
-        justify-content: space-between; padding: 0 20px; z-index: 10000; 
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-    `;
-    taskbar.innerHTML = `
-        <div id="taskbar-windows" style="display: flex; gap: 8px; align-items: center; flex: 1; overflow-x: auto;"></div>
-        <div style="font-size: 0.8rem; color: #888; display: flex; align-items: center; gap: 15px; font-family: monospace;">
-            <span id="footer-time">00:00:00</span>
-        </div>
-    `;
-    document.body.appendChild(taskbar);
-    
-    setInterval(() => {
-        const timeEl = document.getElementById('footer-time');
-        if (timeEl) {
-            timeEl.innerText = new Date().toLocaleTimeString();
-        }
-    }, 1000);
-
     // Restore active tab
     const activeTab = localStorage.getItem('active_tab') || 'dashboard';
     if (activeTab === 'app-details') {
@@ -153,398 +128,17 @@ function initTabs() {
     });
 }
 
-// --- Desktop Window Management System ---
-const activeWindows = {};
-const minimizedWindows = {};
-let maxZIndex = 1000;
-
-const windowNames = {
-    'github-modal': '⚙️ GitHub Ayarları',
-    'activity-log-modal': '📋 Fəaliyyət Jurnalı',
-    'server-modal': '🖥️ Server Əlavə Et',
-    'server-edit-modal': '✏️ Server Redaktə Et',
-    'app-settings-modal': '⚙️ Layihə Ayarları',
-    'cf-terminal-modal': '☁️ Cloudflare Terminalı',
-    'logs-modal': '📋 Layihə Loqları',
-    'system-update-modal': '🔄 Sistem Yeniləmələri',
-    'help-modal': '💡 Kömək Mərkəzi',
-    'create-service-modal': '🚀 Yeni Layihə'
-};
-
-function initializeWindow(backdropId, titleText) {
-    const backdrop = document.getElementById(backdropId);
-    if (!backdrop || backdrop.dataset.windowInitialized) return;
-    
-    backdrop.dataset.windowInitialized = "true";
-    backdrop.style.pointerEvents = 'none';
-    backdrop.style.background = 'transparent';
-    backdrop.style.backdropFilter = 'none';
-    backdrop.style.position = 'fixed';
-    
-    let card = backdrop.querySelector('.modal-card');
-    if (!card) return;
-    
-    // Save existing elements inside modal-card
-    const existingContent = document.createDocumentFragment();
-    while (card.firstChild) {
-        existingContent.appendChild(card.firstChild);
-    }
-    
-    // Set standard styles on card
-    card.style.pointerEvents = 'auto';
-    card.style.position = 'fixed';
-    card.style.margin = '0';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.overflow = 'hidden';
-    card.style.maxWidth = 'none';
-    card.style.maxHeight = 'none';
-    
-    if (!card.style.top || card.style.top === '') {
-        card.style.top = '100px';
-        const cardWidth = card.offsetWidth || 530;
-        card.style.left = `calc(50vw - ${cardWidth / 2}px)`;
-    }
-    
-    // Reconstruct card layout with standard Header, Body, and Resizers
-    card.innerHTML = `
-        <!-- Window Header -->
-        <div class="win-header">
-            <div style="display: flex; align-items: center; gap: 10px;">
-                <div class="neuro-logo"></div>
-                <span class="win-title-text">${titleText}</span>
-            </div>
-            <div class="window-controls" style="display: flex; gap: 12px; align-items: center;">
-                <button class="win-btn-min" title="Kiçilt"></button>
-                <div class="win-btn-max-container">
-                    <button class="win-btn-max" title="Böyüt"></button>
-                    <div class="snap-layout-menu">
-                        <!-- Split Layout Block with Left and Right active hover zones -->
-                        <div class="snap-block split-layout">
-                            <div class="snap-zone zone-left" onclick="snapWindow('${backdropId}', 'left'); event.stopPropagation();" title="Sola yerləşdir"></div>
-                            <div class="snap-zone zone-right" onclick="snapWindow('${backdropId}', 'right'); event.stopPropagation();" title="Sağa yerləşdir"></div>
-                        </div>
-                        
-                        <!-- Full Screen Layout Block -->
-                        <div class="snap-block full-layout" onclick="snapWindow('${backdropId}', 'full'); event.stopPropagation();" title="Tam Ekran">
-                            <div class="snap-zone zone-full"></div>
-                        </div>
-                        
-                        <!-- Centered Layout Block -->
-                        <div class="snap-block center-layout" onclick="snapWindow('${backdropId}', 'center'); event.stopPropagation();" title="Mərkəzə yerləşdir">
-                            <div class="snap-zone zone-center"></div>
-                        </div>
-                    </div>
-                </div>
-                <button class="win-btn-close" title="Bağla"></button>
-            </div>
-        </div>
-        
-        <!-- Window Body Container -->
-        <div class="win-body">
-            <!-- Content goes here -->
-        </div>
-        
-        <!-- Resize Handles -->
-        <div class="resize-handle resizer-t" style="position: absolute; top: 0; left: 0; right: 0; height: 6px; cursor: n-resize; z-index: 10;"></div>
-        <div class="resize-handle resizer-b" style="position: absolute; bottom: 0; left: 0; right: 0; height: 6px; cursor: s-resize; z-index: 10;"></div>
-        <div class="resize-handle resizer-l" style="position: absolute; top: 0; bottom: 0; left: 0; width: 6px; cursor: w-resize; z-index: 10;"></div>
-        <div class="resize-handle resizer-r" style="position: absolute; top: 0; bottom: 0; right: 0; width: 6px; cursor: e-resize; z-index: 10;"></div>
-        <div class="resize-handle resizer-tl" style="position: absolute; top: 0; left: 0; width: 10px; height: 10px; cursor: nw-resize; z-index: 11;"></div>
-        <div class="resize-handle resizer-tr" style="position: absolute; top: 0; right: 0; width: 10px; height: 10px; cursor: ne-resize; z-index: 11;"></div>
-        <div class="resize-handle resizer-bl" style="position: absolute; bottom: 0; left: 0; width: 10px; height: 10px; cursor: sw-resize; z-index: 11;"></div>
-        <div class="resize-handle resizer-br" style="position: absolute; bottom: 0; right: 0; width: 10px; height: 10px; cursor: se-resize; z-index: 11;"></div>
-    `;
-    
-    card.querySelector('.win-body').appendChild(existingContent);
-    
-    // Hide duplicate H2 titles in content
-    const oldH2 = card.querySelector('.win-body h2');
-    if (oldH2) oldH2.style.display = 'none';
-    
-    // Bind controls
-    card.querySelector('.win-btn-min').onclick = (e) => { e.stopPropagation(); minimizeWindow(backdropId); };
-    card.querySelector('.win-btn-max').onclick = (e) => { e.stopPropagation(); maximizeWindow(backdropId); };
-    card.querySelector('.win-btn-close').onclick = (e) => { e.stopPropagation(); closeModal(backdropId); };
-    
-    // Bind dragging on header
-    const header = card.querySelector('.win-header');
-    let isDragging = false;
-    let startX, startY, initialLeft, initialTop;
-    
-    header.addEventListener('mousedown', (e) => {
-        bringToFront(backdropId);
-        if (e.target.tagName === 'BUTTON') return;
-        isDragging = true;
-        startX = e.clientX;
-        startY = e.clientY;
-        initialLeft = card.offsetLeft;
-        initialTop = card.offsetTop;
-        
-        const onMouseMove = (ev) => {
-            if (!isDragging) return;
-            const dx = ev.clientX - startX;
-            const dy = ev.clientY - startY;
-            card.style.left = (initialLeft + dx) + 'px';
-            card.style.top = (initialTop + dy) + 'px';
-        };
-        
-        const onMouseUp = () => {
-            isDragging = false;
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
-        };
-        
-        document.addEventListener('mousemove', onMouseMove);
-        document.addEventListener('mouseup', onMouseUp);
-        e.preventDefault();
-    });
-    
-    // Bind resizing handles
-    setupWindowResize(card);
-    
-    card.addEventListener('mousedown', () => {
-        bringToFront(backdropId);
-    });
-}
-
-function setupWindowResize(card) {
-    const resizers = card.querySelectorAll('.resize-handle');
-    resizers.forEach(resizer => {
-        resizer.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
-            const rect = card.getBoundingClientRect();
-            const startX = e.clientX;
-            const startY = e.clientY;
-            
-            const onMouseMove = (ev) => {
-                let dx = ev.clientX - startX;
-                let dy = ev.clientY - startY;
-                
-                if (resizer.classList.contains('resizer-r')) {
-                    card.style.width = (rect.width + dx) + 'px';
-                }
-                if (resizer.classList.contains('resizer-b')) {
-                    card.style.height = (rect.height + dy) + 'px';
-                }
-                if (resizer.classList.contains('resizer-l')) {
-                    card.style.width = (rect.width - dx) + 'px';
-                    card.style.left = (rect.left + dx) + 'px';
-                }
-                if (resizer.classList.contains('resizer-t')) {
-                    card.style.height = (rect.height - dy) + 'px';
-                    card.style.top = (rect.top + dy) + 'px';
-                }
-                if (resizer.classList.contains('resizer-br')) {
-                    card.style.width = (rect.width + dx) + 'px';
-                    card.style.height = (rect.height + dy) + 'px';
-                }
-                if (resizer.classList.contains('resizer-tr')) {
-                    card.style.width = (rect.width + dx) + 'px';
-                    card.style.height = (rect.height - dy) + 'px';
-                    card.style.top = (rect.top + dy) + 'px';
-                }
-                if (resizer.classList.contains('resizer-bl')) {
-                    card.style.width = (rect.width - dx) + 'px';
-                    card.style.left = (rect.left + dx) + 'px';
-                    card.style.height = (rect.height + dy) + 'px';
-                }
-                if (resizer.classList.contains('resizer-tl')) {
-                    card.style.width = (rect.width - dx) + 'px';
-                    card.style.left = (rect.left + dx) + 'px';
-                    card.style.height = (rect.height - dy) + 'px';
-                    card.style.top = (rect.top + dy) + 'px';
-                }
-            };
-            
-            const onMouseUp = () => {
-                document.removeEventListener('mousemove', onMouseMove);
-                document.removeEventListener('mouseup', onMouseUp);
-            };
-            
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-        });
-    });
-}
-
-function bringToFront(windowId) {
-    const backdrop = document.getElementById(windowId);
-    if (!backdrop) return;
-    const card = backdrop.querySelector('.modal-card');
-    if (!card) return;
-    
-    maxZIndex++;
-    card.style.zIndex = maxZIndex;
-    backdrop.style.zIndex = maxZIndex;
-}
-
-function minimizeWindow(windowId) {
-    const backdrop = document.getElementById(windowId);
-    if (!backdrop) return;
-    backdrop.classList.add('minimized');
-    minimizedWindows[windowId] = true;
-    updateTaskbar();
-}
-
-function restoreWindow(windowId) {
-    const backdrop = document.getElementById(windowId);
-    if (!backdrop) return;
-    backdrop.classList.remove('minimized');
-    bringToFront(windowId);
-    delete minimizedWindows[windowId];
-    updateTaskbar();
-}
-
-function maximizeWindow(windowId) {
-    const backdrop = document.getElementById(windowId);
-    if (!backdrop) return;
-    const card = backdrop.querySelector('.modal-card');
-    if (!card) return;
-    
-    if (card.classList.contains('maximized')) {
-        card.classList.remove('maximized');
-        card.style.width = card.dataset.prevWidth || '530px';
-        card.style.height = card.dataset.prevHeight || 'auto';
-        card.style.top = card.dataset.prevTop || '100px';
-        card.style.left = card.dataset.prevLeft || '30%';
-        card.style.maxWidth = 'none';
-        card.style.maxHeight = 'none';
-        card.style.borderRadius = '12px';
-    } else {
-        card.dataset.prevWidth = card.style.width || '';
-        card.dataset.prevHeight = card.style.height || '';
-        card.dataset.prevTop = card.style.top || '';
-        card.dataset.prevLeft = card.style.left || '';
-        
-        card.classList.add('maximized');
-        card.style.width = '100vw';
-        card.style.height = 'calc(100vh - 50px)';
-        card.style.top = '0';
-        card.style.left = '0';
-        card.style.maxWidth = 'none';
-        card.style.maxHeight = 'none';
-        card.style.borderRadius = '0';
-    }
-}
-
-function snapWindow(windowId, direction) {
-    const backdrop = document.getElementById(windowId);
-    if (!backdrop) return;
-    const card = backdrop.querySelector('.modal-card');
-    if (!card) return;
-    
-    if (!card.classList.contains('maximized')) {
-        card.dataset.prevWidth = card.style.width || '';
-        card.dataset.prevHeight = card.style.height || '';
-        card.dataset.prevTop = card.style.top || '';
-        card.dataset.prevLeft = card.style.left || '';
-    }
-    
-    card.classList.remove('maximized');
-    card.style.maxWidth = 'none';
-    card.style.maxHeight = 'none';
-    card.style.borderRadius = '12px';
-    
-    if (direction === 'left') {
-        card.style.width = '50vw';
-        card.style.height = 'calc(100vh - 50px)';
-        card.style.top = '0';
-        card.style.left = '0';
-        card.style.borderRadius = '0';
-    } else if (direction === 'right') {
-        card.style.width = '50vw';
-        card.style.height = 'calc(100vh - 50px)';
-        card.style.top = '0';
-        card.style.left = '50vw';
-        card.style.borderRadius = '0';
-    } else if (direction === 'full') {
-        maximizeWindow(windowId);
-    } else if (direction === 'center') {
-        card.style.width = card.dataset.prevWidth || '530px';
-        card.style.height = card.dataset.prevHeight || 'auto';
-        card.style.top = '100px';
-        const cardWidth = card.offsetWidth || 530;
-        card.style.left = `calc(50vw - ${cardWidth / 2}px)`;
-    }
-}
-
-function updateTaskbar() {
-    const container = document.getElementById('taskbar-windows');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    
-    Object.keys(activeWindows).forEach(winId => {
-        const isMin = minimizedWindows[winId] || false;
-        const name = windowNames[winId] || '💻 Pəncərə';
-        
-        const btn = document.createElement('button');
-        btn.style.cssText = `
-            background: ${isMin ? 'rgba(255,255,255,0.08)' : 'rgba(0, 210, 255, 0.15)'};
-            color: #fff;
-            border: 1px solid ${isMin ? '#444' : 'var(--accent-color)'};
-            border-radius: 6px;
-            padding: 5px 12px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.2s;
-        `;
-        btn.innerHTML = `
-            <span style="width: 6px; height: 6px; border-radius: 50%; background: ${isMin ? '#ff9800' : '#00e676'};"></span>
-            ${name}
-        `;
-        
-        btn.onclick = () => {
-            if (isMin) {
-                restoreWindow(winId);
-            } else {
-                minimizeWindow(winId);
-            }
-        };
-        container.appendChild(btn);
-    });
-}
-
 // Modal management
 function showModal(id) {
-    const backdrop = document.getElementById(id);
-    if (!backdrop) return;
-    
-    backdrop.classList.add('active');
-    backdrop.style.display = 'flex';
-    
-    const name = windowNames[id] || '💻 Pəncərə';
-    initializeWindow(id, name);
-    
-    activeWindows[id] = true;
-    delete minimizedWindows[id];
-    
-    bringToFront(id);
-    updateTaskbar();
+    document.getElementById(id).classList.add('active');
 }
 
 // Global modal close logic
 function closeModal(id) {
-    const backdrop = document.getElementById(id);
-    if (!backdrop) return;
-    
-    backdrop.classList.remove('active');
-    backdrop.style.display = 'none';
-    
-    delete activeWindows[id];
-    delete minimizedWindows[id];
-    
+    document.getElementById(id).classList.remove('active');
     if (id === 'logs-modal') {
         stopLogPolling();
     }
-    
-    updateTaskbar();
 }
 
 // Load servers from Rust API
@@ -1178,10 +772,26 @@ function openCloudflareModal(appId, appName) {
     if (!modal) {
         modal = document.createElement('div');
         modal.id = 'cf-terminal-modal';
-        modal.className = 'modal-backdrop';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.75);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        `;
         modal.innerHTML = `
-            <div class="modal-card" style="width: 780px; height: 500px; background: #1e1e1e; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                <div style="display: flex; flex-direction: row; flex: 1; min-height: 0; background: #0c0c0c; width: 100%; height: 100%;">
+            <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 12px; width: 780px; max-width: 95%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                <!-- Header -->
+                <div style="background: #2d2d2d; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.2rem;">☁️</span>
+                        <strong style="color: #fff; font-size: 0.95rem;">Cloudflare Tunnel Terminal: <span id="cf-app-name" style="color: #ff9800;"></span></strong>
+                    </div>
+                    <div style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f56; cursor: pointer;" onclick="closeCloudflareModal(false)"></div>
+                </div>
+                
+                <!-- Main Content (Columns) -->
+                <div style="display: flex; flex-direction: row; height: 360px;">
                     <!-- Left: Terminal -->
                     <div style="flex: 1; display: flex; flex-direction: column; background: #0c0c0c;">
                         <!-- Terminal body -->
@@ -1197,7 +807,7 @@ function openCloudflareModal(appId, appName) {
                     </div>
                     
                     <!-- Right: Commands Sidebar -->
-                    <div style="width: 220px; background: #1e1e1e; border-left: 1px solid #333; padding: 16px; display: flex; flex-direction: column; gap: 12px; justify-content: flex-start; align-items: stretch; box-sizing: border-box; height: 100%; overflow-y: auto;">
+                    <div style="width: 220px; background: #1e1e1e; border-left: 1px solid #333; padding: 16px; display: flex; flex-direction: column; gap: 12px; justify-content: flex-start; align-items: stretch; box-sizing: border-box;">
                         <div style="color: #888; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Əmrlər</div>
                         
                         <button onclick="runCfCommand('start')" style="background: #27ae60; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; text-align: left; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
@@ -1222,12 +832,16 @@ function openCloudflareModal(appId, appName) {
                         <button onclick="runCfCommand('clear')" style="background: #444; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; text-align: left; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
                             <span>🧹</span> Konsolu Təmizlə
                         </button>
-                        
-                        <div style="height: 1px; background: #333; margin: 8px 0;"></div>
-                        
-                        <button onclick="closeCloudflareModal(false)" style="background: #7f8c8d; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; text-align: center; transition: opacity 0.2s;">
-                            Bağla
-                        </button>
+                    </div>
+                </div>
+                
+                <!-- Footer Actions -->
+                <div style="background: #1e1e1e; padding: 12px 16px; border-top: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
+                    <div id="cf-tunnel-url-container" style="font-size: 0.85rem; color: #ff9800; font-weight: bold;">
+                        Status: Hazır
+                    </div>
+                    <div>
+                        <button onclick="closeCloudflareModal(false)" class="btn" style="background: #7f8c8d; color: #fff; border: none; padding: 8px 24px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;">Bağla</button>
                     </div>
                 </div>
             </div>
@@ -1261,20 +875,13 @@ function openCloudflareModal(appId, appName) {
         });
     }
     
-    showModal('cf-terminal-modal');
-    
-    const headerTitle = modal.querySelector('.win-title-text');
-    if (headerTitle) {
-        headerTitle.innerHTML = `
-            ☁️ Cloudflare Tunnel: <span id="cf-app-name" style="color: #ff9800; font-weight: bold;">${appName}</span>
-            <span id="cf-tunnel-url-container" style="font-size: 0.75rem; color: #ff9800; font-weight: bold; background: rgba(0, 0, 0, 0.4); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,152,0,0.2); margin-left: 10px;">Status: Hazır</span>
-        `;
-    }
-    
+    document.getElementById('cf-app-name').innerText = appName;
     document.getElementById('cf-terminal-body').innerHTML = `
         <div style="color: #888;">[SİSTEM] Cloudflare tünel sessiyası başladı...</div>
         <div style="color: #888;">[SİSTEM] İcra etmək istədiyiniz əmri sağ paneldən seçin və ya daxil edin.</div>
     `;
+    document.getElementById('cf-tunnel-url-container').innerHTML = 'Status: Hazır';
+    modal.style.display = 'flex';
 }
 
 async function closeCloudflareModal(shouldStop) {
@@ -1282,17 +889,7 @@ async function closeCloudflareModal(shouldStop) {
         clearInterval(cfPollingInterval);
         cfPollingInterval = null;
     }
-    closeModal('cf-terminal-modal');
-    
-    if (shouldStop && currentCfAppId) {
-        try {
-            await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/stop`, { method: 'POST' });
-            addActivityLog("Cloudflare tuneli istifadəçi tərəfindən dayandırıldı", 'info');
-        } catch (e) {
-            console.error(e);
-        }
-        loadApplications();
-    }
+    document.getElementById('cf-terminal-modal').style.display = 'none';
     currentCfAppId = null;
 }
 
@@ -1483,8 +1080,20 @@ function viewLogs(appId, switchMainTab = true, specificDeployId = null) {
         el.querySelector('.stage-time').innerText = '--';
     });
 
-    // Default to showing Build content tab
-    switchLogPanel('build');
+    // Make sure both accordions are closed by default when viewing logs
+    document.getElementById('build-content').style.display = 'none';
+    const buildIcon = document.getElementById('build-content').previousElementSibling.querySelector('.accordion-icon');
+    if (buildIcon.classList.contains('toggle-text-btn')) {
+        buildIcon.innerText = 'Göstər';
+        buildIcon.style.background = 'rgba(255,255,255,0.1)';
+    }
+
+    document.getElementById('live-content').style.display = 'none';
+    const liveIcon = document.getElementById('live-content').previousElementSibling.querySelector('.accordion-icon');
+    if (liveIcon.classList.contains('toggle-text-btn')) {
+        liveIcon.innerText = 'Göstər';
+        liveIcon.style.background = 'rgba(255,255,255,0.1)';
+    }
 
     stopLogPolling();
     stopRuntimeLogPolling();
@@ -1499,7 +1108,7 @@ function viewLogs(appId, switchMainTab = true, specificDeployId = null) {
             .then(res => res.json())
             .then(deploy => {
                 if (deploy) {
-                    terminal.innerHTML = deploy.logs ? formatLogsToHtml(deploy.logs) : "[MƏLUMAT] Bu deployment üçün loq tapılmadı.";
+                    terminal.innerText = deploy.logs ? stripAnsi(deploy.logs) : "[MƏLUMAT] Bu deployment üçün loq tapılmadı.";
                     updateDeploymentStages(deploy.logs || '');
                     
                     const statusDot = document.getElementById('stream-status-dot');
@@ -1553,7 +1162,7 @@ function viewLogs(appId, switchMainTab = true, specificDeployId = null) {
                     if (!latest.logs && (latest.status === 'failed' || latest.status === 'cancelled')) {
                         terminal.innerText = "[SERVER] Xəta baş verdi və ya yayım ləğv edildi. Loq tapılmadı.";
                     } else if (latest.logs) {
-                        terminal.innerHTML = formatLogsToHtml(latest.logs);
+                        terminal.innerText = stripAnsi(latest.logs);
                     }
                     if (isNearBottom) {
                         terminal.scrollTop = terminal.scrollHeight;
@@ -1627,35 +1236,6 @@ function stripAnsi(str) {
     // Also remove any literal "[0m", "[32m", "[2m" strings that sometimes appear unparsed
     stripped = stripped.replace(/\[\d+m/g, '');
     return stripped;
-}
-
-// Convert logs to HTML with error, success, and warning lines highlighted
-function formatLogsToHtml(rawLogs) {
-    if (!rawLogs) return '';
-    const cleanLogs = stripAnsi(rawLogs);
-    const lines = cleanLogs.split('\n');
-    const formattedLines = lines.map(line => {
-        let escapedLine = line
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#039;');
-            
-        const isError = /\[error\]|error|failed|xəta|fail|stderr|critical|cannot|could not|failed to/i.test(escapedLine);
-        const isSuccess = /\[success\]|success|successfully|yazıldı|deploy olundu|succeeded/i.test(escapedLine);
-        const isWarning = /\[warning\]|warning|uyarı/i.test(escapedLine);
-        
-        if (isError) {
-            return `<span style="color: #ff1744; font-weight: 500;">${escapedLine}</span>`;
-        } else if (isSuccess) {
-            return `<span style="color: #00e676; font-weight: 500;">${escapedLine}</span>`;
-        } else if (isWarning) {
-            return `<span style="color: #ffaa00; font-weight: 500;">${escapedLine}</span>`;
-        }
-        return escapedLine;
-    });
-    return formattedLines.join('\n');
 }
 
 // Koyeb-style stage parser based on log keywords
@@ -2297,7 +1877,7 @@ function showCreateServiceTab() {
     document.getElementById('repo-search').value = '';
 
     goToStep(1);
-    showModal('create-service-modal');
+    switchTab('create-service');
 }
 
 function goToStep(step) {
@@ -2625,7 +2205,8 @@ async function handleWizardDeploy(event) {
 
         if (res.ok) {
             const app = await res.json();
-            closeModal('create-service-modal');
+            // Automatically switch back to Applications list
+            switchTab('applications');
             loadApplications();
             // Trigger deployment immediately!
             deployApp(app.id);
@@ -2800,33 +2381,6 @@ function toggleAccordion(contentId, headerElement) {
     }
 }
 
-// Switch Log Panels (Build vs Live)
-function switchLogPanel(panelId) {
-    const buildBtn = document.getElementById('btn-show-build');
-    const liveBtn = document.getElementById('btn-show-live');
-    const buildCont = document.getElementById('build-content');
-    const liveCont = document.getElementById('live-content');
-    
-    if (!buildBtn || !liveBtn || !buildCont || !liveCont) return;
-
-    if (panelId === 'build') {
-        buildBtn.classList.add('active');
-        liveBtn.classList.remove('active');
-        buildCont.style.display = 'flex';
-        liveCont.style.display = 'none';
-        stopRuntimeLogPolling();
-    } else {
-        liveBtn.classList.add('active');
-        buildBtn.classList.remove('active');
-        buildCont.style.display = 'none';
-        liveCont.style.display = 'flex';
-        if (currentAppId) {
-            stopRuntimeLogPolling();
-            fetchRuntimeLogs(currentAppId);
-        }
-    }
-}
-
 // Auto-fill and advisor for Server Stats
 async function updateServerStatsAdvisor(selectId, advisorDivId, memInputId, cpuInputId) {
     const serverId = document.getElementById(selectId).value;
@@ -2894,8 +2448,8 @@ async function fetchRuntimeLogs(appId) {
         if (res.ok) {
             const logs = await res.json();
             const liveTerminal = document.getElementById('live-terminal-body');
-            const isNearBottom = liveTerminal.innerHTML === '' || liveTerminal.scrollHeight - liveTerminal.scrollTop <= liveTerminal.clientHeight + 50;
-            liveTerminal.innerHTML = formatLogsToHtml(logs);
+            const isNearBottom = liveTerminal.innerText === '' || liveTerminal.scrollHeight - liveTerminal.scrollTop <= liveTerminal.clientHeight + 50;
+            liveTerminal.innerText = stripAnsi(logs);
             if (isNearBottom) {
                 liveTerminal.scrollTop = liveTerminal.scrollHeight;
             }
@@ -3609,132 +3163,5 @@ switchAppTab = function(tabId) {
     } else {
         stopOverviewDeploymentsPolling();
     }
-};
-
-// --- Debug mode outline details and copying system ---
-function toggleDebugMode() {
-    document.body.classList.toggle('debug-mode');
-    const isDebug = document.body.classList.contains('debug-mode');
-    localStorage.setItem('debug_mode', isDebug ? 'true' : 'false');
-    if (isDebug) {
-        initDebugTooltips();
-    } else {
-        removeDebugTooltips();
-    }
-}
-
-function initDebugTooltips() {
-    if (!document.body.classList.contains('debug-mode')) return;
-
-    const debugComponents = [
-        { selector: '.app-container', name: 'App Container', color: 'Deep Pink (#e91e63)' },
-        { selector: '.sidebar', name: 'Sidebar', color: 'Orange (#ff9800)' },
-        { selector: '.main-content', name: 'Main Content', color: 'Green (#00e676)' },
-        { selector: '#subtab-logs', name: 'Logs Tab Container', color: 'Purple (#9c27b0)' },
-        { selector: '.logs-tabs-container', name: 'Logs Sub-Tabs Container', color: 'Cyan (#00bcd4)' },
-        { selector: '.log-panels-wrapper', name: 'Log Panels Wrapper', color: 'Blue (#3f51b5)' },
-        { selector: '.terminal-toolbar', name: 'Terminal Toolbar', color: 'Yellow (#ffeb3b)' },
-        { selector: '.terminal-body', name: 'Terminal Body', color: 'Lime (#cddc39)' },
-        { selector: '#stages-container', name: 'Stages Container', color: 'Coral (#ff5722)' },
-        { selector: '.stage-item', name: 'Stage Item', color: 'Light Blue (#03a9f4)' },
-        { selector: '.logo-area', name: 'Logo Area', color: 'Pink (#e91e63)' },
-        { selector: '.nav-menu', name: 'Navigation Menu', color: 'Forest Green (#4caf50)' },
-        { selector: '.nav-btn', name: 'Navigation Button', color: 'Light Purple (#9c27b0)' },
-        { selector: '.log-tab-btn', name: 'Log Tab Button', color: 'Light Orange (#ff9800)' },
-        { selector: '.theme-toggle-container', name: 'Theme Toggle Container', color: 'Light Cyan (#00bcd4)' },
-        { selector: '.status-footer', name: 'Status Footer', color: 'Brown (#795548)' }
-    ];
-
-    debugComponents.forEach(comp => {
-        const elements = document.querySelectorAll(comp.selector);
-        elements.forEach(el => {
-            if (el.dataset.debugInited) return;
-            el.dataset.debugInited = "true";
-
-            el.addEventListener('mouseenter', (e) => {
-                if (!document.body.classList.contains('debug-mode')) return;
-                showDebugTooltip(el, comp.name, comp.color);
-            });
-        });
-    });
-}
-
-function showDebugTooltip(element, name, color) {
-    if (element.querySelector('.debug-tooltip')) return;
-
-    const tooltip = document.createElement('div');
-    tooltip.className = 'debug-tooltip';
-    tooltip.style.cssText = `
-        position: absolute;
-        top: 2px;
-        left: 2px;
-        background: #111;
-        color: #fff;
-        border: 1px solid #555;
-        border-radius: 4px;
-        padding: 4px 8px;
-        font-size: 11px;
-        font-family: monospace;
-        z-index: 1000000;
-        cursor: pointer;
-        user-select: none;
-        pointer-events: auto;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-    `;
-    tooltip.innerHTML = `📍 <strong>${name}</strong> <span style="color:#aaa;">(${color})</span>`;
-    
-    const originalPos = window.getComputedStyle(element).position;
-    if (originalPos === 'static') {
-        element.style.position = 'relative';
-    }
-
-    tooltip.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const copyText = `${name} (${color})`;
-        navigator.clipboard.writeText(copyText).then(() => {
-            const origHTML = tooltip.innerHTML;
-            tooltip.innerHTML = `✅ Copied!`;
-            setTimeout(() => {
-                tooltip.innerHTML = origHTML;
-            }, 1500);
-        }).catch(err => {
-            console.error('Failed to copy', err);
-        });
-    });
-
-    element.appendChild(tooltip);
-}
-
-function removeDebugTooltips() {
-    document.querySelectorAll('.debug-tooltip').forEach(t => t.remove());
-}
-
-document.addEventListener('click', (e) => {
-    if (!document.body.classList.contains('debug-mode')) return;
-    if (!e.target.closest('.debug-tooltip')) {
-        removeDebugTooltips();
-    }
-});
-
-// Auto-run debug tooltips on page load if active
-window.addEventListener('load', () => {
-    const isDebug = localStorage.getItem('debug_mode') === 'true' || document.body.classList.contains('debug-mode');
-    if (isDebug) {
-        document.body.classList.add('debug-mode');
-        setTimeout(initDebugTooltips, 500);
-    }
-});
-
-// Hook dynamic rendering
-const originalLoadApplications = loadApplications;
-loadApplications = async function() {
-    await originalLoadApplications();
-    setTimeout(initDebugTooltips, 500);
-};
-
-const originalViewLogs = viewLogs;
-viewLogs = function(appId, switchMainTab = true, specificDeployId = null) {
-    originalViewLogs(appId, switchMainTab, specificDeployId);
-    setTimeout(initDebugTooltips, 500);
 };
 
