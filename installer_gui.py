@@ -189,6 +189,9 @@ class RemoteInstallerGUI:
         self.btn_all = self.create_button(setup_lf, "🌟 Tam Qur", BTN_ALL, lambda: self.backend.run_remote_task(self.backend.get_cmd_all))
         self.btn_all.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
 
+        self.btn_cloudflare = self.create_button(setup_lf, "☁️ Cloudflare Qur", "#F38020", lambda: self.backend.run_remote_task(self.backend.get_cmd_cloudflare))
+        self.btn_cloudflare.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
+
         sys_lf = tk.LabelFrame(btn_action_frame, text=" 🖥️ Server & Servislər ", font=(self.font_label[0], 8, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
         sys_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
 
@@ -201,7 +204,7 @@ class RemoteInstallerGUI:
         self.btn_token = self.create_button(sys_lf, "🔑 Token Yarat", "#8E44AD", lambda: self.backend.trigger_portainer_token(is_local=False))
         self.btn_token.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
 
-        self.remote_action_btns = [self.btn_swap, self.btn_git, self.btn_docker, self.btn_docker_settings, self.btn_panel, self.btn_all, self.btn_reboot, self.btn_clean, self.btn_portainer, self.btn_token, self.btn_port_check, self.btn_port_toggle]
+        self.remote_action_btns = [self.btn_swap, self.btn_git, self.btn_docker, self.btn_docker_settings, self.btn_panel, self.btn_all, self.btn_cloudflare, self.btn_reboot, self.btn_clean, self.btn_portainer, self.btn_token, self.btn_port_check, self.btn_port_toggle]
         self.toggle_remote_buttons(tk.DISABLED)
 
         # Console Header
@@ -407,6 +410,7 @@ class RemoteInstallerGUI:
                 elif btn == self.btn_docker: btn.config(bg=BTN_PREP, fg="white")
                 elif btn == self.btn_panel: btn.config(bg=BTN_PANEL, fg="white")
                 elif btn == self.btn_all: btn.config(bg=BTN_ALL, fg="white")
+                elif btn == getattr(self, 'btn_cloudflare', None): btn.config(bg="#F38020", fg="white")
                 elif btn == self.btn_reboot: btn.config(bg=BTN_REBOOT, fg="black")
                 elif btn == self.btn_clean: btn.config(bg=BTN_CLEAN, fg="white")
                 elif btn == self.btn_portainer: btn.config(bg="#00A2D3", fg="white")

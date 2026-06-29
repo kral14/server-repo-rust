@@ -49,6 +49,7 @@ pub struct Application {
     pub memory_limit: Option<String>,
     pub cpu_limit: Option<f64>,
     pub last_commit_hash: Option<String>,
+    pub cloudflare_url: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

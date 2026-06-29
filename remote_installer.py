@@ -16,6 +16,18 @@ class RemoteInstallerLogic:
         self.gui = None  # GUI işə düşəndə özünü bura bağlayacaq
         self.monitoring_active = False
 
+    def center_window(self, size_str):
+        try:
+            size = size_str.split('+')[0] if '+' in size_str else size_str
+            w, h = map(int, size.split('x'))
+            ws = self.gui.root.winfo_screenwidth()
+            hs = self.gui.root.winfo_screenheight()
+            x = (ws / 2) - (w / 2)
+            y = (hs / 2) - (h / 2)
+            self.gui.root.geometry(f"{w}x{h}+{int(x)}+{int(y)}")
+        except:
+            self.gui.root.geometry(size_str)
+
     def load_config(self):
         if not self.gui: return
         try:
@@ -42,7 +54,7 @@ class RemoteInstallerLogic:
                     self.gui.local_portainer_port_entry.insert(0, port_val)
                     
                     geom = data.get("geometry", "850x780")
-                    self.gui.root.geometry(geom)
+                    self.center_window(geom)
             else:
                 self.gui.user_entry.insert(0, "ubuntu")
                 self.gui.swap_entry.insert(0, "2")
@@ -51,9 +63,9 @@ class RemoteInstallerLogic:
                 self.gui.local_panel_port_entry.insert(0, "3000")
                 self.gui.portainer_port_entry.insert(0, "9000")
                 self.gui.local_portainer_port_entry.insert(0, "9000")
-                self.gui.root.geometry("850x780")
+                self.center_window("850x780")
         except:
-            try: self.gui.root.geometry("850x780")
+            try: self.center_window("850x780")
             except: pass
 
     def save_window_geometry(self):
@@ -89,10 +101,17 @@ class RemoteInstallerLogic:
         except: pass
 
     def copy_console(self, console_widget):
-        text = console_widget.get("1.0", tk.END)
-        self.gui.root.clipboard_clear()
-        self.gui.root.clipboard_append(text)
-        messagebox.showinfo("Kopyalandı", "Çıxış yaddaşa kopyalandı!")
+        try:
+            # Əgər istifadəçi siçanla hər hansı hissəni seçibsə, yalnız onu kopyalayırıq
+            text = console_widget.get("sel.first", "sel.last")
+        except tk.TclError:
+            # Seçim yoxdursa, bütün konsol mətnini kopyalayırıq
+            text = console_widget.get("1.0", tk.END).strip()
+            
+        if text:
+            self.gui.root.clipboard_clear()
+            self.gui.root.clipboard_append(text)
+            messagebox.showinfo("Kopyalandı", "Mətn panoya kopyalandı!")
 
     def clear_remote_console(self):
         self.gui.console_remote.delete("1.0", tk.END)
@@ -781,6 +800,20 @@ sudo docker run -d -p {port_p}:9000 --name portainer --restart=always \
 echo '✅ Portainer quruldu! Port: {port_p}';
 """
 
+    def get_cmd_cloudflare(self, swap_gb, panel_p, port_p):
+        return """
+echo 'Cloudflared yoxlanılır və quraşdırılır...';
+if ! command -v cloudflared > /dev/null 2>&1; then
+    sudo mkdir -p --mode=0755 /usr/share/keyrings;
+    curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null;
+    echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared debian-stable main' | sudo tee /etc/apt/sources.list.d/cloudflared.list > /dev/null;
+    sudo apt-get update && sudo apt-get install -y cloudflared;
+    echo '✅ Cloudflared uğurla quraşdırıldı!';
+else
+    echo '✅ Cloudflared artıq mövcuddur: '$(cloudflared --version);
+fi;
+"""
+
     def run_remote_task(self, cmd_func, confirm=None):
         if not self.gui: return
         if confirm and not messagebox.askyesno("Təsdiq", confirm): return
@@ -804,9 +837,24 @@ echo '✅ Portainer quruldu! Port: {port_p}';
             try:
                 creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
                 proc = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', creationflags=creationflags)
-                out, _ = proc.communicate(input=cmd)
-                self.log_remote(out)
-                self.log_remote("✅ UZAR SERVERDƏ ƏMƏLİYYAT BİTDİ!")
+                
+                # Komandaları stdin vasitəsilə ötürürük və bağlayırıq
+                proc.stdin.write(cmd)
+                proc.stdin.close()
+                
+                # Canlı olaraq oxuyuruq
+                while True:
+                    line = proc.stdout.readline()
+                    if not line and proc.poll() is not None:
+                        break
+                    if line:
+                        self.log_remote(line.rstrip('\r\n'))
+                
+                proc.wait()
+                if proc.returncode == 0:
+                    self.log_remote("✅ UZAQ SERVERDƏ ƏMƏLİYYAT UĞURLA BİTDİ!")
+                else:
+                    self.log_remote(f"❌ Əməliyyat xəta kodu ilə bitdi: {proc.returncode}")
             except Exception as e:
                 self.log_remote(f"❌ Xəta baş verdi: {e}")
             self.gui.root.after(0, lambda: self.gui.toggle_remote_buttons(tk.NORMAL))
@@ -830,8 +878,22 @@ echo '✅ Portainer quruldu! Port: {port_p}';
             ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=15", "-i", key_path, f"{user}@{ip}", cmd]
             try:
                 creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', creationflags=creationflags)
-                self.log_remote(proc.stdout)
+                proc = subprocess.Popen(
+                    ssh_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace',
+                    creationflags=creationflags
+                )
+                while True:
+                    line = proc.stdout.readline()
+                    if not line and proc.poll() is not None:
+                        break
+                    if line:
+                        self.log_remote(line.rstrip('\r\n'))
+                proc.wait()
             except Exception as e:
                 self.log_remote(f"❌ Xəta baş verdi: {e}")
             self.gui.root.after(0, lambda: self.gui.toggle_remote_buttons(tk.NORMAL))
@@ -854,8 +916,21 @@ echo '✅ Portainer quruldu! Port: {port_p}';
             
         def task():
             try:
-                proc = subprocess.run(["bash", "-c", cmd], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace')
-                self.log_local(proc.stdout)
+                proc = subprocess.Popen(
+                    ["bash", "-c", cmd],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    encoding='utf-8',
+                    errors='replace'
+                )
+                while True:
+                    line = proc.stdout.readline()
+                    if not line and proc.poll() is not None:
+                        break
+                    if line:
+                        self.log_local(line.rstrip('\r\n'))
+                proc.wait()
             except Exception as e:
                 self.log_local(f"❌ Xəta: {e}")
             self.gui.root.after(0, lambda: self.gui.toggle_local_buttons(tk.NORMAL))

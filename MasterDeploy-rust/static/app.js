@@ -301,8 +301,16 @@ async function loadApplications() {
                                 🚀 ${app.name}
                                 ${app.status === 'success' || app.status === 'running' ? `
                                 <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: var(--accent-color); text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 210, 255, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                    🔗 API Keçidi
+                                    🔗 Lokal Keçid
                                 </a>
+                                ${app.cloudflare_url ? `
+                                <a href="${app.cloudflare_url}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: #ff9800; text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(255, 152, 0, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
+                                    ☁️ Cloudflare Keçidi
+                                </a>
+                                ` : ''}
+                                <button onclick="generateCloudflareTunnel(event, '${app.id}')" style="font-size: 0.75rem; color: #fff; background: #e67e22; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem;" title="Cloudflare Tunelini İşə Sal / Link Al">
+                                    🔄 ☁️ Tunnel Al
+                                </button>
                                 ` : ''}
                                 ${appStatsHtml}
                             </h3>
@@ -754,6 +762,32 @@ async function deleteApp(appId, appName) {
             }
         }
     });
+}
+
+// Generate Cloudflare Tunnel
+async function generateCloudflareTunnel(event, id) {
+    if (event) event.stopPropagation();
+    
+    showInfoCard('☁️ Cloudflare Tunnel', 'Tünel generasiya olunur, zəhmət olmasa gözləyin (təxminən 4 saniyə)...', 'Cloudflare serverinə sorğu göndərildi...');
+    
+    try {
+        const res = await fetch(`/api/applications/${id}/cloudflare-tunnel`, { method: 'POST' });
+        if (res.ok) {
+            const data = await res.json();
+            if (data.success) {
+                addActivityLog(`Cloudflare tüneli yaradıldı: ${data.cloudflare_url}`, 'success');
+                showInfoCard('✅ Uğurlu', 'Cloudflare Tüneli generasiya olundu!', `Link: ${data.cloudflare_url}`);
+                loadApplications();
+            } else {
+                showInfoCard('❌ Xəta', 'Tünel yaradıla bilmədi', data.error || 'Naməlum xəta');
+            }
+        } else {
+            const errText = await res.text();
+            showInfoCard('❌ Xəta', 'Tünel yaradıla bilmədi', errText);
+        }
+    } catch (e) {
+        showInfoCard('❌ Sistem Xətası', 'Serverdən cavab gəlmədi.', e.message);
+    }
 }
 
 // Trigger Deployment

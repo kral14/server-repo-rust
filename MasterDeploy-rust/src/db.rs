@@ -55,6 +55,7 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
             privileged INTEGER DEFAULT 0,\n\
             memory_limit TEXT,\n\
             cpu_limit REAL,\n\
+            cloudflare_url TEXT,\n\
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n\
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,\n\
             FOREIGN KEY(server_id) REFERENCES servers(id)\n\
@@ -103,6 +104,7 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN memory_limit TEXT;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN cpu_limit REAL;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN last_commit_hash TEXT;").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN cloudflare_url TEXT;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;").execute(&pool).await;
 
     // Seed default local server if empty

@@ -46,6 +46,7 @@ async fn main() {
         .route("/api/applications/:app_id/stop", post(stop_application))
         .route("/api/applications/:app_id/restart", post(restart_application))
         .route("/api/deploy/:app_id", post(trigger_deployment))
+        .route("/api/applications/:app_id/cloudflare-tunnel", post(create_cloudflare_tunnel))
 
         .route("/api/deploy/cancel/:deploy_id", post(cancel_deployment))
         .route("/api/deployments/:app_id", get(list_deployments))
@@ -780,7 +781,7 @@ async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec<App
     let apps = sqlx::query_as::<_, Application>(
         "SELECT id, name, repo_url, branch, server_id, status, port, env_vars, build_pack_type, \
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
-         privileged, memory_limit, cpu_limit, last_commit_hash, \
+         privileged, memory_limit, cpu_limit, last_commit_hash, cloudflare_url, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at \
          FROM applications ORDER BY created_at DESC"
     )
@@ -845,6 +846,7 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
         memory_limit: input.memory_limit,
         cpu_limit: input.cpu_limit,
         last_commit_hash: None,
+        cloudflare_url: None,
         created_at: String::new(),
         updated_at: String::new(),
     };
@@ -856,7 +858,7 @@ async fn get_application(State(state): State<AppState>, AxumPath(app_id): AxumPa
     let app = sqlx::query_as::<_, Application>(
         "SELECT id, name, repo_url, branch, server_id, status, port, env_vars, build_pack_type, \
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
-         privileged, memory_limit, cpu_limit, last_commit_hash, \
+         privileged, memory_limit, cpu_limit, last_commit_hash, cloudflare_url, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at \
          FROM applications WHERE id = ?"
     )
@@ -1618,7 +1620,7 @@ async fn git_polling_loop(db: SqlitePool) {
         let apps = match sqlx::query_as::<_, Application>(
             "SELECT id, name, repo_url, branch, server_id, status, port, env_vars, build_pack_type, \
              build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
-             privileged, memory_limit, cpu_limit, last_commit_hash, \
+             privileged, memory_limit, cpu_limit, last_commit_hash, cloudflare_url, \
              CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at \
              FROM applications"
         ).fetch_all(&db).await {
@@ -1691,6 +1693,124 @@ async fn git_polling_loop(db: SqlitePool) {
                 }
             }
         }
+    }
+}
+
+async fn create_cloudflare_tunnel(
+    State(state): State<AppState>,
+    AxumPath(app_id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
+        .bind(&app_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
+
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&app.server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
+
+    let port = app.port;
+
+    // We need to write the key to a temporary file if it's SSH connection
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+
+    // Prepare commands
+    let bash_cmd = format!(
+        "sudo pkill -f 'cloudflared.*:{}' || true; \
+         rm -f /tmp/cf_tunnel_{}.log; \
+         nohup cloudflared tunnel --url http://localhost:{} > /tmp/cf_tunnel_{}.log 2>&1 & \
+         sleep 4; \
+         cat /tmp/cf_tunnel_{}.log",
+        port, app_id, port, app_id, app_id
+    );
+
+    let output_str = if server.ip == "local" || server.ip == "127.0.0.1" {
+        // Run locally
+        let out = tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(&bash_cmd)
+            .output()
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Local command execution failed: {}", e)))?;
+        String::from_utf8_lossy(&out.stdout).to_string()
+    } else {
+        // Run via SSH
+        let temp_key_path = format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4());
+        let key_content = if server.ssh_key.contains("BEGIN ") {
+            server.ssh_key.clone()
+        } else {
+            std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        };
+
+        std::fs::write(&temp_key_path, &key_content)
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Key write error: {}", e)))?;
+
+        #[cfg(target_os = "windows")]
+        {
+            let domain = std::env::var("USERDOMAIN").unwrap_or_default();
+            let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+            let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+        }
+
+        let out_res = tokio::process::Command::new(ssh_bin)
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=10",
+                "-i", &temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                &bash_cmd
+            ])
+            .output()
+            .await;
+
+        let _ = std::fs::remove_file(&temp_key_path);
+
+        let out = out_res.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("SSH command execution failed: {}", e)))?;
+        String::from_utf8_lossy(&out.stdout).to_string() + "\n" + &String::from_utf8_lossy(&out.stderr)
+    };
+
+    // Now extract the trycloudflare URL from output_str
+    let mut cloudflare_url = None;
+    for line in output_str.lines() {
+        if line.contains(".trycloudflare.com") {
+            if let Some(start_idx) = line.find("https://") {
+                let rest = &line[start_idx..];
+                let end_idx = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
+                let url = &rest[..end_idx];
+                cloudflare_url = Some(url.to_string());
+                break;
+            }
+        }
+    }
+
+    if let Some(ref url) = cloudflare_url {
+        // Save to database
+        sqlx::query("UPDATE applications SET cloudflare_url = ? WHERE id = ?")
+            .bind(url)
+            .bind(&app_id)
+            .execute(&state.db)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Database update failed: {}", e)))?;
+
+        Ok(Json(serde_json::json!({
+            "success": true,
+            "cloudflare_url": url
+        })))
+    } else {
+        Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Could not extract Cloudflare URL. Output was:\n{}", output_str)))
     }
 }
 
