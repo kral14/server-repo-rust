@@ -112,7 +112,13 @@ __pycache__/
     
     import datetime
     time_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if not run_cmd(f'git commit -m "Avtomatik yenilenme: {time_str}"', ignore_error=True):
+    
+    # Commit mesajını istifadəçidən soruşuruq, boş olduqda avtomatik təyin edirik
+    user_commit_msg = input("Commit mesajını daxil edin (Avtomatik mesaj üçün boş buraxın): ").strip()
+    if not user_commit_msg:
+        user_commit_msg = f"Avtomatik yenilenme: {time_str}"
+        
+    if not run_cmd(f'git commit -m "{user_commit_msg}"', ignore_error=True):
         print("Nothing to commit or commit failed.")
         # We don't return here, maybe there are just no changes
     

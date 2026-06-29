@@ -780,7 +780,7 @@ function openCloudflareModal(appId, appName) {
             z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         `;
         modal.innerHTML = `
-            <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 12px; width: 680px; max-width: 95%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div style="background: #1e1e1e; border: 1px solid #333; border-radius: 12px; width: 780px; max-width: 95%; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                 <!-- Header -->
                 <div style="background: #2d2d2d; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333;">
                     <div style="display: flex; align-items: center; gap: 8px;">
@@ -789,23 +789,59 @@ function openCloudflareModal(appId, appName) {
                     </div>
                     <div style="width: 12px; height: 12px; border-radius: 50%; background: #ff5f56; cursor: pointer;" onclick="closeCloudflareModal(false)"></div>
                 </div>
-                <!-- Body / Terminal -->
-                <div id="cf-terminal-body" style="padding: 16px; background: #0c0c0c; height: 320px; overflow-y: auto; font-family: 'Consolas', 'Courier New', Courier, monospace; font-size: 0.85rem; color: #00e676; line-height: 1.5; text-align: left; white-space: pre-wrap; word-break: break-all;">
-                    <div style="color: #888;">[SİSTEM] Cloudflare tünel sessiyası başladı...</div>
+                
+                <!-- Main Content (Columns) -->
+                <div style="display: flex; flex-direction: row; height: 360px;">
+                    <!-- Left: Terminal -->
+                    <div style="flex: 1; display: flex; flex-direction: column; background: #0c0c0c;">
+                        <!-- Terminal body -->
+                        <div id="cf-terminal-body" style="flex: 1; padding: 16px; overflow-y: auto; font-family: 'Consolas', 'Courier New', Courier, monospace; font-size: 0.85rem; color: #00e676; line-height: 1.5; text-align: left; white-space: pre-wrap; word-break: break-all;">
+                            <div style="color: #888;">[SİSTEM] Cloudflare tünel sessiyası başladı...</div>
+                            <div style="color: #888;">[SİSTEM] İcra etmək istədiyiniz əmri sağ paneldən seçin və ya daxil edin.</div>
+                        </div>
+                        <!-- Terminal Input Prompt -->
+                        <div style="background: #0c0c0c; padding: 10px 16px; display: flex; align-items: center; gap: 8px; font-family: 'Consolas', 'Courier New', Courier, monospace; font-size: 0.85rem; border-top: 1px solid #222;">
+                            <span style="color: #00d2ff; white-space: nowrap;">ubuntu@masterdeploy:~$</span>
+                            <input type="text" id="cf-terminal-input" style="flex: 1; background: transparent; border: none; outline: none; color: #fff; font-family: inherit; font-size: inherit;" placeholder="Komanda yazın..." />
+                        </div>
+                    </div>
+                    
+                    <!-- Right: Commands Sidebar -->
+                    <div style="width: 220px; background: #1e1e1e; border-left: 1px solid #333; padding: 16px; display: flex; flex-direction: column; gap: 12px; justify-content: flex-start; align-items: stretch; box-sizing: border-box;">
+                        <div style="color: #888; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Əmrlər</div>
+                        
+                        <button onclick="runCfCommand('start')" style="background: #27ae60; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; text-align: left; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
+                            <span>▶️</span> Tüneli Başlat
+                        </button>
+                        
+                        <button onclick="runCfCommand('logs')" style="background: #2980b9; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; text-align: left; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
+                            <span>📋</span> Loqları İzlə
+                        </button>
+                        
+                        <button onclick="runCfCommand('stop')" style="background: #c0392b; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: bold; text-align: left; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
+                            <span>🛑</span> Tüneli Durdur
+                        </button>
+                        
+                        <div style="height: 1px; background: #333; margin: 8px 0;"></div>
+                        <div style="color: #888; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;">Alətlər</div>
+                        
+                        <button onclick="runCfCommand('copy')" style="background: #444; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; text-align: left; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
+                            <span>💾</span> Loqları Kopyala
+                        </button>
+                        
+                        <button onclick="runCfCommand('clear')" style="background: #444; color: #fff; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; text-align: left; display: flex; align-items: center; gap: 8px; transition: opacity 0.2s;">
+                            <span>🧹</span> Konsolu Təmizlə
+                        </button>
+                    </div>
                 </div>
-                <!-- Terminal Input Prompt -->
-                <div style="background: #0c0c0c; padding: 0 16px 12px 16px; display: flex; align-items: center; gap: 8px; font-family: 'Consolas', 'Courier New', Courier, monospace; font-size: 0.85rem; border-top: 1px solid #222;">
-                    <span style="color: #00d2ff; white-space: nowrap;">ubuntu@masterdeploy:~$</span>
-                    <input type="text" id="cf-terminal-input" style="flex: 1; background: transparent; border: none; outline: none; color: #fff; font-family: inherit; font-size: inherit;" placeholder="Məlumat və ya qeyd yazın (Təmizləmək üçün 'clear' yazın)..." />
-                </div>
+                
                 <!-- Footer Actions -->
                 <div style="background: #1e1e1e; padding: 12px 16px; border-top: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
                     <div id="cf-tunnel-url-container" style="font-size: 0.85rem; color: #ff9800; font-weight: bold;">
-                        🔗 Link axtarılır...
+                        Status: Hazır
                     </div>
-                    <div style="display: flex; gap: 10px;">
-                        <button id="cf-btn-cancel" class="btn" style="background: #e74c3c; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: background 0.2s;">🛑 Ləğv Et</button>
-                        <button id="cf-btn-close" class="btn" style="background: #4a4a4a; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: background 0.2s;">Bağla</button>
+                    <div>
+                        <button onclick="closeCloudflareModal(false)" class="btn" style="background: #7f8c8d; color: #fff; border: none; padding: 8px 24px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 500;">Bağla</button>
                     </div>
                 </div>
             </div>
@@ -818,11 +854,20 @@ function openCloudflareModal(appId, appName) {
             if (e.key === 'Enter') {
                 const text = this.value.trim();
                 if (text) {
-                    if (text.toLowerCase() === 'clear') {
-                        document.getElementById('cf-terminal-body').innerHTML = '<div style="color: #888;">[SİSTEM] Terminal təmizləndi...</div>';
+                    const lowerText = text.toLowerCase();
+                    if (lowerText === 'start' || lowerText === 'start-tunnel') {
+                        runCfCommand('start');
+                    } else if (lowerText === 'stop' || lowerText === 'stop-tunnel') {
+                        runCfCommand('stop');
+                    } else if (lowerText === 'logs' || lowerText === 'watch-logs') {
+                        runCfCommand('logs');
+                    } else if (lowerText === 'clear') {
+                        runCfCommand('clear');
+                    } else if (lowerText === 'copy') {
+                        runCfCommand('copy');
                     } else {
                         appendCfLog(`\nubuntu@masterdeploy:~$ ${text}`, '#fff');
-                        appendCfLog(`[MƏLUMAT] Qeyd: ${text}`, '#00d2ff');
+                        appendCfLog(`[MƏLUMAT] Əmr tapılmadı. Mövcud əmrlər: start, stop, logs, clear, copy`, '#ff9800');
                     }
                     this.value = '';
                 }
@@ -831,8 +876,11 @@ function openCloudflareModal(appId, appName) {
     }
     
     document.getElementById('cf-app-name').innerText = appName;
-    document.getElementById('cf-terminal-body').innerHTML = '<div style="color: #888;">[SİSTEM] Cloudflare tünel sessiyası başladı...</div>';
-    document.getElementById('cf-tunnel-url-container').innerHTML = '🔗 Link axtarılır...';
+    document.getElementById('cf-terminal-body').innerHTML = `
+        <div style="color: #888;">[SİSTEM] Cloudflare tünel sessiyası başladı...</div>
+        <div style="color: #888;">[SİSTEM] İcra etmək istədiyiniz əmri sağ paneldən seçin və ya daxil edin.</div>
+    `;
+    document.getElementById('cf-tunnel-url-container').innerHTML = 'Status: Hazır';
     modal.style.display = 'flex';
 }
 
@@ -841,18 +889,7 @@ async function closeCloudflareModal(shouldStop) {
         clearInterval(cfPollingInterval);
         cfPollingInterval = null;
     }
-    
     document.getElementById('cf-terminal-modal').style.display = 'none';
-    
-    if (shouldStop && currentCfAppId) {
-        try {
-            await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/stop`, { method: 'POST' });
-            addActivityLog("Cloudflare tuneli istifadəçi tərəfindən dayandırıldı", 'info');
-        } catch (e) {
-            console.error(e);
-        }
-        loadApplications();
-    }
     currentCfAppId = null;
 }
 
@@ -864,54 +901,100 @@ async function generateCloudflareTunnel(event, id) {
     
     currentCfAppId = id;
     openCloudflareModal(id, appName);
+}
+
+async function runCfCommand(cmdType) {
+    if (!currentCfAppId) return;
     
-    // Set up action button click listeners
-    document.getElementById('cf-btn-cancel').onclick = () => closeCloudflareModal(true);
-    document.getElementById('cf-btn-close').onclick = () => closeCloudflareModal(false);
+    if (cfPollingInterval) {
+        clearInterval(cfPollingInterval);
+        cfPollingInterval = null;
+    }
     
-    appendCfLog('[SİSTEM] Konteyner işə salınır...', '#ff9800');
-    
-    try {
-        const res = await fetch(`/api/applications/${id}/cloudflare-tunnel/start`, { method: 'POST' });
-        if (!res.ok) {
-            const errText = await res.text();
-            appendCfLog(`[XƏTA] Başlanğıc xətası: ${errText}`, '#ff1744');
-            document.getElementById('cf-tunnel-url-container').innerText = '❌ Başladıla bilmədi';
-            return;
+    if (cmdType === 'start') {
+        appendCfLog(`\nubuntu@masterdeploy:~$ start-tunnel`, '#fff');
+        appendCfLog('[SİSTEM] Konteyner başladılır...', '#ff9800');
+        document.getElementById('cf-tunnel-url-container').innerText = '🔗 Başladılır...';
+        
+        try {
+            const res = await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/start`, { method: 'POST' });
+            if (res.ok) {
+                appendCfLog('[SİSTEM] Konteyner uğurla işə salındı! Canlı loqlar izlənilir...', '#00e676');
+                startCfLogsPolling();
+            } else {
+                const err = await res.text();
+                appendCfLog(`[XƏTA] Başlatma xətası: ${err}`, '#ff1744');
+                document.getElementById('cf-tunnel-url-container').innerText = '❌ Xəta baş verdi';
+            }
+        } catch (e) {
+            appendCfLog(`[SİSTEM XƏTASI] Qoşulma xətası: ${e.message}`, '#ff1744');
         }
         
-        appendCfLog('[SİSTEM] Konteyner başladıldı! Loqlar oxunur...', '#00e676');
+    } else if (cmdType === 'logs') {
+        appendCfLog(`\nubuntu@masterdeploy:~$ watch-logs`, '#fff');
+        appendCfLog('[SİSTEM] Loq izləmə başladılır...', '#00e676');
+        startCfLogsPolling();
         
-        let urlFound = false;
-        cfPollingInterval = setInterval(async () => {
-            if (!currentCfAppId) return;
-            try {
-                const logRes = await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/logs`);
-                if (logRes.ok) {
-                    const data = await logRes.json();
-                    
-                    const termBody = document.getElementById('cf-terminal-body');
-                    termBody.innerText = data.logs;
-                    termBody.scrollTop = termBody.scrollHeight;
-                    
-                    if (data.cloudflare_url) {
-                        document.getElementById('cf-tunnel-url-container').innerHTML = `
-                            🔗 Link: <a href="${data.cloudflare_url}" target="_blank" style="color: #00e676; text-decoration: underline;">${data.cloudflare_url}</a>
-                        `;
-                        if (!urlFound) {
-                            urlFound = true;
-                            addActivityLog(`Cloudflare tunel linki alındı: ${data.cloudflare_url}`, 'success');
-                        }
+    } else if (cmdType === 'stop') {
+        appendCfLog(`\nubuntu@masterdeploy:~$ stop-tunnel`, '#fff');
+        appendCfLog('[SİSTEM] Konteyner dayandırılır və silinir...', '#c0392b');
+        document.getElementById('cf-tunnel-url-container').innerText = '🛑 Tünel dayandırıldı';
+        
+        try {
+            const res = await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/stop`, { method: 'POST' });
+            if (res.ok) {
+                appendCfLog('[SİSTEM] Konteyner tamamilə dayandırıldı və silindi.', '#ff1744');
+                loadApplications();
+            } else {
+                const err = await res.text();
+                appendCfLog(`[XƏTA] Dayandırma xətası: ${err}`, '#ff1744');
+            }
+        } catch (e) {
+            appendCfLog(`[SİSTEM XƏTASI] Qoşulma xətası: ${e.message}`, '#ff1744');
+        }
+        
+    } else if (cmdType === 'clear') {
+        document.getElementById('cf-terminal-body').innerHTML = '<div style="color: #888;">[SİSTEM] Terminal təmizləndi...</div>';
+        
+    } else if (cmdType === 'copy') {
+        const text = document.getElementById('cf-terminal-body').innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            appendCfLog('\n[SİSTEM] Bütün terminal mətnləri panoya kopyalandı.', '#00e676');
+        }).catch(err => {
+            appendCfLog('\n[XƏTA] Kopyalamaq mümkün olmadı: ' + err, '#ff1744');
+        });
+    }
+}
+
+function startCfLogsPolling() {
+    if (cfPollingInterval) clearInterval(cfPollingInterval);
+    
+    let urlFound = false;
+    cfPollingInterval = setInterval(async () => {
+        if (!currentCfAppId) return;
+        try {
+            const logRes = await fetch(`/api/applications/${currentCfAppId}/cloudflare-tunnel/logs`);
+            if (logRes.ok) {
+                const data = await logRes.json();
+                
+                const termBody = document.getElementById('cf-terminal-body');
+                termBody.innerText = data.logs;
+                termBody.scrollTop = termBody.scrollHeight;
+                
+                if (data.cloudflare_url) {
+                    document.getElementById('cf-tunnel-url-container').innerHTML = `
+                        🔗 Link: <a href="${data.cloudflare_url}" target="_blank" style="color: #00e676; text-decoration: underline;">${data.cloudflare_url}</a>
+                    `;
+                    if (!urlFound) {
+                        urlFound = true;
+                        addActivityLog(`Cloudflare tunel linki alındı: ${data.cloudflare_url}`, 'success');
                     }
                 }
-            } catch (e) {
-                console.error("Logs polling failed", e);
             }
-        }, 1500);
-        
-    } catch (e) {
-        appendCfLog(`[SİSTEM XƏTASI] Qoşulma uğursuz: ${e.message}`, '#ff1744');
-    }
+        } catch (e) {
+            console.error("Logs polling failed", e);
+        }
+    }, 1500);
 }
 
 function appendCfLog(text, color = '#00e676') {
