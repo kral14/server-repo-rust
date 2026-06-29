@@ -1719,17 +1719,32 @@ async fn create_cloudflare_tunnel(
     // We need to write the key to a temporary file if it's SSH connection
     let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
 
-    // Prepare commands
-    let bash_cmd = format!(
-        "sudo pkill -f 'cloudflared.*:{}' || true; \
-         rm -f /tmp/cf_tunnel_{}.log; \
-         nohup cloudflared tunnel --url http://localhost:{} > /tmp/cf_tunnel_{}.log 2>&1 & \
-         sleep 4; \
-         cat /tmp/cf_tunnel_{}.log",
-        port, app_id, port, app_id, app_id
-    );
+    // Prepare commands depending on local/remote server type
+    let (bash_cmd, is_local) = if server.ip == "local" || server.ip == "127.0.0.1" {
+        (
+            format!(
+                "docker rm -f cf-tunnel-{} || true; \
+                 docker run -d --name cf-tunnel-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{} && \
+                 sleep 4 && \
+                 docker logs cf-tunnel-{}",
+                app_id, app_id, port, app_id
+            ),
+            true,
+        )
+    } else {
+        (
+            format!(
+                "sudo docker rm -f cf-tunnel-{} || true; \
+                 sudo docker run -d --name cf-tunnel-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{} && \
+                 sleep 4 && \
+                 sudo docker logs cf-tunnel-{}",
+                app_id, app_id, port, app_id
+            ),
+            false,
+        )
+    };
 
-    let output_str = if server.ip == "local" || server.ip == "127.0.0.1" {
+    let output_str = if is_local {
         // Run locally
         let out = tokio::process::Command::new("sh")
             .arg("-c")
@@ -1737,7 +1752,7 @@ async fn create_cloudflare_tunnel(
             .output()
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Local command execution failed: {}", e)))?;
-        String::from_utf8_lossy(&out.stdout).to_string()
+        format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
     } else {
         // Run via SSH
         let temp_key_path = format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4());

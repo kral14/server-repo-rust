@@ -806,7 +806,7 @@ echo 'Cloudflared yoxlanılır və quraşdırılır...';
 if ! command -v cloudflared > /dev/null 2>&1; then
     sudo mkdir -p --mode=0755 /usr/share/keyrings;
     curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg | sudo tee /usr/share/keyrings/cloudflare-main.gpg >/dev/null;
-    echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared debian-stable main' | sudo tee /etc/apt/sources.list.d/cloudflared.list > /dev/null;
+    echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' | sudo tee /etc/apt/sources.list.d/cloudflared.list > /dev/null;
     sudo apt-get update && sudo apt-get install -y cloudflared;
     echo '✅ Cloudflared uğurla quraşdırıldı!';
 else
@@ -827,7 +827,7 @@ fi;
         portainer_port = self.gui.portainer_port_entry.get().strip() or "9000"
         
         self.save_config()
-        cmd = cmd_func(swap_gb, panel_port, portainer_port)
+        cmd = cmd_func(swap_gb, panel_port, portainer_port).replace('\r\n', '\n')
         
         self.log_remote(f"\n--- Əməliyyat Başladı: {user}@{ip} ---")
         self.gui.toggle_remote_buttons(tk.DISABLED)
@@ -836,18 +836,19 @@ fi;
             ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10", "-i", key_path, f"{user}@{ip}", f"bash -s"]
             try:
                 creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-                proc = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, encoding='utf-8', errors='replace', creationflags=creationflags)
+                proc = subprocess.Popen(ssh_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, creationflags=creationflags)
                 
-                # Komandaları stdin vasitəsilə ötürürük və bağlayırıq
-                proc.stdin.write(cmd)
+                # Komandaları binary olaraq ötürürük (Windows-un \r\n çevrilməsinin qarşısını almaq üçün)
+                proc.stdin.write(cmd.encode('utf-8'))
                 proc.stdin.close()
                 
-                # Canlı olaraq oxuyuruq
+                # Canlı olaraq oxuyuruq və decode edirik
                 while True:
-                    line = proc.stdout.readline()
-                    if not line and proc.poll() is not None:
+                    line_bytes = proc.stdout.readline()
+                    if not line_bytes and proc.poll() is not None:
                         break
-                    if line:
+                    if line_bytes:
+                        line = line_bytes.decode('utf-8', errors='replace')
                         self.log_remote(line.rstrip('\r\n'))
                 
                 proc.wait()
