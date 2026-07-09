@@ -1,0 +1,5 @@
+{
+  "proqram_haqqinda": "MasterDeploy, serverlərinizi və docker layihələrinizi tək bir mərkəzdən asanlıqla idarə etməyə imkan verən yüngül idarəetmə panelidir.",
+  "xarici_server": "Xarici server əlavə etmək üçün:\n1. Həmin serverdə root (və ya sudo) hüququ olan istifadəçiyə sahib olmalısınız.\n2. Serverdə Ubuntu və ya Debian əməliyyat sistemi olması tövsiyə olunur.\n3. Serverin IP ünvanını, istifadəçi adını və gizli SSH açarını panelə əlavə edin.",
+  "lokal_server": "Mövcud kompüterinizi (lokal) server kimi əlavə etmək üçün:\n1. Kompüterinizdə SSH xidmətini (OpenSSH Server) aktivləşdirin.\n2. Docker-in düzgün işlədiyinə əmin olun.\n3. Paneldə IP olaraq '127.0.0.1' və lokal istifadəçi məlumatlarını qeyd edin."
+}

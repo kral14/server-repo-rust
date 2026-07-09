@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="az">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeployMaster Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/style.css?v=6">
+    <script>
+        // Prevent flashing on load
+        const savedTheme = localStorage.getItem('theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    </script>
+    <style>
+        .subtab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 0.8rem 1rem;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-family: inherit;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+
+        .subtab-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .subtab-btn.active {
+            color: var(--accent-color);
+            border-bottom: 2px solid var(--accent-color);
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Ambient Background Lights -->
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="logo-area">
+                <span class="logo-icon">🛸</span>
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                    <h1 style="margin: 0; line-height: 1;">DeployMaster</h1>
+                    <div style="display: flex; align-items: center; gap: 5px; margin-top: 2px;">
+                        <span onclick="openHelpCenter()" style="cursor: pointer; opacity: 0.8; font-size: 0.85rem; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'" title="Kömək Mərkəzi və Versiyalar">ℹ️</span>
+                        <span id="app-version" style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace; letter-spacing: 1px;">v1.0.0</span>
+                    </div>
+                </div>
+            </div>
+            <nav class="nav-menu">
+                <button class="nav-btn active" data-tab="dashboard">📊 Dashboard</button>
+                <button class="nav-btn" data-tab="servers">🖥️ Serverlər</button>
+                <button class="nav-btn" data-tab="applications">🚀 Layihələr</button>
+
+                <button class="nav-btn" onclick="showModal('github-modal')"
+                    style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">⚙️
+                    GitHub Ayarları</button>
+                <button class="nav-btn" onclick="showModal('activity-log-modal')" style="margin-top: 0.5rem;">📋 Fəaliyyət Jurnalı</button>
+            </nav>
+
+            <div class="theme-toggle-container" style="padding-bottom: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--card-border); margin-top: 0.75rem;">
+                <button id="theme-toggle-btn" class="btn btn-secondary"
+                    style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                    <span id="theme-icon">☀️</span> <span id="theme-text">Açıq Tema</span>
+                </button>
+            </div>
+
+            <div class="status-footer">
+                <div class="status-indicator online"></div>
+                <span>Server Aktivdir (Rust)</span>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <!-- Dashboard Tab -->
+            <section id="tab-dashboard" class="tab-section active">
+                <header class="tab-header">
+                    <h2>📊 İdarəetmə Paneli (Dashboard)</h2>
+                    <p>Sisteminizin ümumi işləmə göstəriciləri</p>
+                </header>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Ümumi Serverlər</h3>
+                        <p id="stat-servers-count" class="stat-val">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Aktiv Layihələr</h3>
+                        <p id="stat-apps-count" class="stat-val">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Yükləmə Statusu</h3>
+                        <p class="stat-val green">Stabil</p>
+                    </div>
+                </div>
+
+                <div class="info-box">
+                    <h3>💡 DeployMaster haqqında</h3>
+                    <p>Bu platforma Rust dilində yazılmışdır və 1 GB RAM-ı olan Oracle Always Free serverləri üçün
+                        xüsusi olaraq optimallaşdırılmışdır. Bütün resursların səmərəli istifadəsini təmin edir.</p>
+                </div>
+            </section>
+
+            <!-- Servers Tab -->
+            <section id="tab-servers" class="tab-section">
+                <header class="tab-header-btn">
+                    <div>
+                        <h2>🖥️ Serverlər (Servers)</h2>
+                        <p>Layihələrin yayına çıxarılacağı uzaqdakı serverlər</p>
+                    </div>
+                    <button class="btn btn-primary" onclick="showModal('server-modal')">+ Yeni Server</button>
+                </header>
+
+                <div id="servers-list" class="items-list">
+                    <!-- Servers will be listed here -->
+                    <div class="no-data">Hələ heç bir server əlavə edilməyib.</div>
+                </div>
+            </section>
+
+            <!-- Applications Tab -->
+            <section id="tab-applications" class="tab-section">
+                <header class="tab-header-btn">
+                    <div>
+                        <h2>🚀 Layihələr (Applications)</h2>
+                        <p>Git-dən qoşulmuş tətbiqləriniz və API-ləriniz</p>
+                    </div>
+                    <div id="server-stats-banner"
+                        style="display: none; background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2); padding: 0.6rem 1rem; border-radius: 8px; flex-grow: 1; margin: 0 1rem; align-items: center; justify-content: space-around;">
+                        <span style="font-size: 0.85rem;"><span style="color:var(--text-secondary)">RAM:</span> <strong
+                                id="stat-ram" style="color:var(--accent-color)">-- / -- MB</strong></span>
+                        <span style="font-size: 0.85rem;"><span style="color:var(--text-secondary)">Nüvə (CPU):</span>
+                            <strong id="stat-cpu" style="color:var(--accent-color)">--</strong></span>
+                    </div>
+                    <button class="btn btn-primary" onclick="showCreateServiceTab()">+ Yeni Layihə</button>
+                </header>
+
+                <div id="apps-list" class="items-list">
+                    <!-- Applications will be listed here -->
+                    <div class="no-data">Hələ heç bir layihə əlavə edilməyib.</div>
+                </div>
+            </section>
+
+
+
+
+            <!-- App Details Tab -->
+            <section id="tab-app-details" class="tab-section">
+                <header class="app-detail-header"
+                    style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1rem 1.2rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; gap: 0.8rem; align-items: center;">
+                        <div
+                            style="width: 40px; height: 40px; background: rgba(0, 210, 255, 0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">
+                            🚀</div>
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.2rem;">
+                                <h2 id="detail-app-name" style="margin: 0; font-size: 1.2rem;">-</h2>
+                                <span id="detail-app-status"
+                                    style="padding: 0.2rem 0.5rem; border-radius: 10px; font-size: 0.7rem; font-weight: 500;">-</span>
+                            </div>
+                            <a id="detail-app-link" href="#" target="_blank"
+                                style="color: var(--text-secondary); text-decoration: none; font-size: 0.85rem; display: flex; align-items: center; gap: 0.4rem;">
+                                🔗 <span id="detail-app-url">Link yaradılır...</span>
+                            </a>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+                        <button class="btn btn-secondary" onclick="switchTab('applications')">Geri Dön</button>
+
+                        <button id="btn-app-restart" class="btn btn-secondary" onclick="restartApp()" title="Konteyneri yenidən başladır">🔄 Restart</button>
+                        <button id="btn-app-stop" class="btn btn-secondary" onclick="stopApp()" style="color: #ff4444 !important;" title="Konteyneri dayandırır">🛑 Stop</button>
+
+                        <button id="btn-app-save" class="btn btn-secondary" onclick="saveAppSettings()" style="color: var(--accent-color) !important;" title="Ayarları bazaya qeyd edir">💾 Yadda Saxla</button>
+                        <button id="btn-app-redeploy" class="btn btn-primary" style="background: linear-gradient(135deg, #7c3aed, #00d2ff);" onclick="redeployApp()" title="Yeni versiya kimi yayımlayır">🚀 Redeploy</button>
+
+                        <div style="position: relative; display: inline-block;">
+                            <button class="btn btn-secondary"
+                                onclick="document.getElementById('app-actions-dropdown').style.display = document.getElementById('app-actions-dropdown').style.display === 'block' ? 'none' : 'block'"
+                                style="padding: 0.6rem; min-width: 40px; display: flex; align-items: center; justify-content: center;">
+                                ⋮
+                            </button>
+                            <div id="app-actions-dropdown"
+                                style="display: none; position: absolute; right: 0; top: 110%; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); z-index: 100; min-width: 150px; overflow: hidden;">
+                                <button
+                                    onclick="cancelActiveDeployment(); document.getElementById('app-actions-dropdown').style.display='none'"
+                                    style="width: 100%; text-align: left; background: transparent; border: none; color: var(--text-color); padding: 0.8rem 1rem; cursor: pointer; border-bottom: 1px solid var(--card-border); display: flex; gap: 0.5rem; align-items: center;">
+                                    🛑 Yayımı Ləğv Et
+                                </button>
+                                <button
+                                    onclick="deleteAppFromDetails(); document.getElementById('app-actions-dropdown').style.display='none'"
+                                    style="width: 100%; text-align: left; background: transparent; border: none; color: #ff4444; padding: 0.8rem 1rem; cursor: pointer; display: flex; gap: 0.5rem; align-items: center;">
+                                    🗑️ Sil
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+
+                <!-- Sub-Tabs Navigation -->
+                <div class="app-subtabs"
+                    style="display: flex; gap: 1rem; border-bottom: 1px solid var(--card-border); margin-bottom: 1.5rem; padding-bottom: 0px;">
+                    <button class="subtab-btn active" data-subtab="overview" onclick="switchAppTab('overview')">Ümumi
+                        (Overview)</button>
+                    <button class="subtab-btn" data-subtab="settings" onclick="switchAppTab('settings')">Sazlamalar
+                        (Settings)</button>
+                    <button class="subtab-btn" data-subtab="logs" onclick="switchAppTab('logs')">Loqlar (Logs)</button>
+                </div>
+
+                <!-- Sub-Tab Contents -->
+                <div id="subtab-overview" class="subtab-content active"
+                    style="display: block; flex: 1; min-height: 0; overflow-y: auto;">
+                    <div
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem;">
+                        <h3
+                            style="margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.8rem;">
+                            Layihə Məlumatları</h3>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                            <div>
+                                <span
+                                    style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.3rem;">Mənbə
+                                    (Repository)</span>
+                                <div
+                                    style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.02); padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                                    <span>🐱</span> <strong id="detail-overview-repo">-</strong>
+                                </div>
+                            </div>
+
+                            <div>
+                                <span
+                                    style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.3rem;">Budaq
+                                    (Branch)</span>
+                                <div
+                                    style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.02); padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                                    <span>🌿</span> <strong id="detail-overview-branch">-</strong>
+                                </div>
+                            </div>
+
+                            <div>
+                                <span
+                                    style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.3rem;">Daxili
+                                    Port (Internal Port)</span>
+                                <div
+                                    style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.02); padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                                    <span>🔌</span> <strong id="detail-overview-port">-</strong>
+                                </div>
+                            </div>
+
+                            <div>
+                                <span
+                                    style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.3rem;">Hədəf
+                                    Server</span>
+                                <div
+                                    style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.02); padding: 0.6rem 1rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                                    <span>🖥️</span> <strong id="detail-overview-server">-</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Deployments Tarixçəsi Bölməsi -->
+                    <div
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.5rem; margin-top: 1.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.8rem;">
+                            <h3 style="margin: 0;">🚀 Yayım Tarixçəsi (Deployments)</h3>
+                            <button class="btn btn-secondary" onclick="loadAppDeployments(currentAppDetailsId)" style="padding: 0.3rem 0.8rem; font-size: 0.75rem;">🔄 Yenilə</button>
+                        </div>
+                        
+                        <div id="overview-deployments-list" style="display: flex; flex-direction: column; gap: 0.8rem;">
+                            <div class="no-data">Yüklənir...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="subtab-settings" class="subtab-content"
+                    style="display: none; flex: 1; min-height: 0; overflow-y: auto;">
+                    <div style="max-width: 800px; margin-bottom: 2rem;">
+                        <h3 style="margin-bottom: 1.5rem; padding-bottom: 0.8rem;">Konfiqurasiya Ayarları</h3>
+
+                        <!-- Source Accordion -->
+                        <div class="accordion-section"
+                            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 1rem;">
+                            <div class="accordion-header" onclick="toggleAccordion('settings-source-content', this)"
+                                style="padding: 1rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3
+                                    style="font-size: 1rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                    📂 Mənbə (Source)</h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.85rem; background: rgba(255,255,255,0.1); padding: 0.3rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="settings-source-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border);">
+                                <div class="form-group">
+                                    <label>Git Repo URL</label>
+                                    <input type="text" id="settings-repo-url"
+                                        placeholder="https://github.com/user/repo.git">
+                                </div>
+                                <div class="form-group">
+                                    <label>Budaq (Branch)</label>
+                                    <input type="text" id="settings-branch" placeholder="main">
+                                </div>
+                                <div class="form-group">
+                                    <label>İşçi Qovluq (Work directory)</label>
+                                    <input type="text" id="settings-work-dir" placeholder="/app">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Builder Accordion -->
+                        <div class="accordion-section"
+                            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 1rem;">
+                            <div class="accordion-header" onclick="toggleAccordion('settings-builder-content', this)"
+                                style="padding: 1rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3
+                                    style="font-size: 1rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                    🛠️ Qurucu (Builder)</h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.85rem; background: rgba(255,255,255,0.1); padding: 0.3rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="settings-builder-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border);">
+                                <div class="form-group">
+                                    <label>Build növü</label>
+                                    <div style="display: flex; gap: 0.8rem;">
+                                        <button type="button" id="settings-bp-btn" class="source-btn active"
+                                            onclick="settingsSelectBuild('buildpack')"
+                                            style="flex: 1; padding: 0.6rem; border-radius: 8px; border: 1px solid var(--card-border); background: rgba(0,210,255,0.1); color: var(--accent-color); cursor: pointer; font-size: 0.85rem;">📦
+                                            Buildpack</button>
+                                        <button type="button" id="settings-df-btn" class="source-btn"
+                                            onclick="settingsSelectBuild('dockerfile')"
+                                            style="flex: 1; padding: 0.6rem; border-radius: 8px; border: 1px solid var(--card-border); background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 0.85rem;">🐳
+                                            Dockerfile</button>
+                                    </div>
+                                </div>
+                                <div id="settings-bp-fields">
+                                    <div class="form-group">
+                                        <label>Build command (override)</label>
+                                        <input type="text" id="settings-build-command" placeholder="npm run build">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Run command (override)</label>
+                                        <input type="text" id="settings-run-command" placeholder="npm start">
+                                    </div>
+                                </div>
+                                <div id="settings-df-fields" style="display: none;">
+                                    <div class="form-group">
+                                        <label>Dockerfile yolu (override)</label>
+                                        <input type="text" id="settings-dockerfile-path" placeholder="Dockerfile">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Entrypoint (override)</label>
+                                        <input type="text" id="settings-entrypoint" placeholder="/bin/sh">
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Command (override)</label>
+                                        <input type="text" id="settings-command" placeholder="-c 'start.sh'">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Environment Variables Accordion -->
+                        <div class="accordion-section"
+                            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 1rem;">
+                            <div class="accordion-header" onclick="toggleAccordion('settings-env-content', this)"
+                                style="padding: 1rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3
+                                    style="font-size: 1rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                    🔐 Mühit Dəyişənləri (ENV)</h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.85rem; background: rgba(255,255,255,0.1); padding: 0.3rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="settings-env-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border);">
+                                <div class="form-group" style="margin: 0;">
+                                    <div
+                                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                        <label style="margin: 0;">Mühit Dəyişənləri (ENV)</label>
+                                        <button type="button" class="btn btn-secondary" onclick="addSettingsEnvVarRow()"
+                                            style="padding: 0.3rem 0.8rem; font-size: 0.75rem; border-radius: 6px;">+
+                                            Əlavə Et</button>
+                                    </div>
+                                    <div id="settings-env-vars-container"
+                                        style="max-height: 300px; overflow-y: auto; padding-right: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                        <!-- Dynamic ENV rows will be added here via JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Resources & Ports Accordion -->
+                        <div class="accordion-section"
+                            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 1.5rem;">
+                            <div class="accordion-header" onclick="toggleAccordion('settings-res-content', this)"
+                                style="padding: 1rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3
+                                    style="font-size: 1rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                    ⚙️ Resurslar və Port</h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.85rem; background: rgba(255,255,255,0.1); padding: 0.3rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="settings-res-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border);">
+                                <div class="form-group">
+                                    <label>Daxili Port</label>
+                                    <input type="number" id="settings-port" placeholder="8080">
+                                </div>
+                                <div class="split-inputs" style="display: flex; gap: 1rem; margin-top: 1rem;">
+                                    <div class="form-group" style="flex: 1;">
+                                        <label>RAM Limiti (məs. 512m, 1g)</label>
+                                        <input type="text" id="settings-memory-limit" placeholder="Limitsiz">
+                                    </div>
+                                    <div class="form-group" style="flex: 1;">
+                                        <label>CPU Nüvə Limiti (məs. 0.5, 1.0)</label>
+                                        <input type="text" id="settings-cpu-limit" placeholder="Limitsiz">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+
+                <div id="subtab-logs" class="subtab-content"
+                    style="display: none; flex: 1; min-height: 0; overflow-y: auto;">
+                    <div id="cancel-deploy-btn" style="display: none;"></div>
+                    <div class="accordion-container"
+                        style="display: flex; flex-direction: column; gap: 1rem; flex-grow: 1; padding-right: 0.5rem;">
+
+                        <!-- Accordion 1: Build -->
+                        <div class="accordion-section"
+                            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('build-content', this)"
+                                style="padding: 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3
+                                    style="font-size: 1.1rem; font-weight: 500; color: var(--accent-color); margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                    > Build (Yığılma)</h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.85rem; background: rgba(255,255,255,0.1); padding: 0.3rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                            </div>
+
+                            <div id="build-content" class="accordion-content"
+                                style="display: none; flex-direction: column; flex-grow: 1; border-top: 1px solid var(--card-border);">
+                                <!-- Stages -->
+                                <div id="stages-container"
+                                    style="padding: 0.8rem 1.2rem; display: flex; flex-direction: column; gap: 0.8rem; border-bottom: 1px solid var(--card-border); overflow-x: auto; align-items: stretch; justify-content: flex-start;">
+                                    <div class="stage-item" id="stage-1"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">Hazırlıq</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+ 
+                                     <div class="stage-item" id="stage-2"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">Git Klonlama</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+ 
+                                     <div class="stage-item" id="stage-3"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">Docker Build</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+ 
+                                     <div class="stage-item" id="stage-4"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">Təmizlik</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+ 
+                                     <div class="stage-item" id="stage-5"
+                                         style="display: flex; align-items: center; opacity: 0.5; transition: all 0.3s ease; font-size: 0.8rem; background: rgba(255,255,255,0.02); padding: 0.6rem 0.9rem; border-radius: 8px; flex: 1; justify-content: space-between; min-width: 170px;">
+                                         <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                             <span class="stage-icon" style="font-size: 1.1rem;">⚪</span>
+                                             <div style="display: flex; flex-direction: column;">
+                                                 <strong class="stage-title" style="color: #fff;">İşəsalma</strong>
+                                                 <span class="stage-desc" style="font-size: 0.65rem; color: var(--text-secondary); margin-top: 1px;">Gözlənilir</span>
+                                             </div>
+                                         </div>
+                                         <span class="stage-time"
+                                             style="font-family: monospace; font-size: 0.72rem; color: var(--text-secondary);">--</span>
+                                     </div>
+                                </div>
+                                <!-- Build Terminal -->
+                                <div
+                                    style="background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--card-border); padding: 0.6rem 1rem; display: flex; justify-content: space-between; align-items: center;">
+                                    <span
+                                        style="font-family: monospace; font-size: 0.8rem; color: var(--text-secondary);">root@masterdeploy:~$
+                                        tail -f build.log</span>
+                                    <div style="display: flex; align-items: center; gap: 0.8rem;">
+                                        <span id="last-update-badge"
+                                            style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;"></span>
+                                        <span id="stream-status-dot"
+                                            style="font-size: 0.8rem; color: var(--success-color);">Real-time stream
+                                            active ●</span>
+                                        <button id="copy-logs-btn" onclick="copyTerminalLogs('terminal-body')"
+                                            title="Loqları kopyala"
+                                            style="background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; padding: 0.3rem 0.6rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.35rem; transition: all 0.2s ease;"
+                                            onmouseover="this.style.background='rgba(255,255,255,0.12)';this.style.color='var(--text-primary)'"
+                                            onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.color='var(--text-secondary)'">📋
+                                            Kopyala</button>
+                                        <button id="download-build-logs-btn" onclick="downloadLogs('terminal-body', 'build_logs.txt')"
+                                            title="Yığım loqlarını endir"
+                                            style="background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; padding: 0.3rem 0.6rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.35rem; transition: all 0.2s ease;"
+                                            onmouseover="this.style.background='rgba(255,255,255,0.12)';this.style.color='var(--text-primary)'"
+                                            onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.color='var(--text-secondary)'">📥
+                                            Endir</button>
+                                    </div>
+                                </div>
+                                <div id="stuck-warning-banner"
+                                    style="display: none; background: rgba(234, 179, 8, 0.12); color: #fbbf24; padding: 0.5rem 1rem; font-size: 0.8rem; border-bottom: 1px solid rgba(234, 179, 8, 0.3);">
+                                    ⏳ 3 dəqiqədir yeni log gəlmir. Docker/Rust build-ləri çox uzun çəkə bilər (30+ dəq).
+                                    Proses hələ işləyir, gözləyin...</div>
+                                <div id="terminal-body" class="terminal-body"
+                                    style="flex-grow: 1; min-height: 250px; padding: 1.2rem; border: none; border-radius: 0; font-size: 0.85rem; font-family: 'Space Grotesk', monospace; overflow-y: auto;">
+                                    <!-- Logs will stream here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Accordion 2: Live Runtime -->
+                        <div class="accordion-section"
+                            style="background: #040508; border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('live-content', this)"
+                                style="padding: 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); transition: background 0.2s;">
+                                <h3
+                                    style="font-size: 1.1rem; font-weight: 500; color: #fff; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                    > Deployment (Canlı Server)</h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.85rem; background: rgba(255,255,255,0.1); padding: 0.3rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                            </div>
+
+                            <div id="live-content" class="accordion-content"
+                                style="display: none; flex-direction: column; flex-grow: 1; border-top: 1px solid var(--card-border);">
+                                <div
+                                    style="background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--card-border); padding: 0.6rem 1rem; display: flex; justify-content: space-between; align-items: center;">
+                                    <span
+                                        style="font-family: monospace; font-size: 0.8rem; color: var(--text-secondary);">root@masterdeploy:~$
+                                        docker logs -f container</span>
+                                    <div style="display: flex; align-items: center; gap: 0.8rem;">
+                                        <span id="live-status-dot"
+                                            style="font-size: 0.8rem; color: var(--success-color);">Live ●</span>
+                                        <button onclick="copyTerminalLogs('live-terminal-body')" title="Loqları kopyala"
+                                            style="background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; padding: 0.3rem 0.6rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.35rem; transition: all 0.2s ease;"
+                                            onmouseover="this.style.background='rgba(255,255,255,0.12)';this.style.color='var(--text-primary)'"
+                                            onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.color='var(--text-secondary)'">📋
+                                            Kopyala</button>
+                                        <button id="download-live-logs-btn" onclick="downloadLogs('live-terminal-body', 'live_logs.txt')"
+                                            title="Canlı server loqlarını endir"
+                                            style="background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); border-radius: 6px; color: var(--text-secondary); cursor: pointer; padding: 0.3rem 0.6rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.35rem; transition: all 0.2s ease;"
+                                            onmouseover="this.style.background='rgba(255,255,255,0.12)';this.style.color='var(--text-primary)'"
+                                            onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.color='var(--text-secondary)'">📥
+                                            Endir</button>
+                                    </div>
+                                </div>
+                                <div id="live-terminal-body" class="terminal-body"
+                                    style="flex-grow: 1; min-height: 400px; padding: 1.2rem; border: none; border-radius: 0; font-size: 0.85rem; font-family: 'Space Grotesk', monospace; overflow-y: auto;">
+                                    <!-- Live Runtime logs will stream here -->
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- Create Service Tab (Koyeb-style) -->
+            <section id="tab-create-service" class="tab-section">
+                <header class="tab-header">
+                    <div
+                        style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; font-size: 0.9rem;">
+                        <span style="cursor: pointer; color: var(--text-secondary);"
+                            onclick="switchTab('applications')">🚀 Layihələr</span>
+                        <span style="color: var(--text-secondary);">/</span>
+                        <span style="color: var(--text-primary);">Yeni Xidmət</span>
+                    </div>
+                    <h2>Let's deploy a new service</h2>
+                </header>
+
+                <!-- Step 1: Select Source -->
+                <div id="wizard-step-1" class="wizard-step active">
+                    <h3 style="margin-bottom: 1.5rem; font-weight: 500;">Create web service</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 2rem;">Can be accessed from the Internet or
+                        the private network</p>
+
+                    <div class="source-cards-grid">
+                        <div class="source-card" onclick="selectSource('github')">
+                            <span class="source-icon">🐱</span>
+                            <div class="source-info">
+                                <h4>GitHub</h4>
+                                <p>Connect, build and deploy your code from a GitHub repository</p>
+                            </div>
+                        </div>
+                        <div class="source-card" onclick="selectSource('docker')">
+                            <span class="source-icon">🐳</span>
+                            <div class="source-info">
+                                <h4>Docker</h4>
+                                <p>Deploy docker images from any public or private registries</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Select Repository -->
+                <div id="wizard-step-2" class="wizard-step">
+                    <div class="step-progress-bar">
+                        <div class="progress-indicator active">Import project (1 of 3)</div>
+                        <div class="progress-indicator">Build options</div>
+                        <div class="progress-indicator">Configure service</div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: center;">
+                        <input type="text" id="repo-search" placeholder="Search GitHub repository..."
+                            oninput="filterRepos()" style="flex: 1; padding: 0.8rem 1rem;">
+                        <button class="btn btn-secondary" onclick="loadGithubRepos()"
+                            style="padding: 0.8rem 1.2rem;">Refresh</button>
+                    </div>
+
+                    <div id="github-repos-list" class="github-repos-list">
+                        <!-- Repos will be loaded dynamically here -->
+                        <div class="no-data">Token quraşdırılmayıb. Lütfən əvvəlcə GitHub Ayarlarını edin.</div>
+                    </div>
+
+                    <div style="margin-top: 2rem; border-top: 1px solid var(--card-border); padding-top: 2rem;">
+                        <h4>Public GitHub repository</h4>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">Use a public
+                            repository by entering the URL below. Features like auto-deploy are not available.</p>
+                        <div style="display: flex; gap: 1rem;">
+                            <input type="text" id="manual-public-repo" placeholder="https://github.com/owner/repo"
+                                style="flex: 1; padding: 0.8rem 1rem;">
+                            <button class="btn btn-primary" onclick="importManualRepo()"
+                                style="padding: 0.8rem 1.6rem;">Import</button>
+                        </div>
+                    </div>
+
+                    <div class="wizard-actions" style="margin-top: 2.5rem;">
+                        <button class="btn btn-secondary" onclick="goToStep(1)">Back</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Build Options -->
+                <div id="wizard-step-3" class="wizard-step">
+                    <div class="step-progress-bar">
+                        <div class="progress-indicator done">Import project</div>
+                        <div class="progress-indicator active">Build options (2 of 3)</div>
+                        <div class="progress-indicator">Configure service</div>
+                    </div>
+
+                    <h4 style="margin-bottom: 1.5rem; font-weight: 500;">Choose whether to build your code with a
+                        Dockerfile or a Buildpack</h4>
+
+                    <div class="source-cards-grid">
+                        <div class="source-card active" id="buildpack-card" onclick="selectBuildOption('buildpack')">
+                            <span class="source-icon">📦</span>
+                            <div class="source-info">
+                                <h4>Buildpack</h4>
+                                <p>Detect your project's language, install dependencies, and package the environment
+                                    into a runnable image</p>
+                            </div>
+                        </div>
+                        <div class="source-card" id="dockerfile-card" onclick="selectBuildOption('dockerfile')">
+                            <span class="source-icon">🐳</span>
+                            <div class="source-info">
+                                <h4>Dockerfile</h4>
+                                <p>Build a runnable container image for your project. Requires your repository to
+                                    contain a Dockerfile.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buildpack Customization Settings (Collapsible) -->
+                    <div id="wiz-bp-container" style="display: none; margin-top: 1rem; max-width: 600px;">
+                        <div class="collapsible-header" onclick="toggleCollapsible('wiz-buildpack-settings', this)"
+                            style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; background: var(--card-bg); padding: 0.8rem 1.2rem; border-radius: 12px; border: 1px solid var(--card-border); font-weight: 500; font-size: 0.95rem; transition: all 0.3s ease;">
+                            <span class="arrow-icon"
+                                style="transition: transform 0.2s ease; transform: rotate(0deg); display: inline-block; font-size: 0.75rem;">❯</span>
+                            <span>Buildpack ayarlarını özəlləşdirin (Customize Buildpack settings)</span>
+                        </div>
+                        <div id="wiz-buildpack-settings" class="collapsible-content"
+                            style="display: none; padding: 1.2rem; background: rgba(255,255,255,0.01); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-bottom: 1px solid var(--card-border); border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; margin-top: -2px;">
+                            <div class="form-group">
+                                <label>Build command (Override)</label>
+                                <input type="text" id="wiz-bp-build-command" placeholder="Məs: npm run build">
+                            </div>
+                            <div class="form-group">
+                                <label>Run command (Override)</label>
+                                <input type="text" id="wiz-bp-run-command" placeholder="Məs: node dist/index.js">
+                            </div>
+                            <div class="form-group">
+                                <label>Work directory (Override)</label>
+                                <input type="text" id="wiz-bp-work-dir" placeholder="Məs: src">
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="wiz-bp-privileged" style="width: auto;">
+                                <label style="margin-bottom: 0; cursor: pointer;" for="wiz-bp-privileged">Privileged
+                                    mode</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dockerfile Customization Settings (Collapsible) -->
+                    <div id="wiz-df-container" style="display: none; margin-top: 1rem; max-width: 600px;">
+                        <div class="collapsible-header" onclick="toggleCollapsible('wiz-dockerfile-settings', this)"
+                            style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; background: var(--card-bg); padding: 0.8rem 1.2rem; border-radius: 12px; border: 1px solid var(--card-border); font-weight: 500; font-size: 0.95rem; transition: all 0.3s ease;">
+                            <span class="arrow-icon"
+                                style="transition: transform 0.2s ease; transform: rotate(0deg); display: inline-block; font-size: 0.75rem;">❯</span>
+                            <span>Dockerfile ayarlarını özəlləşdirin (Customize Dockerfile settings)</span>
+                        </div>
+                        <div id="wiz-dockerfile-settings" class="collapsible-content"
+                            style="display: none; padding: 1.2rem; background: rgba(255,255,255,0.01); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-bottom: 1px solid var(--card-border); border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; margin-top: -2px;">
+                            <div class="form-group">
+                                <label>Dockerfile location (Override)</label>
+                                <input type="text" id="wiz-df-path" placeholder="Məs: docker/Dockerfile">
+                            </div>
+                            <div class="form-group">
+                                <label>Entrypoint (Override)</label>
+                                <input type="text" id="wiz-df-entrypoint" placeholder="Məs: /bin/sh">
+                            </div>
+                            <div class="form-group">
+                                <label>Command (Override)</label>
+                                <input type="text" id="wiz-df-command" placeholder="Məs: -c 'echo test'">
+                            </div>
+                            <div class="form-group">
+                                <label>Target (Override)</label>
+                                <input type="text" id="wiz-df-target" placeholder="Məs: runner">
+                            </div>
+                            <div class="form-group">
+                                <label>Work directory (Override)</label>
+                                <input type="text" id="wiz-df-work-dir" placeholder="Məs: /app">
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="wiz-df-privileged" style="width: auto;">
+                                <label style="margin-bottom: 0; cursor: pointer;" for="wiz-df-privileged">Privileged
+                                    mode</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="wizard-actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
+                        <button class="btn btn-secondary" onclick="goToStep(2)">Back</button>
+                        <button class="btn btn-primary" onclick="goToStep(4)">Next</button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Configure Service -->
+                <div id="wizard-step-4" class="wizard-step">
+                    <div class="step-progress-bar">
+                        <div class="progress-indicator done">Import project</div>
+                        <div class="progress-indicator done">Build options</div>
+                        <div class="progress-indicator active">Configure service (3 of 3)</div>
+                    </div>
+
+                    <form id="wizard-config-form" onsubmit="handleWizardDeploy(event)"
+                        style="max-width: 600px; background: var(--card-bg); padding: 2rem; border-radius: 16px; border: 1px solid var(--card-border);">
+                        <div class="form-group">
+                            <label>Service Name</label>
+                            <input type="text" id="wiz-app-name" required placeholder="Məs: my-web-app">
+                        </div>
+                        <div class="form-group" id="wiz-branch-group">
+                            <label>Branch (Budaq)</label>
+                            <select id="wiz-app-branch" class="form-control" style="background: #12141e;">
+                                <option value="main">main</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Daxili Port</label>
+                            <input type="number" id="wiz-app-port" required value="8080">
+                        </div>
+                        <div class="form-group">
+                            <label>Hədəf Server</label>
+                            <select id="wiz-app-server" required style="background: #12141e;"
+                                onchange="updateServerStatsAdvisor('wiz-app-server', 'wiz-server-advisor', 'wiz-app-memory', 'wiz-app-cpu')">
+                                <!-- Server list loaded here -->
+                            </select>
+                        </div>
+                        <div id="wiz-server-advisor"
+                            style="display: none; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #cbd5e1;">
+                            <!-- Advisor content dynamically loaded -->
+                        </div>
+                        <div class="form-group">
+                            <label>RAM Limiti (Məs: 512m, 1g)</label>
+                            <input type="text" id="wiz-app-memory" placeholder="Limitsiz (Boş saxlayın)">
+                        </div>
+                        <div class="form-group">
+                            <label>CPU Limiti (Məs: 0.5, 1)</label>
+                            <input type="number" step="0.1" min="0.1" id="wiz-app-cpu"
+                                placeholder="Limitsiz (Boş saxlayın)">
+                            <small style="color: var(--text-secondary); display: block; margin-top: 0.3rem;">Layihəni
+                                yaradarkən serverinizin yuxarıdakı "Server Stats" panelində olan boş limitlərini nəzərə
+                                alın.</small>
+                        </div>
+                        <div class="form-group">
+                            <label>Mühit Dəyişənləri (ENV)</label>
+                            <div id="wiz-env-vars-container"
+                                style="max-height: 200px; overflow-y: auto; margin-bottom: 0.5rem; padding-right: 0.5rem;">
+                                <!-- Dynamic ENV rows will be added here -->
+                            </div>
+                            <button type="button" class="btn btn-secondary" onclick="addWizEnvVarRow()"
+                                style="padding: 0.5rem 1rem; font-size: 0.8rem; border-radius: 6px;">+ Əlavə Et</button>
+                        </div>
+
+                        <div class="wizard-actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
+                            <button type="button" class="btn btn-secondary" onclick="goBackFromConfig()">Back</button>
+                            <button type="submit" class="btn btn-primary">Deploy</button>
+                        </div>
+                    </form>
+                </div>
+        </main>
+    </div>
+
+    <!-- Server Add Modal -->
+    <div id="server-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>🖥️ Yeni Server Əlavə Et</h2>
+            <form id="server-form" onsubmit="handleCreateServer(event)">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Server Adı</label>
+                        <input type="text" id="srv-name" required placeholder="Məs: Oracle Always Free">
+                    </div>
+                    <div class="form-group">
+                        <label>IP Ünvanı (Public IP)</label>
+                        <input type="text" id="srv-ip" required placeholder="Məs: 79.72.95.173">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH İstifadəçi Adı</label>
+                        <input type="text" id="srv-user" required placeholder="Məs: ubuntu">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH Private Key</label>
+                        <textarea id="srv-key" required placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-modal')">Ləğv
+                        Et</button>
+                    <button type="submit" class="btn btn-primary">Yadda Saxla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Server Edit Modal -->
+    <div id="server-edit-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>✏️ Server Ayarlarını Redaktə Et</h2>
+            <form id="server-edit-form" onsubmit="handleUpdateServer(event)">
+                <input type="hidden" id="edit-srv-id">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Server Adı</label>
+                        <input type="text" id="edit-srv-name" required placeholder="Məs: Oracle Always Free">
+                    </div>
+                    <div class="form-group">
+                        <label>IP Ünvanı (Public IP)</label>
+                        <input type="text" id="edit-srv-ip" required placeholder="Məs: 79.72.95.173">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH İstifadəçi Adı</label>
+                        <input type="text" id="edit-srv-user" required placeholder="Məs: ubuntu">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH Private Key</label>
+                        <textarea id="edit-srv-key" required placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-edit-modal')">Ləğv
+                        Et</button>
+                    <button type="submit" class="btn btn-primary">Yadda Saxla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Application Add Modal -->
+    <div id="app-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>🚀 Yeni Layihə Əlavə Et</h2>
+            <form id="app-form" onsubmit="handleCreateApp(event)">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Layihə Adı</label>
+                        <input type="text" id="app-name" required placeholder="Məs: Rust API Backend">
+                    </div>
+                    <div class="form-group">
+                        <label>Repo Mənbəyi</label>
+                        <div class="source-switcher">
+                            <button type="button" class="source-btn active" id="src-manual-btn"
+                                onclick="toggleRepoSource('manual')">✍️ Əl ilə</button>
+                            <button type="button" class="source-btn" id="src-github-btn"
+                                onclick="toggleRepoSource('github')">🐱 GitHub</button>
+                        </div>
+                    </div>
+
+                    <!-- Manual Git Details -->
+                    <div id="git-manual-inputs">
+                        <div class="form-group">
+                            <label>Git Repo URL</label>
+                            <input type="text" id="app-repo" required
+                                placeholder="Məs: https://github.com/user/repo.git">
+                        </div>
+                        <div class="form-group">
+                            <label>Budaq (Branch)</label>
+                            <input type="text" id="app-branch" required value="main">
+                        </div>
+                    </div>
+
+                    <!-- GitHub Auto Details -->
+                    <div id="git-github-inputs" style="display: none;">
+                        <div class="form-group">
+                            <label>Repozitoriya Seçin</label>
+                            <select id="app-repo-select" onchange="handleRepoSelectChange()">
+                                <option value="">Token quraşdırılmayıb</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Budaq Seçin (Branch)</label>
+                            <select id="app-branch-select">
+                                <option value="main">main</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Daxili Port</label>
+                        <input type="number" id="app-port" required value="8080">
+                    </div>
+                    <div class="form-group">
+                        <label>Hədəf Server</label>
+                        <select id="app-server" required
+                            onchange="updateServerStatsAdvisor('app-server', 'app-server-advisor', 'app-memory', 'app-cpu')">
+                            <!-- Server list will load here -->
+                        </select>
+                    </div>
+                    <div id="app-server-advisor"
+                        style="display: none; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #cbd5e1;">
+                        <!-- Advisor content dynamically loaded -->
+                    </div>
+                    <div class="form-group">
+                        <label>RAM Limiti (Məs: 512m, 1g)</label>
+                        <input type="text" id="app-memory" placeholder="Limitsiz (Boş saxlayın)">
+                    </div>
+                    <div class="form-group">
+                        <label>CPU Limiti (Məs: 0.5, 1)</label>
+                        <input type="number" step="0.1" min="0.1" id="app-cpu" placeholder="Limitsiz (Boş saxlayın)">
+                        <small style="color: var(--text-secondary); display: block; margin-top: 0.3rem;">Layihəni
+                            yaradarkən serverinizin yuxarıdakı "Server Stats" panelində olan boş limitlərini nəzərə
+                            alın.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Mühit Dəyişənləri (ENV)</label>
+                        <div id="env-vars-container"
+                            style="max-height: 200px; overflow-y: auto; margin-bottom: 0.5rem; padding-right: 0.5rem;">
+                            <!-- Dynamic ENV rows will be added here via JS -->
+                        </div>
+                        <button type="button" class="btn btn-secondary" onclick="addEnvVarRow()"
+                            style="padding: 0.5rem 1rem; font-size: 0.8rem; border-radius: 6px;">+ Əlavə Et</button>
+                    </div>
+                </div>
+                <div class="item-actions">
+                    <button class="btn btn-primary" onclick="deployApp('${app.id}')">Yayına Al (Deploy)</button>
+                    <button class="btn btn-secondary" onclick="viewLogs('${app.id}')">Loqlar</button>
+                    <button class="btn btn-secondary" onclick="openAppSettings('${app.id}')"
+                        style="background: rgba(255,255,255,0.04);">⚙️ Ayarlar</button>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('app-modal')">Ləğv Et</button>
+                    <button type="submit" class="btn btn-primary">Layihəni Qur</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- GitHub Config Modal -->
+    <div id="github-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>🐱 GitHub Bağlantısı</h2>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.4;">
+                DeployMaster-a özəl və ümumi repozitoriyalarınızı gətirmək üçün GitHub Personal Access Token (PAT) daxil
+                edin.
+            </p>
+
+            <div class="form-group">
+                <label>GitHub Personal Access Token (PAT)</label>
+                <input type="password" id="gh-token" placeholder="ghp_..." style="font-family: monospace;">
+                <small
+                    style="color: var(--text-secondary); display: block; margin-top: 6px; font-size: 0.8rem; line-height: 1.3;">
+                    Token yaratmaq üçün <a href="https://github.com/settings/tokens" target="_blank"
+                        style="color: var(--accent-color); text-decoration: underline;">GitHub Settings</a> səhifəsinə
+                    daxil olun. (Gərəkli icazələr: <code>repo</code>)
+                </small>
+            </div>
+
+            <div class="form-group"
+                style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border); margin-top: 1rem;">
+                <span style="font-size: 0.9rem; color: var(--text-secondary);">Bağlantı Statusu:</span>
+                <strong id="gh-status" style="margin-left: 0.5rem; color: #94a3b8;">Məlumat yoxdur</strong>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('github-modal')">Ləğv Et</button>
+                <button type="button" class="btn btn-primary" onclick="saveGithubToken()">Yadda Saxla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Center Modal -->
+    <div id="help-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 800px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">📚 Kömək Mərkəzi və Versiya Tarixçəsi</h2>
+                <button onclick="closeModal('help-modal')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
+            </div>
+            <div style="padding: 0;">
+                <div style="display: flex; border-bottom: 1px solid var(--card-border);">
+                    <button class="help-tab-btn active" onclick="switchHelpTab('help-changelog')" style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-primary); cursor: pointer; border-bottom: 2px solid var(--primary-color);">Yeniliklər (Changelog)</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-about')" style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Proqram Haqqında</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-external')" style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Xarici Server</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-local')" style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Lokal Server</button>
+                </div>
+                <div style="padding: 20px; max-height: 500px; overflow-y: auto;">
+                    <div id="help-changelog" class="help-tab-content">Yüklənir...</div>
+                    <div id="help-about" class="help-tab-content" style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">Yüklənir...</div>
+                    <div id="help-external" class="help-tab-content" style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">Yüklənir...</div>
+                    <div id="help-local" class="help-tab-content" style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">Yüklənir...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Card Modal -->
+    <div id="confirm-card-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9998; align-items:center; justify-content:center; backdrop-filter:blur(6px);">
+        <div style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 28px; max-width: 440px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+            <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 16px;">
+                <span id="confirm-card-icon" style="font-size:1.8rem;">🔄</span>
+                <div>
+                    <h3 id="confirm-card-title" style="margin:0; font-size:1.1rem; color: var(--text-primary);">Əminsiniz?</h3>
+                    <p id="confirm-card-subtitle" style="margin:4px 0 0; font-size:0.8rem; color: var(--text-secondary);"></p>
+                </div>
+            </div>
+            <div id="confirm-card-body" style="font-size:0.85rem; color: var(--text-secondary); background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 20px; line-height: 1.6;"></div>
+            <div id="confirm-card-warning" style="display:none; background: rgba(255,165,0,0.1); border: 1px solid rgba(255,165,0,0.3); border-radius: 8px; padding: 10px 12px; margin-bottom: 20px; font-size: 0.8rem; color: #ffaa00;"></div>
+            <div style="display:flex; justify-content:flex-end; gap: 10px;">
+                <button id="confirm-card-no" class="btn btn-secondary" style="padding: 8px 20px;">Ləğv Et</button>
+                <button id="confirm-card-yes" class="btn btn-primary" style="padding: 8px 20px;">Təsdiqlə</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Update Modal -->
+    <div id="system-update-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 600px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem;">🔄 Versiyalar</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Yeni versiyaya keç və ya köhnəyə qayıt</p>
+                </div>
+                <button onclick="closeModal('system-update-modal')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">✕</button>
+            </div>
+            <div id="version-cards-list" style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
+                <div style="text-align:center; padding: 20px; color: var(--text-secondary);">Yüklənir...</div>
+            </div>
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border);">
+                <button class="btn btn-secondary" onclick="closeModal('system-update-modal')">Bağla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fəaliyyət Jurnalı Modal -->
+    <div id="activity-log-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 500px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem;">📋 Fəaliyyət Jurnalı</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Panel daxilində icra edilmiş hərəkətlər</p>
+                </div>
+                <button onclick="closeModal('activity-log-modal')" style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='transparent'">✕</button>
+            </div>
+            <div id="activity-log-list" style="max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; padding-bottom: 10px;">
+                <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>
+            </div>
+            <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border);">
+                <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important;">🧹 Jurnalı Təmizlə</button>
+                <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')">Bağla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Files -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="app.js"></script>
+</body>
+
+</html>
