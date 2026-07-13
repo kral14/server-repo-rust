@@ -152,14 +152,21 @@ pub async fn start_cloudflare_tunnel(
                     }
 
                     if let Some(ref url) = cloudflare_url {
+                        println!("[TUNNEL] Uğurla yeni tunel linki tapıldı: {}", url);
                         let _ = sqlx::query("UPDATE applications SET cloudflare_url = ? WHERE id = ?")
                             .bind(url)
                             .bind(&app_id_clone)
                             .execute(&db_clone)
                             .await;
                         
-                        let _ = send_url_to_kv(&db_clone, &app_name_clone, cf_worker_url_clone.clone(), url).await;
+                        println!("[TUNNEL] Link KV bazasına (Cloudflare) yazılmağa göndərilir...");
+                        match send_url_to_kv(&db_clone, &app_name_clone, cf_worker_url_clone.clone(), url).await {
+                            Ok(_) => println!("[TUNNEL] Link uğurla Cloudflare KV yaddaşına yazıldı!"),
+                            Err(e) => eprintln!("[TUNNEL ERROR] Linki KV yaddaşına yazarkən xəta baş verdi: {}", e),
+                        }
                         break;
+                    } else {
+                        println!("[TUNNEL] Tunel linki axtarılır... (Nəticə hələ tapılmayıb)");
                     }
                 }
             }
@@ -171,10 +178,32 @@ pub async fn start_cloudflare_tunnel(
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
+use std::sync::Mutex;
+use std::time::{Instant, Duration};
+
+static LOG_CACHE: std::sync::OnceLock<Mutex<std::collections::HashMap<String, (String, Option<String>, Instant)>>> = std::sync::OnceLock::new();
+
+fn get_cache() -> &'static Mutex<std::collections::HashMap<String, (String, Option<String>, Instant)>> {
+    LOG_CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
 pub async fn get_cloudflare_tunnel_logs(
     State(state): State<AppState>,
     AxumPath(app_id): AxumPath<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let cache = get_cache();
+    {
+        let lock = cache.lock().unwrap();
+        if let Some((cached_logs, cached_url, last_time)) = lock.get(&app_id) {
+            if last_time.elapsed() < Duration::from_secs(8) {
+                return Ok(Json(serde_json::json!({
+                    "logs": cached_logs,
+                    "cloudflare_url": cached_url
+                })));
+            }
+        }
+    }
+
     let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
         .bind(&app_id)
         .fetch_optional(&state.db)
@@ -235,7 +264,7 @@ pub async fn get_cloudflare_tunnel_logs(
                 .args(&[
                     "-o", "StrictHostKeyChecking=no",
                     "-o", "BatchMode=yes",
-                    "-o", "ConnectTimeout=2",
+                    "-o", "ConnectTimeout=8",
                     "-i", &temp_key_path,
                     &format!("{}@{}", server.ssh_user, server.ip),
                     &bash_cmd
@@ -244,19 +273,18 @@ pub async fn get_cloudflare_tunnel_logs(
                 .await
         };
 
-        let output_res = tokio::time::timeout(std::time::Duration::from_millis(10000), run_future).await;
+        let output_res = tokio::time::timeout(std::time::Duration::from_millis(20000), run_future).await;
         let _ = std::fs::remove_file(&temp_key_path);
         
         let out = match output_res {
             Ok(Ok(out)) => out,
             _ => {
-                return Err((StatusCode::INTERNAL_SERVER_ERROR, "SSH tunnel log request timed out (10s)".to_string()));
+                return Err((StatusCode::INTERNAL_SERVER_ERROR, "SSH tunnel log request timed out (20s)".to_string()));
             }
         };
         String::from_utf8_lossy(&out.stdout).to_string() + "\n" + &String::from_utf8_lossy(&out.stderr)
     };
 
-    // Extract trycloudflare URL
     let mut cloudflare_url = None;
     for line in output_str.lines() {
         if line.contains(".trycloudflare.com") {
@@ -271,14 +299,21 @@ pub async fn get_cloudflare_tunnel_logs(
     }
 
     if let Some(ref url) = cloudflare_url {
-        let _ = sqlx::query("UPDATE applications SET cloudflare_url = ? WHERE id = ?")
-            .bind(url)
-            .bind(&app_id)
-            .execute(&state.db)
-            .await;
-        
-        // Həmçinin Cloudflare KV-yə göndərilir (layihənin adı və ya worker subdomaini ilə)
-        let _ = send_url_to_kv(&state.db, &app.name, app.cf_worker_url.clone(), url).await;
+        let should_update = app.cloudflare_url.is_none() || app.cloudflare_url.as_ref().unwrap() != url;
+        if should_update {
+            let _ = sqlx::query("UPDATE applications SET cloudflare_url = ? WHERE id = ?")
+                .bind(url)
+                .bind(&app_id)
+                .execute(&state.db)
+                .await;
+            
+            let _ = send_url_to_kv(&state.db, &app.name, app.cf_worker_url.clone(), url).await;
+        }
+    }
+
+    {
+        let mut lock = cache.lock().unwrap();
+        lock.insert(app_id.clone(), (output_str.clone(), cloudflare_url.clone(), Instant::now()));
     }
 
     Ok(Json(serde_json::json!({
@@ -461,37 +496,52 @@ async fn send_url_to_kv(db: &sqlx::SqlitePool, app_name: &str, cf_worker_url: Op
         .await
         .unwrap_or_default();
 
-    if let (Some(token), Some(acc), Some(kv)) = (api_token, account_id, kv_id) {
-        if !token.is_empty() && !acc.is_empty() && !kv.is_empty() {
-            if let Ok(client) = reqwest::Client::builder().timeout(std::time::Duration::from_secs(8)).build() {
-                let mut keys_to_write = vec![app_name.to_string()];
-                
-                if let Some(worker_url) = cf_worker_url {
-                    let clean_url = worker_url
-                        .trim()
-                        .trim_start_matches("https://")
-                        .trim_start_matches("http://");
-                    if let Some(subdomain) = clean_url.split('.').next() {
-                        if !subdomain.is_empty() && subdomain != app_name {
-                            keys_to_write.push(subdomain.to_string());
-                        }
-                    }
-                }
+    let token = api_token.filter(|t| !t.is_empty())
+        .ok_or_else(|| "Cloudflare API Token tapılmadı (ayarlar boşdur)!".to_string())?;
+    let acc = account_id.filter(|a| !a.is_empty())
+        .ok_or_else(|| "Cloudflare Account ID tapılmadı (ayarlar boşdur)!".to_string())?;
+    let kv = kv_id.filter(|k| !k.is_empty())
+        .ok_or_else(|| "Cloudflare KV Namespace ID tapılmadı (ayarlar boşdur)!".to_string())?;
 
-                for key in keys_to_write {
-                    let kv_url = format!(
-                        "https://api.cloudflare.com/client/v4/accounts/{}/storage/kv/namespaces/{}/values/{}",
-                        acc, kv, key
-                    );
-                    let _ = client.put(&kv_url)
-                        .bearer_auth(&token)
-                        .header("Content-Type", "text/plain")
-                        .body(url.to_string())
-                        .send()
-                        .await;
-                }
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8))
+        .build()
+        .map_err(|e| format!("reqwest client yaradıla bilmədi: {}", e))?;
+
+    let mut keys_to_write = vec![app_name.to_string()];
+    
+    if let Some(worker_url) = cf_worker_url {
+        let clean_url = worker_url
+            .trim()
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        if let Some(subdomain) = clean_url.split('.').next() {
+            if !subdomain.is_empty() && subdomain != app_name {
+                keys_to_write.push(subdomain.to_string());
             }
         }
+    }
+
+    for key in keys_to_write {
+        let kv_url = format!(
+            "https://api.cloudflare.com/client/v4/accounts/{}/storage/kv/namespaces/{}/values/{}",
+            acc, kv, key
+        );
+        println!("[KV UPDATE] Key: '{}' üçün Cloudflare API-yə PUT sorğusu göndərilir...", key);
+        let res = client.put(&kv_url)
+            .bearer_auth(&token)
+            .header("Content-Type", "text/plain")
+            .body(url.to_string())
+            .send()
+            .await
+            .map_err(|e| format!("Cloudflare KV API-yə qoşulma xətası: {}", e))?;
+
+        if !res.status().is_success() {
+            let status = res.status();
+            let err_text = res.text().await.unwrap_or_default();
+            return Err(format!("Cloudflare API xətası (status {}): {}", status, err_text));
+        }
+        println!("[KV UPDATE] Key: '{}' uğurla yeniləndi (200 OK).", key);
     }
     Ok(())
 }

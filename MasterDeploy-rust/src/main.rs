@@ -333,6 +333,321 @@ async fn get_server_stats(
     Ok(Json(stats))
 }
 
+async fn sync_remote_applications(db: &sqlx::SqlitePool, server: &Server, temp_key_path: &str) -> Result<usize, String> {
+    println!("[SYNC] '{}' (IP: {}) serverində layihə axtarışı başladıldı...", server.name, server.ip);
+    
+    let cmd = "CONTAINER_NAME=$(sudo docker ps --format \"{{.Names}} {{.Image}}\" | grep \"server-repo-rust\" | awk '{print $1}' | head -n 1); \
+               if [ -z \"$CONTAINER_NAME\" ]; then CONTAINER_NAME=$(sudo docker ps --format \"{{.Names}}\" | grep \"masterdeploy\" | head -n 1); fi; \
+               if [ -n \"$CONTAINER_NAME\" ]; then \
+                   sudo docker exec $CONTAINER_NAME sqlite3 -json /app/data/masterdeploy.db \"SELECT id, name, repo_url, branch, port, env_vars, build_pack_type, build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, privileged, memory_limit, cpu_limit, cloudflare_url, cf_worker_url, deploy_type, registry_image FROM applications\" 2>/dev/null; \
+               else \
+                   if [ -f \"/data/masterdeploy/masterdeploy.db\" ]; then \
+                       sqlite3 -json /data/masterdeploy/masterdeploy.db \"SELECT id, name, repo_url, branch, port, env_vars, build_pack_type, build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, privileged, memory_limit, cpu_limit, cloudflare_url, cf_worker_url, deploy_type, registry_image FROM applications\" 2>/dev/null; \
+                   elif [ -f \"masterdeploy.db\" ]; then \
+                       sqlite3 -json masterdeploy.db \"SELECT id, name, repo_url, branch, port, env_vars, build_pack_type, build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, privileged, memory_limit, cpu_limit, cloudflare_url, cf_worker_url, deploy_type, registry_image FROM applications\" 2>/dev/null; \
+                   fi; \
+               fi";
+    
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+    
+    let output = if server.ip == "local" || server.ip == "127.0.0.1" {
+        println!("[SYNC] Local Host üçün uzaqdan skan tələb olunmur.");
+        return Ok(0);
+    } else {
+        println!("[SYNC] SSH vasitəsilə uzaq serverə sorğu göndərilir...");
+        tokio::process::Command::new(ssh_bin)
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=15",
+                "-i", temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                cmd
+            ])
+            .output()
+            .await
+            .map_err(|e| {
+                let err_msg = format!("[SYNC ERROR] SSH prosesini başlatmaq mümkün olmadı: {}", e);
+                eprintln!("{}", err_msg);
+                err_msg
+            })?
+    };
+
+    let mut apps: Vec<serde_json::Value> = Vec::new();
+    let stdout_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    println!("[SYNC DEBUG] Uzaq serverdən gələn stdout: '{}'", stdout_str);
+
+    if output.status.success() && !stdout_str.is_empty() && stdout_str.starts_with('[') {
+        if let Ok(v) = serde_json::from_str::<Vec<serde_json::Value>>(&stdout_str) {
+            apps = v;
+        }
+    }
+
+    // Əgər uzaq serverdə masterdeploy tapılmadısa və ya boşdursa, mərkəzi server (84.8.148.216) üzərindən cəhd edirik
+    if apps.is_empty() {
+        println!("[SYNC] Uzaq serverin özündə MasterDeploy verilənlər bazası tapılmadı. Mərkəzi veritabanı (84.8.148.216) yoxlanılır...");
+        
+        let central_row: Option<(String, String, String, String)> = sqlx::query_as(
+            "SELECT name, ip, ssh_user, ssh_key FROM servers WHERE ip = '84.8.148.216' OR (ip != 'local' AND ip != ?) LIMIT 1"
+        )
+        .bind(&server.ip)
+        .fetch_optional(db)
+        .await
+        .unwrap_or(None);
+
+        if let Some((c_name, c_ip, c_ssh_user, c_ssh_key)) = central_row {
+            println!("[SYNC] Mərkəzi MasterDeploy serveri aşkar edildi: '{}' (IP: {}). Sorğu göndərilir...", c_name, c_ip);
+            let c_temp_key_path = format!("temp_central_key_{}.key", uuid::Uuid::new_v4());
+            let c_key_content = if c_ssh_key.contains("BEGIN ") {
+                c_ssh_key.clone()
+            } else {
+                std::fs::read_to_string(c_ssh_key.trim()).unwrap_or_else(|_| c_ssh_key.clone())
+            };
+
+            if std::fs::write(&c_temp_key_path, &c_key_content).is_ok() {
+                #[cfg(target_os = "windows")]
+                {
+                    let domain = std::env::var("USERDOMAIN").unwrap_or_default();
+                    let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+                    let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+                    let _ = std::process::Command::new("icacls").args(&[&c_temp_key_path, "/inheritance:r"]).output();
+                    let _ = std::process::Command::new("icacls").args(&[&c_temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+                }
+
+                // Mərkəzi serverdən yoxlanılan serverin IP-sinə görə layihələri sorğulayırıq
+                let central_cmd = format!(
+                    "CONTAINER_NAME=$(sudo docker ps --format \"{{.Names}} {{.Image}}\" | grep \"server-repo-rust\" | awk '{{print $1}}' | head -n 1); \
+                     if [ -z \"$CONTAINER_NAME\" ]; then CONTAINER_NAME=$(sudo docker ps --format \"{{.Names}}\" | grep \"masterdeploy\" | head -n 1); fi; \
+                     if [ -n \"$CONTAINER_NAME\" ]; then \
+                         sudo docker exec $CONTAINER_NAME sqlite3 -json /app/data/masterdeploy.db \"SELECT a.id, a.name, a.repo_url, a.branch, a.port, a.env_vars, a.build_pack_type, a.build_command, a.run_command, a.dockerfile_path, a.entrypoint, a.command, a.target, a.work_dir, a.privileged, a.memory_limit, a.cpu_limit, a.cloudflare_url, a.cf_worker_url, a.deploy_type, a.registry_image, s.ip AS server_ip FROM applications a LEFT JOIN servers s ON a.server_id = s.id WHERE s.ip = '{}' OR s.ip = 'local'\" 2>/dev/null; \
+                     fi",
+                    server.ip
+                );
+
+                let c_output = tokio::process::Command::new(ssh_bin)
+                    .args(&[
+                        "-o", "StrictHostKeyChecking=no",
+                        "-o", "BatchMode=yes",
+                        "-o", "ConnectTimeout=15",
+                        "-i", &c_temp_key_path,
+                        &format!("{}@{}", c_ssh_user, c_ip),
+                        &central_cmd
+                    ])
+                    .output()
+                    .await;
+
+                let _ = std::fs::remove_file(&c_temp_key_path);
+
+                if let Ok(out) = c_output {
+                    if out.status.success() {
+                        let c_stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                        if !c_stdout.is_empty() && c_stdout.starts_with('[') {
+                            if let Ok(v) = serde_json::from_str::<Vec<serde_json::Value>>(&c_stdout) {
+                                println!("[SYNC] Mərkəzi serverdən bu serverə ({}) aid {} layihə uğurla çəkildi!", server.ip, v.len());
+                                apps = v;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut imported_count = 0;
+    println!("[SYNC] Cəmi {} layihə emal edilir. Lokal verilənlər bazası ilə müqayisə edilir...", apps.len());
+    for app in apps {
+        let id = match app["id"].as_str() {
+            Some(v) => v.to_string(),
+            None => continue,
+        };
+        let name = app["name"].as_str().unwrap_or("Unnamed App").to_string();
+        let repo_url = app["repo_url"].as_str().unwrap_or("").to_string();
+        let branch = app["branch"].as_str().unwrap_or("main").to_string();
+        let port = app["port"].as_i64().unwrap_or(80) as i32;
+        let env_vars = app["env_vars"].as_str().map(|s| s.to_string());
+        let build_pack_type = app["build_pack_type"].as_str().unwrap_or("dockerfile").to_string();
+        let build_command = app["build_command"].as_str().map(|s| s.to_string());
+        let run_command = app["run_command"].as_str().map(|s| s.to_string());
+        let dockerfile_path = app["dockerfile_path"].as_str().map(|s| s.to_string());
+        let entrypoint = app["entrypoint"].as_str().map(|s| s.to_string());
+        let command = app["command"].as_str().map(|s| s.to_string());
+        let target = app["target"].as_str().map(|s| s.to_string());
+        let work_dir = app["work_dir"].as_str().map(|s| s.to_string());
+        let privileged = app["privileged"].as_i64().unwrap_or(0) as i32;
+        let memory_limit = app["memory_limit"].as_str().map(|s| s.to_string());
+        let cpu_limit = app["cpu_limit"].as_f64();
+        let cloudflare_url = app["cloudflare_url"].as_str().map(|s| s.to_string());
+        let cf_worker_url = app["cf_worker_url"].as_str().map(|s| s.to_string());
+        let deploy_type = app["deploy_type"].as_str().unwrap_or("git").to_string();
+        let registry_image = app["registry_image"].as_str().map(|s| s.to_string());
+        let server_ip = app["server_ip"].as_str().unwrap_or(&server.ip).to_string();
+        let target_server_id = if server_ip == "local" {
+            "local-server-id".to_string()
+        } else {
+            let row_res: Option<(String,)> = sqlx::query_as("SELECT id FROM servers WHERE ip = ?")
+                .bind(&server_ip)
+                .fetch_optional(db)
+                .await
+                .unwrap_or(None);
+            row_res.map(|r| r.0).unwrap_or_else(|| server.id.clone())
+        };
+
+        let mut exists: Option<(String,)> = sqlx::query_as("SELECT id FROM applications WHERE id = ?")
+            .bind(&id)
+            .fetch_optional(db)
+            .await
+            .unwrap_or(None);
+
+        if exists.is_none() {
+            let by_name: Option<(String,)> = sqlx::query_as("SELECT id FROM applications WHERE name = ?")
+                .bind(&name)
+                .fetch_optional(db)
+                .await
+                .unwrap_or(None);
+            if let Some((old_id,)) = by_name {
+                println!("[SYNC] '{}' layihəsinin ID-si fərqlidir (Lokal: {}, Mərkəzi: {}). Köhnə qeyd silinir...", name, old_id, &id);
+                let _ = sqlx::query("DELETE FROM applications WHERE id = ?").bind(&old_id).execute(db).await;
+                exists = None;
+            }
+        }
+
+        if exists.is_none() {
+            println!("[SYNC] Yeni layihə tapıldı. Lokal bazaya yazılır: '{}' (ID: {}, Server IP: {})", name, id, server_ip);
+            let _ = sqlx::query(
+                "INSERT INTO applications (id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, privileged, memory_limit, cpu_limit, cloudflare_url, cf_worker_url, deploy_type, registry_image) \
+                 VALUES (?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            )
+            .bind(&id)
+            .bind(&name)
+            .bind(&repo_url)
+            .bind(&branch)
+            .bind(port)
+            .bind(&target_server_id)
+            .bind(env_vars)
+            .bind(build_pack_type)
+            .bind(build_command)
+            .bind(run_command)
+            .bind(dockerfile_path)
+            .bind(entrypoint)
+            .bind(command)
+            .bind(target)
+            .bind(work_dir)
+            .bind(privileged)
+            .bind(memory_limit)
+            .bind(cpu_limit)
+            .bind(cloudflare_url)
+            .bind(cf_worker_url)
+            .bind(deploy_type)
+            .bind(registry_image)
+            .execute(db)
+            .await;
+            
+            imported_count += 1;
+        } else {
+            println!("[SYNC] '{}' layihəsi artıq lokal bazada mövcuddur. Mərkəzi bazadakı server və cloudflare/worker linkləri yenilənir...", name);
+            let _ = sqlx::query(
+                "UPDATE applications SET server_id = ?, cloudflare_url = ?, cf_worker_url = ?, repo_url = ?, branch = ?, port = ?, env_vars = ?, deploy_type = ?, registry_image = ? WHERE id = ? OR name = ?"
+            )
+            .bind(&target_server_id)
+            .bind(&cloudflare_url)
+            .bind(&cf_worker_url)
+            .bind(&repo_url)
+            .bind(&branch)
+            .bind(port)
+            .bind(&env_vars)
+            .bind(&deploy_type)
+            .bind(&registry_image)
+            .bind(&id)
+            .bind(&name)
+            .execute(db)
+            .await;
+        }
+    }
+    
+    // Həmçinin uzaq serverdəki aktiv docker konteynerlərini skan edirik (Auto-Discover)
+    println!("[SYNC] Uzaq serverdəki digər işlək Docker konteynerləri skan edilir...");
+    let docker_ps_cmd = "sudo docker ps --format \"{{.Names}}|{{.Image}}|{{.Ports}}|{{.State}}\"";
+    let ps_output = if server.ip == "local" || server.ip == "127.0.0.1" {
+        return Ok(imported_count);
+    } else {
+        tokio::process::Command::new(ssh_bin)
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=15",
+                "-i", temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                docker_ps_cmd
+            ])
+            .output()
+            .await
+            .unwrap_or_else(|_| output.clone())
+    };
+
+    if ps_output.status.success() {
+        let ps_str = String::from_utf8_lossy(&ps_output.stdout).trim().to_string();
+        for line in ps_str.lines() {
+            let parts: Vec<&str> = line.split('|').collect();
+            if parts.len() >= 4 {
+                let name = parts[0].trim();
+                let image = parts[1].trim();
+                let ports_str = parts[2].trim();
+                let state_str = parts[3].trim();
+
+                if name == "masterdeploy" || name == "portainer" || name == "masterdeploy-updater" || name.is_empty() {
+                    continue;
+                }
+
+                let exists: Option<(String,)> = sqlx::query_as("SELECT id FROM applications WHERE name = ?")
+                    .bind(name)
+                    .fetch_optional(db)
+                    .await
+                    .unwrap_or(None);
+
+                if exists.is_none() {
+                    println!("[SYNC] Yeni Docker konteyneri aşkar edildi! Lokal bazaya layihə kimi idxal olunur: '{}'", name);
+                    let new_id = uuid::Uuid::new_v4().to_string();
+                    let port_num = if ports_str.is_empty() {
+                        80
+                    } else {
+                        let mut p_val = 80;
+                        if let Some(colon_idx) = ports_str.rfind(':') {
+                            let rest = &ports_str[colon_idx+1..];
+                            if let Some(arrow_idx) = rest.find("->") {
+                                if let Ok(p) = rest[..arrow_idx].trim().parse::<i32>() {
+                                    p_val = p;
+                                }
+                            }
+                        }
+                        p_val
+                    };
+
+                    let _ = sqlx::query(
+                        "INSERT INTO applications (id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, privileged, memory_limit, cpu_limit, cloudflare_url, cf_worker_url, deploy_type, registry_image) \
+                         VALUES (?, ?, ?, 'main', ?, ?, ?, NULL, 'dockerfile', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, 'image', ?)"
+                    )
+                    .bind(&new_id)
+                    .bind(name)
+                    .bind(image)
+                    .bind(port_num)
+                    .bind(&server.id)
+                    .bind(if state_str.contains("running") { "running" } else { "stopped" })
+                    .bind(image)
+                    .execute(db)
+                    .await;
+
+                    imported_count += 1;
+                } else {
+                    println!("[SYNC] '{}' konteyneri artıq lokal bazada mövcuddur. İdxal edilmədi.", name);
+                }
+            }
+        }
+    }
+    
+    println!("[SYNC] Sinxronizasiya tamamlandı! Cəmi {} yeni layihə lokal bazaya əlavə edildi.", imported_count);
+    Ok(imported_count)
+}
+
 async fn check_server_connection(
     State(state): State<AppState>,
     AxumPath(server_id): AxumPath<String>,
@@ -400,7 +715,6 @@ async fn check_server_connection(
     };
 
     let output_res = tokio::time::timeout(std::time::Duration::from_secs(5), run_future).await;
-    let _ = std::fs::remove_file(&temp_key_path);
  
     let output = match output_res {
         Ok(Ok(out)) => Ok(out),
@@ -408,11 +722,18 @@ async fn check_server_connection(
         Err(_) => Err("Qoşulma limiti aşdı (Timeout 5s). Serverə qoşulmaq mümkün olmadı.".to_string())
     };
 
-    match output {
+    let result = match output {
         Ok(out) if out.status.success() => {
+            let mut sync_message = String::new();
+            if let Ok(count) = sync_remote_applications(&state.db, &server, &temp_key_path).await {
+                if count > 0 {
+                    sync_message = format!(" Həmçinin uzaq serverdən {} yeni layihə sinxronlaşdırıldı!", count);
+                }
+            }
+
             Ok(Json(serde_json::json!({
                 "success": true,
-                "message": "Connection successful!"
+                "message": format!("Connection successful!{}", sync_message)
             })))
         }
         Ok(out) => {
@@ -430,7 +751,10 @@ async fn check_server_connection(
                 "error": format!("Failed to spawn SSH process: {}", e)
             })))
         }
-    }
+    };
+
+    let _ = std::fs::remove_file(&temp_key_path);
+    result
 }
 
 async fn list_server_volumes(
@@ -1834,14 +2158,17 @@ async fn trigger_deployment_impl(
             update_logs_helper(&db_clone, &deploy_id, &lock).await;
         }
         
-        // Köhnə konteynerin işlətdiyi imicin SHA məlumatını çəkirik
-        let inspect_old_cmd = format!("sudo docker inspect --format '{{{{.Image}}}}' {} 2>/dev/null || echo 'Tapılmadı'", app.name);
+        // Köhnə konteynerin işlətdiyi imicin SHA və Tarix məlumatını çəkirik
+        let inspect_old_cmd = format!(
+            "sudo docker inspect --format 'SHA: {{{{.Image}}}} | İmic: {{{{.Config.Image}}}} | Yaradılma: {{{{.Created}}}} | Başlama: {{{{.State.StartedAt}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
+            app.name
+        );
         let old_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
         let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_old_cmd, db_clone.clone(), deploy_id.clone(), old_image_logs.clone()).await;
-        let old_image_sha = old_image_logs.lock().await.trim().to_string();
-        if !old_image_sha.is_empty() && old_image_sha != "Tapılmadı" {
+        let old_image_info = old_image_logs.lock().await.trim().to_string();
+        if !old_image_info.is_empty() && old_image_info != "Tapılmadı" {
             let mut lock = logs.lock().await;
-            lock.push_str(&format!("[INFO] Silinən köhnə versiya (Image SHA): {}\n", old_image_sha));
+            lock.push_str(&format!("[INFO] Köhnə versiya məlumatı:\n  {}\n", old_image_info));
             update_logs_helper(&db_clone, &deploy_id, &lock).await;
         }
 
@@ -1859,19 +2186,22 @@ async fn trigger_deployment_impl(
             update_logs_helper(&db_clone, &deploy_id, &lock).await;
         }
 
-        // Yeni qurulan imicin SHA məlumatını çəkirik
+        // Yeni qurulan imicin SHA və Tarix məlumatını çəkirik
         let image_target_inspect = if deploy_type == "image" {
             app.registry_image.clone().unwrap_or_else(|| format!("{}:latest", app.name))
         } else {
             format!("{}:latest", app.name)
         };
-        let inspect_new_cmd = format!("sudo docker image inspect --format '{{{{.Id}}}}' {} 2>/dev/null || echo 'Tapılmadı'", image_target_inspect);
+        let inspect_new_cmd = format!(
+            "sudo docker image inspect --format 'SHA: {{{{.Id}}}} | Yaradılma: {{{{.Created}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
+            image_target_inspect
+        );
         let new_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
         let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_new_cmd, db_clone.clone(), deploy_id.clone(), new_image_logs.clone()).await;
-        let new_image_sha = new_image_logs.lock().await.trim().to_string();
-        if !new_image_sha.is_empty() && new_image_sha != "Tapılmadı" {
+        let new_image_info = new_image_logs.lock().await.trim().to_string();
+        if !new_image_info.is_empty() && new_image_info != "Tapılmadı" {
             let mut lock = logs.lock().await;
-            lock.push_str(&format!("[INFO] Qurulan yeni versiya (Image SHA): {}\n", new_image_sha));
+            lock.push_str(&format!("[INFO] Qurulan yeni versiya məlumatı:\n  {}\n", new_image_info));
             update_logs_helper(&db_clone, &deploy_id, &lock).await;
         }
         
@@ -2252,8 +2582,9 @@ async fn request_logger(
     let method = req.method().clone();
     let path = req.uri().path().to_string();
     
-    // Statik fayllar (assets, JS, CSS) üçün çoxlu loq yazılmasının qarşısını alırıq
-    let is_api = path.starts_with("/api");
+    // Statik fayllar və çox tez-tez çağırılan stats/logs üçün loq yazılmasını dayandırırıq
+    let is_noisy = path.contains("/stats") || path.contains("/logs");
+    let is_api = path.starts_with("/api") && !is_noisy;
     
     let start = std::time::Instant::now();
     let response = next.run(req).await;
