@@ -1239,6 +1239,24 @@ fi;
             if install_dir.endswith(':') or install_dir.endswith(':\\') or install_dir.endswith(':/'):
                 install_dir = os.path.join(install_dir, "Docker")
                 
+            possible_paths = [
+                "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
+                os.path.join(install_dir, "Docker\\resources\\bin\\docker.exe"),
+                os.path.join(install_dir, "resources\\bin\\docker.exe")
+            ]
+            docker_exists = any(os.path.exists(p) for p in possible_paths)
+            if not docker_exists:
+                try:
+                    subprocess.run(["docker", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    docker_exists = True
+                except:
+                    pass
+            
+            force_install = False
+            if docker_exists:
+                if messagebox.askyesno("Docker Desktop Mövcuddur", "Docker Desktop artıq sistemdə tapıldı.\nYenə də seçilmiş qovluğa (" + install_dir + ") yenidən quraşdırmaq istəyirsiniz?"):
+                    force_install = True
+                
             self.log_local(f"\n--- YERLİ WINDOWS DOCKER QURAŞDIRILMASI BAŞLADI ---")
             self.log_local(f"Seçilmiş hədəf qovluq: {install_dir}")
             self.gui.toggle_local_buttons(tk.DISABLED)
@@ -1246,25 +1264,7 @@ fi;
             def task():
                 try:
                     installer_path = None
-                    docker_exists = False
-                    possible_paths = [
-                        "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
-                        os.path.join(install_dir, "Docker\\resources\\bin\\docker.exe"),
-                        os.path.join(install_dir, "resources\\bin\\docker.exe")
-                    ]
-                    for p in possible_paths:
-                        if os.path.exists(p):
-                            docker_exists = True
-                            break
-                            
-                    if not docker_exists:
-                        try:
-                            subprocess.run(["docker", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-                            docker_exists = True
-                        except:
-                            pass
-                            
-                    if docker_exists:
+                    if docker_exists and not force_install:
                         self.log_local("✅ Docker Desktop artıq sistemdə mövcuddur. Yenidən quraşdırılma atlanır.")
                     else:
                         installer_path = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "DockerDesktopInstaller.exe")
