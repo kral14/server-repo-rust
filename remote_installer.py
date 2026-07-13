@@ -1280,6 +1280,18 @@ fi;
                         urllib.request.urlretrieve(url, installer_path, reporthook=download_progress)
                         self.log_local("✅ Docker Desktop Installer uğurla yükləndi!")
 
+                        if force_install:
+                            self.log_local("⚠️ Köhnə Docker xidmətləri dayandırılır və qovluqlar təmizlənir...")
+                            subprocess.run(["taskkill", "/F", "/IM", "Docker Desktop.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            subprocess.run(["net", "stop", "com.docker.service"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                            import shutil
+                            for path_to_clean in ["C:\\ProgramData\\DockerDesktop", "C:\\Program Files\\Docker"]:
+                                if os.path.exists(path_to_clean):
+                                    try:
+                                        shutil.rmtree(path_to_clean, ignore_errors=True)
+                                    except:
+                                        pass
+
                         self.log_local(f"2. Docker Desktop səssiz rejimdə {install_dir} qovluğuna quraşdırılır...")
                         install_cmd = [installer_path, "install", f"--installation-dir={install_dir}", "--accept-license", "--quiet"]
                         proc = subprocess.run(install_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
