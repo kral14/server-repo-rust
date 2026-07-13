@@ -2005,13 +2005,21 @@ async fn trigger_deployment_impl(
                 .unwrap_or_default();
             let github_token = token_row.map(|r| r.0).unwrap_or_default();
 
-            let login_prefix = if !github_token.is_empty() {
-                format!("echo '{}' | sudo docker login ghcr.io -u oauth2 --password-stdin && ", github_token)
+            let login_cmd = if !github_token.is_empty() {
+                format!("echo '{}' | sudo docker login ghcr.io -u kral14 --password-stdin", github_token)
             } else {
-                "".to_string()
+                "echo '[INFO] GitHub token tapılmadı, anonim pull cəhdi edilir...'".to_string()
             };
 
-            let pull_cmd = format!("{}sudo docker pull {}", login_prefix, reg_img);
+            {
+                let mut lock = logs.lock().await;
+                lock.push_str("[DEBUG] GHCR-a daxil olunur (docker login)...\n");
+                update_logs_helper(&db_clone, &deploy_id, &lock).await;
+            }
+
+            let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), login_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await;
+
+            let pull_cmd = format!("sudo docker pull {}", reg_img);
             match run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), pull_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await {
                 Ok(true) => {
                     let mut lock = logs.lock().await;

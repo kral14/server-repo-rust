@@ -77,14 +77,30 @@ def main():
 
     # 2. Əsas .git qovluğunu yoxlayırıq, yoxdursa yaradırıq
     main_git = os.path.join(ROOT_DIR, ".git")
+    
+    # Tokeni .env faylından oxuyuruq
+    token = ""
+    env_path = os.path.join(ROOT_DIR, ".env")
+    if os.path.exists(env_path):
+        with open(env_path, "r", encoding="utf-8-sig") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("GITHUB_TOKEN="):
+                    token = line.split("=", 1)[1].strip()
+                    
+    if not token:
+        print("ERROR: .env faylında GITHUB_TOKEN tapılmadı!")
+        return
+        
+    token_url = f"https://oauth2:{token}@github.com/kral14/server-repo-rust.git"
     if not os.path.exists(main_git):
         print("Initializing new git repository...")
         run_cmd("git init")
-        run_cmd(f"git remote add origin {REPO_URL}")
+        run_cmd(f"git remote add origin {token_url}")
         run_cmd("git branch -M main")
     else:
-        # Remote URL-in mövcud olub-olmadığını yoxlayıb, yoxdursa əlavə edirik
-        run_cmd(f"git remote add origin {REPO_URL}", ignore_error=True)
+        # Remote URL-i yeniləyirik ki, həmişə düzgün tokenlə auth olsun
+        run_cmd(f"git remote set-url origin {token_url}", ignore_error=True)
     
     # 3. .gitignore faylını yalnız yoxdursa yaradırıq ki, etdiyiniz dəyişikliklər silinməsin
     gitignore_path = os.path.join(ROOT_DIR, ".gitignore")

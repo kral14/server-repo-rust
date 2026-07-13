@@ -4,3 +4,4 @@ target/
 temp_*
 MasterDeploy-rust/temp_*
 MasterDeploy-rust/target/
+.env
