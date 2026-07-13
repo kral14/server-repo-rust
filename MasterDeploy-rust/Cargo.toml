@@ -1,6 +1,6 @@
 [package]
 name = "masterdeploy-rust"
-version = "1.0.109"
+version = "1.0.110"
 edition = "2021"
 
 [dependencies]
