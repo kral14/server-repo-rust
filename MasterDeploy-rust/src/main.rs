@@ -2193,25 +2193,6 @@ async fn trigger_deployment_impl(
             lock.push_str(&format!("[5/5] Yeni konteyner işə salınır (Port: {})... \n", app.port));
             update_logs_helper(&db_clone, &deploy_id, &lock).await;
         }
-
-        // Yeni qurulan imicin SHA və Tarix məlumatını çəkirik
-        let image_target_inspect = if deploy_type == "image" {
-            app.registry_image.clone().unwrap_or_else(|| format!("{}:latest", app.name))
-        } else {
-            format!("{}:latest", app.name)
-        };
-        let inspect_new_cmd = format!(
-            "sudo docker image inspect --format 'SHA: {{{{.Id}}}} | Yaradılma: {{{{.Created}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
-            image_target_inspect
-        );
-        let new_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
-        let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_new_cmd, db_clone.clone(), deploy_id.clone(), new_image_logs.clone()).await;
-        let new_image_info = new_image_logs.lock().await.trim().to_string();
-        if !new_image_info.is_empty() && new_image_info != "Tapılmadı" {
-            let mut lock = logs.lock().await;
-            lock.push_str(&format!("[INFO] Qurulan yeni versiya məlumatı:\n  {}\n", new_image_info));
-            update_logs_helper(&db_clone, &deploy_id, &lock).await;
-        }
         
         let mut env_args = String::new();
         let mut has_port_env = false;
@@ -2249,8 +2230,20 @@ async fn trigger_deployment_impl(
         
         match run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), run_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await {
             Ok(true) => {
+                // Yeni başladılmış konteynerin SHA, yaradılma və işə düşmə tarixini çəkirik
+                let inspect_new_cmd = format!(
+                    "sudo docker inspect --format 'SHA: {{{{.Image}}}} | Yaradılma: {{{{.Created}}}} | Başlama: {{{{.State.StartedAt}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
+                    app.name
+                );
+                let new_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+                let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_new_cmd, db_clone.clone(), deploy_id.clone(), new_image_logs.clone()).await;
+                let new_image_info = new_image_logs.lock().await.trim().to_string();
+                
                 {
                     let mut lock = logs.lock().await;
+                    if !new_image_info.is_empty() && new_image_info != "Tapılmadı" {
+                        lock.push_str(&format!("[INFO] Qurulan yeni versiya məlumatı:\n  {}\n", new_image_info));
+                    }
                     lock.push_str("[SUCCESS] Tətbiq uğurla deploy olundu! 🎉\n");
                     lock.push_str("[CLEANUP] Köhnə Docker image-ları təmizlənir...\n");
                     update_logs_helper(&db_clone, &deploy_id, &lock).await;
