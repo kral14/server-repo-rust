@@ -1292,13 +1292,13 @@ fi;
                                     except:
                                         pass
 
-                        self.log_local(f"2. Docker Desktop səssiz rejimdə {install_dir} qovluğuna quraşdırılır...")
-                        install_cmd = [installer_path, "install", f"--installation-dir={install_dir}", "--accept-license", "--quiet"]
-                        proc = subprocess.run(install_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                        self.log_local(f"2. Docker Desktop quraşdırıcısı ekranda açılır (Zəhmət olmasa ekrandakı pəncərədən quraşdırmanı tamamlayın)...")
+                        install_cmd = [installer_path, "install", f"--installation-dir={install_dir}"]
+                        proc = subprocess.run(install_cmd)
                         if proc.returncode == 0 or proc.returncode == 3010:
                             self.log_local("✅ Docker Desktop uğurla quraşdırıldı!")
                         else:
-                            self.log_local(f"❌ Quraşdırma xətası baş verdi (Kod: {proc.returncode})")
+                            self.log_local(f"❌ Quraşdırma tamamlanmadı və ya ləğv olundu (Kod: {proc.returncode})")
                             self.gui.root.after(0, lambda: self.gui.toggle_local_buttons(tk.NORMAL))
                             return
 
