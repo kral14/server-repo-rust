@@ -1,5 +1,11 @@
 [
   {
+    "version": "v1.0.124",
+    "changes": [
+      "Lokal suretli build ve tehlukesizlik tekmillesdirmeleri."
+    ]
+  },
+  {
     "version": "v1.0.123",
     "changes": [
       "Lokal suretli build ve tehlukesizlik tekmillesdirmeleri."
