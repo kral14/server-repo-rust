@@ -3854,7 +3854,7 @@ async function confirmVersionSwitch(version, isRollback) {
 
                 if (res.ok) {
                     // Pull və proses uğurludur, loading ekranını açırıq
-                    showVersionSwitchProgress();
+                    showVersionSwitchProgress(version);
                 } else {
                     const errMsg = await res.text();
                     showInfoCard('❌ Keçid Baş tutmadı', 'Docker Pull Xətası', errMsg);
@@ -3863,13 +3863,18 @@ async function confirmVersionSwitch(version, isRollback) {
                 // Şəbəkə kəsilməsi (fetch-in yarıda qalması) serverin sönməsi deməkdir.
                 // Buna görə əgər xəta baş verərsə lakin heç bir HTTP statusu yoxdursa, böyük ehtimal update başlayıb.
                 // Ancaq ehtiyat üçün 3 saniyə gözləyib yenidən yoxlama loadingini göstərə bilərik.
-                showVersionSwitchProgress();
+                showVersionSwitchProgress(version);
             }
         }
     });
 }
 
-function showVersionSwitchProgress() {
+function showVersionSwitchProgress(targetVersion) {
+    let cleanTargetVersion = targetVersion || '';
+    if (cleanTargetVersion.startsWith('v')) {
+        cleanTargetVersion = cleanTargetVersion.substring(1);
+    }
+
     // Ekranı qarala, gözlə, yenilə
     const overlay = document.createElement('div');
     overlay.id = 'update-overlay';
@@ -3882,24 +3887,53 @@ function showVersionSwitchProgress() {
             <div style="width:240px; height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; margin:0 auto; box-shadow:var(--shadow-in);">
                 <div id="progress-bar" style="width:0%; height:100%; background:linear-gradient(90deg,#00d2ff,#7c3aed); border-radius:3px; transition:width 0.3s; box-shadow: 0 0 10px var(--accent-glow);"></div>
             </div>
-            <p id="update-countdown" style="color:var(--text-secondary); font-size:0.8rem; margin-top:1.2rem; font-family:monospace;">10 saniyə...</p>
+            <p id="update-countdown" style="color:var(--text-secondary); font-size:0.8rem; margin-top:1.2rem; font-family:monospace;">12 saniyə...</p>
         </div>
     `;
     document.body.appendChild(overlay);
 
-    let secs = 10;
+    let secs = 12;
     const interval = setInterval(() => {
         secs--;
-        const pct = ((10 - secs) / 10) * 100;
+        const pct = Math.min(((12 - secs) / 12) * 90, 90);
         const bar = document.getElementById('progress-bar');
         const cd = document.getElementById('update-countdown');
         if (bar) bar.style.width = pct + '%';
-        if (cd) cd.textContent = secs > 0 ? `${secs} saniyə...` : 'Yenilənir...';
+        if (cd) cd.textContent = secs > 0 ? `${secs} saniyə...` : 'Serverə yenidən bağlanılır...';
         if (secs <= 0) {
             clearInterval(interval);
-            location.reload();
+            pollNewVersion(cleanTargetVersion);
         }
     }, 1000);
+}
+
+async function pollNewVersion(targetVersion) {
+    const cd = document.getElementById('update-countdown');
+    const bar = document.getElementById('progress-bar');
+    let attempts = 0;
+    
+    const pollInterval = setInterval(async () => {
+        attempts++;
+        if (cd) cd.textContent = `Yoxlanış cəhdi ${attempts} (Yeni versiya gözlənilir)...`;
+        
+        try {
+            const res = await fetch('/api/version?t=' + Date.now());
+            if (res.ok) {
+                const data = await res.json();
+                const currentVer = data.version || '';
+                if (currentVer.includes(targetVersion) || attempts > 15) {
+                    if (bar) bar.style.width = '100%';
+                    if (cd) cd.textContent = 'Yeni versiya aktivdir! Səhifə yenilənir...';
+                    clearInterval(pollInterval);
+                    setTimeout(() => {
+                        window.location.href = window.location.pathname + '?t=' + Date.now();
+                    }, 800);
+                }
+            }
+        } catch (e) {
+            console.log("Server is offline during update restart...");
+        }
+    }, 2000);
 }
 
 // Köhnə funksiyalar — uyğunluq üçün saxlanılır
