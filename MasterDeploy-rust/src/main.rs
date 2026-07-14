@@ -2202,6 +2202,7 @@ async fn trigger_deployment_impl(
         }
         
         // Köhnə konteynerin işlətdiyi imicin SHA və Tarix məlumatını çəkirik
+        let mut old_image_id = String::new();
         let inspect_old_cmd = format!(
             "sudo docker inspect --format 'SHA: {{{{.Image}}}} | İmic: {{{{.Config.Image}}}} | Yaradılma: {{{{.Created}}}} | Başlama: {{{{.State.StartedAt}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
             app.name
@@ -2210,6 +2211,11 @@ async fn trigger_deployment_impl(
         let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_old_cmd, db_clone.clone(), deploy_id.clone(), old_image_logs.clone()).await;
         let old_image_info = old_image_logs.lock().await.trim().to_string();
         if !old_image_info.is_empty() && old_image_info != "Tapılmadı" {
+            if old_image_info.contains("SHA: ") {
+                if let Some(sha_part) = old_image_info.split('|').next() {
+                    old_image_id = sha_part.replace("SHA: ", "").trim().to_string();
+                }
+            }
             let mut lock = logs.lock().await;
             lock.push_str(&format!("[INFO] Köhnə versiya məlumatı:\n  {}\n", old_image_info));
             update_logs_helper(&db_clone, &deploy_id, &lock).await;
@@ -2303,8 +2309,52 @@ async fn trigger_deployment_impl(
             _ => {
                 let mut lock = logs.lock().await;
                 lock.push_str("[ERROR] Docker container run failed.\n");
-                update_logs_helper(&db_clone, &deploy_id, &lock).await;
-                finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+                
+                if !old_image_id.is_empty() && old_image_id != "Tapılmadı" {
+                    lock.push_str(&format!("[ROLLBACK] Yeni versiya işə düşmədi. Əvvəlki işlək versiya (SHA: {}) yenidən aktivləşdirilir...\n", old_image_id));
+                    update_logs_helper(&db_clone, &deploy_id, &lock).await;
+                    
+                    let rollback_cmd = format!(
+                        "sudo docker rm -f {} || true && sudo docker run -d --name {} --restart always -p {}:{} {} {}",
+                        app.name, app.name, app.port, app.port, env_args, old_image_id
+                    );
+                    
+                    let rollback_res = run_ssh_cmd_stream_helper(
+                        temp_key_path.clone(),
+                        server.ssh_user.clone(),
+                        server.ip.clone(),
+                        rollback_cmd,
+                        db_clone.clone(),
+                        deploy_id.clone(),
+                        logs.clone(),
+                    ).await;
+                    
+                    match rollback_res {
+                        Ok(true) => {
+                            let mut lock_rb = logs.lock().await;
+                            lock_rb.push_str("[ROLLBACK SUCCESS] Uğursuz quraşdırmadan sonra əvvəlki işlək versiyaya geri qayıdış (rollback) tamamlandı! 🎉 Layihə aktiv qalacaq.\n");
+                            update_logs_helper(&db_clone, &deploy_id, &lock_rb).await;
+                            
+                            finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+                            
+                            // Rollback uğurlu olduğu üçün tətbiqin statusunu database-də running saxlayırıq
+                            let _ = sqlx::query("UPDATE applications SET status = 'running' WHERE id = ?")
+                                .bind(&app_id_clone)
+                                .execute(&db_clone)
+                                .await;
+                        }
+                        _ => {
+                            let mut lock_rb = logs.lock().await;
+                            lock_rb.push_str("[ROLLBACK FAILED] Əvvəlki versiyaya geri qayıdış baş tutmadı! Tətbiq sönülü qaldı.\n");
+                            update_logs_helper(&db_clone, &deploy_id, &lock_rb).await;
+                            finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+                        }
+                    }
+                } else {
+                    lock.push_str("[ROLLBACK] Əvvəlki işlək imic SHA-sı tapılmadığı üçün rollback edilə bilmədi.\n");
+                    update_logs_helper(&db_clone, &deploy_id, &lock).await;
+                    finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+                }
             }
         }
 
