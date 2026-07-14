@@ -1517,7 +1517,7 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
 }
 
 async fn get_application(State(state): State<AppState>, AxumPath(app_id): AxumPath<String>) -> Result<Json<Application>, (StatusCode, String)> {
-    let app = sqlx::query_as::<_, Application>(
+    let mut app = sqlx::query_as::<_, Application>(
         "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
@@ -1530,6 +1530,31 @@ async fn get_application(State(state): State<AppState>, AxumPath(app_id): AxumPa
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
     .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
+
+    // Real-time VM status yoxlanması və verilənlər bazası ilə sinxronizasiya
+    if app.status != "deploying" && app.status != "building" {
+        if let Ok(Some(server)) = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+            .bind(&app.server_id)
+            .fetch_optional(&state.db)
+            .await 
+        {
+            let check_cmd = format!("sudo docker inspect -f '{{{{.State.Running}}}}' {} 2>/dev/null || echo 'false'", app.name);
+            if let Ok(out) = run_ssh_command(&server, &check_cmd).await {
+                let is_running = out.trim() == "true";
+                let current_status = if is_running { "running" } else { "stopped" };
+                
+                if app.status != current_status {
+                    let _ = sqlx::query("UPDATE applications SET status = ? WHERE id = ?")
+                        .bind(current_status)
+                        .bind(&app_id)
+                        .execute(&state.db)
+                        .await;
+                    app.status = current_status.to_string();
+                }
+            }
+        }
+    }
+
     Ok(Json(app))
 }
 
