@@ -28,51 +28,26 @@ def get_backend_mtime(src_dir):
     return max(mtimes) if mtimes else 0
 
 def sync_database_from_remote():
-    print("[SYNC] Uzak merkezi serverden (84.8.148.216) SQLite verilenler bazasi yuklenir...")
+    import json
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(base_dir, "config.json")
     
-    key_content = """-----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEAn6XItsoash9Cr1yD4Doxsmps9LisPUfLnyc65cceyBXMEyV2
-jkPRRxDdtLBM5WA378+JjDbYLJCZwyQmOOYAbXn3SJHTbqrNxjsairI3EK+sYXbz
-HmxYpS00owvjfcAYIbiOBM7L2w/+BnInkQo3EkfccE9zYW7PMHx70WYLKVGNTbod
-pUvZy8SWH51zJ6jy4x+US6OkEg6TW73mrCsWEgvl7O/9gvYb0XFyChBSRe9W9mW1
-I0jTPP7Vk/LP2reZ5Locz97j8nUIVp0nmuB2abQi5ucssVbAYNxRX/mb6mog4cqa
-aTdT+xV7yov3EwK7sfziAM0Id8gpclReH6XPYQIDAQABAoIBABb3box9PqHpRVqc
-4IvdU1DrZok+F+ko7u4SYrKzloYKPLV0aj3FG9IxZvObeTR2RxXEsXDuYuLmWnhs
-NuNwkxcsuJpEADqnb7rYvdS+FpXb79yFlCwIQihg/HWIPE3W2KHhPu0KIuF8x3p9
-6Zs/8PQ8SkYN5/dYTY4YGmfhWjGzQ4n79dCO+K8GG7NKUFbeDsRQJEq5Q6rEhyox
-5ITK+12ndzYF1oGXdQs66PJrVx93VLSBTTqGcuS9UAV1QMJqOU78zyOGvUlY9ILp
-pMG90LnebsuhzNppKhfpVDePmn58IKWTt9HdMh3l1fkf9aohf/glyMKpJPOb4jjP
-HwWGOJECgYEAyxEHs5yIucANoCHYO+HSsVc6zmlFJA2i8SzlBkcqHPMTHqg3ZKbX
-cz1awuHvmy5t144/wdPNWAldWvTdsQut/80Q+Yrd+h6ta1K0HOVdvDSMcXKSRE1o
-SX5xGB6A1RYg0CkvhzLLpf3RlEMijruAWSLhUSCtXQ0xkv8xfgqYZRMCgYEAyUNV
-/YQf9IvpEOOmDdv7rtrieccQqyK307667zOZPmYJQ5bpkSnxFAgyYCjFjB0WSte/
-X35Nm7LrUJ8oET29zD0TFgJ7TDpbmhYZRlqkASPokjn9ke3QlQyvUf7J2sHcExdq
-KVOcHxRmqflLPwMj1cCWYdWJXDegUCiXa9lj7DsCgYEAuQYhYFRmd+k4AQoVfip6
-0T9Lw7tDVmBecSWY4CmDg7EvYKWhI0Kp2MS0qBE5QsoBJ4DjMvaLiYWu3Ct0u9aK
-iiMNLnKLY1UEal+G4TVUPSIcPVpJT5bASQa+gV15wa5R45lDRwrPZ8VnapHpMOhD
-P/R6HHOLwtc8rlV7gP6icKUCgYBYNf8WYjZvRHMeR+ib4nLpLF5e6XTQzSKs18eu
-13qu8qHU0ewFB9D16rHJm5UZ2BXRL8Zc4Eq7lyuz5k31YI4zWgFngCbyPhGv80eY
-olmHdmmUzX3p28Wzzh95XKa0DouagoSxIEgpBxQII49rSsEGCqbesmzF0kudVm0n
-g9xbyQKBgQC8nlRI3L1U4KkPl4nGICFCgygFQxMsZMgW/4CDaOYmfxshwjiXCgMQ
-7CgGLQjcFKonGe3tyazayR5+V94svEiaIDt/Dof1Yjp6hmCwReAwwKYo/KaoGiKv
-rAH0tz+nUAYAzK092qAun9TOtaamVpbslmKn92AlS087MNCSFQBXYQ==
------END RSA PRIVATE KEY-----"""
-
-    key_path = "temp_sync_key.key"
-    with open(key_path, "w") as f:
-        f.write(key_content.strip() + "\n")
-
+    if not os.path.exists(config_path):
+        print("[SYNC ERROR] config.json tapilmadi, sinxronizasiya es gecilir.")
+        return
+        
     try:
-        import getpass
-        username = getpass.getuser()
-        domain = os.environ.get("USERDOMAIN", "")
-        identity = f"{domain}\\{username}" if domain else username
-        subprocess.run(["icacls", key_path, "/inheritance:r"], stdout=subprocess.DEVNULL)
-        subprocess.run(["icacls", key_path, "/grant:r", f"{identity}:F"], stdout=subprocess.DEVNULL)
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        ip = config.get("ip", "").strip()
+        user = config.get("user", "ubuntu").strip()
+        key_path = config.get("key", "").strip()
+        
+        if not ip or not key_path:
+            print("[SYNC ERROR] IP ve ya Key tapilmadi, sinxronizasiya es gecilir.")
+            return
 
-        ip = '84.8.148.216'
-        user = 'ubuntu'
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"[SYNC] Uzak merkezi serverden ({ip}) SQLite verilenler bazasi yuklenir...")
         local_db_path = os.path.join(base_dir, "MasterDeploy-rust", "masterdeploy.db")
 
         # Database faylını SCP ilə kopyalayırıq
@@ -90,56 +65,29 @@ rAH0tz+nUAYAzK092qAun9TOtaamVpbslmKn92AlS087MNCSFQBXYQ==
             print(res.stderr)
     except Exception as e:
         print(f"[SYNC ERROR] Sinxronizasiya zamani gozlenilmez xeta: {e}")
-    finally:
-        if os.path.exists(key_path):
-            os.remove(key_path)
+
 
 def upload_database_to_remote():
-    print("[SYNC] Lokal SQLite verilenler bazasi uzak merkezi servere (84.8.148.216) yuklenir...")
+    import json
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(base_dir, "config.json")
     
-    key_content = """-----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEAn6XItsoash9Cr1yD4Doxsmps9LisPUfLnyc65cceyBXMEyV2
-jkPRRxDdtLBM5WA378+JjDbYLJCZwyQmOOYAbXn3SJHTbqrNxjsairI3EK+sYXbz
-HmxYpS00owvjfcAYIbiOBM7L2w/+BnInkQo3EkfccE9zYW7PMHx70WYLKVGNTbod
-pUvZy8SWH51zJ6jy4x+US6OkEg6TW73mrCsWEgvl7O/9gvYb0XFyChBSRe9W9mW1
-I0jTPP7Vk/LP2reZ5Locz97j8nUIVp0nmuB2abQi5ucssVbAYNxRX/mb6mog4cqa
-aTdT+xV7yov3EwK7sfziAM0Id8gpclReH6XPYQIDAQABAoIBABb3box9PqHpRVqc
-4IvdU1DrZok+F+ko7u4SYrKzloYKPLV0aj3FG9IxZvObeTR2RxXEsXDuYuLmWnhs
-NuNwkxcsuJpEADqnb7rYvdS+FpXb79yFlCwIQihg/HWIPE3W2KHhPu0KIuF8x3p9
-6Zs/8PQ8SkYN5/dYTY4YGmfhWjGzQ4n79dCO+K8GG7NKUFbeDsRQJEq5Q6rEhyox
-5ITK+12ndzYF1oGXdQs66PJrVx93VLSBTTqGcuS9UAV1QMJqOU78zyOGvUlY9ILp
-pMG90LnebsuhzNppKhfpVDePmn58IKWTt9HdMh3l1fkf9aohf/glyMKpJPOb4jjP
-HwWGOJECgYEAyxEHs5yIucANoCHYO+HSsVc6zmlFJA2i8SzlBkcqHPMTHqg3ZKbX
-cz1awuHvmy5t144/wdPNWAldWvTdsQut/80Q+Yrd+h6ta1K0HOVdvDSMcXKSRE1o
-SX5xGB6A1RYg0CkvhzLLpf3RlEMijruAWSLhUSCtXQ0xkv8xfgqYZRMCgYEAyUNV
-/YQf9IvpEOOmDdv7rtrieccQqyK307667zOZPmYJQ5bpkSnxFAgyYCjFjB0WSte/
-X35Nm7LrUJ8oET29zD0TFgJ7TDpbmhYZRlqkASPokjn9ke3QlQyvUf7J2sHcExdq
-KVOcHxRmqflLPwMj1cCWYdWJXDegUCiXa9lj7DsCgYEAuQYhYFRmd+k4AQoVfip6
-0T9Lw7tDVmBecSWY4CmDg7EvYKWhI0Kp2MS0qBE5QsoBJ4DjMvaLiYWu3Ct0u9aK
-iiMNLnKLY1UEal+G4TVUPSIcPVpJT5bASQa+gV15wa5R45lDRwrPZ8VnapHpMOhD
-P/R6HHOLwtc8rlV7gP6icKUCgYBYNf8WYjZvRHMeR+ib4nLpLF5e6XTQzSKs18eu
-13qu8qHU0ewFB9D16rHJm5UZ2BXRL8Zc4Eq7lyuz5k31YI4zWgFngCbyPhGv80eY
-olmHdmmUzX3p28Wzzh95XKa0DouagoSxIEgpBxQII49rSsEGCqbesmzF0kudVm0n
-g9xbyQKBgQC8nlRI3L1U4KkPl4nGICFCgygFQxMsZMgW/4CDaOYmfxshwjiXCgMQ
-7CgGLQjcFKonGe3tyazayR5+V94svEiaIDt/Dof1Yjp6hmCwReAwwKYo/KaoGiKv
-rAH0tz+nUAYAzK092qAun9TOtaamVpbslmKn92AlS087MNCSFQBXYQ==
------END RSA PRIVATE KEY-----"""
-
-    key_path = "temp_sync_key.key"
-    with open(key_path, "w") as f:
-        f.write(key_content.strip() + "\n")
-
+    if not os.path.exists(config_path):
+        print("[SYNC ERROR] config.json tapilmadi, sinxronizasiya es gecilir.")
+        return
+        
     try:
-        import getpass
-        username = getpass.getuser()
-        domain = os.environ.get("USERDOMAIN", "")
-        identity = f"{domain}\\{username}" if domain else username
-        subprocess.run(["icacls", key_path, "/inheritance:r"], stdout=subprocess.DEVNULL)
-        subprocess.run(["icacls", key_path, "/grant:r", f"{identity}:F"], stdout=subprocess.DEVNULL)
+        with open(config_path, "r") as f:
+            config = json.load(f)
+        ip = config.get("ip", "").strip()
+        user = config.get("user", "ubuntu").strip()
+        key_path = config.get("key", "").strip()
+        
+        if not ip or not key_path:
+            print("[SYNC ERROR] IP ve ya Key tapilmadi, sinxronizasiya es gecilir.")
+            return
 
-        ip = '84.8.148.216'
-        user = 'ubuntu'
-        base_dir = os.path.dirname(os.path.abspath(__file__))
+        print(f"[SYNC] Lokal SQLite verilenler bazasi uzak merkezi servere ({ip}) yuklenir...")
         local_db_path = os.path.join(base_dir, "MasterDeploy-rust", "masterdeploy.db")
 
         # Database-i uzaq servere geri yukleyirik
@@ -157,9 +105,7 @@ rAH0tz+nUAYAzK092qAun9TOtaamVpbslmKn92AlS087MNCSFQBXYQ==
             print(res.stderr)
     except Exception as e:
         print(f"[SYNC ERROR] Geri yukleme zamani gozlenilmez xeta: {e}")
-    finally:
-        if os.path.exists(key_path):
-            os.remove(key_path)
+
 
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
