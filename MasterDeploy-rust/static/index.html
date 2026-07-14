@@ -497,14 +497,22 @@
                     style="display: none; flex: 1; min-height: 0; overflow: hidden; padding: 4px 16px 0 16px; flex-direction: column;">
                     <div id="cancel-deploy-btn" style="display: none;"></div>
 
-                    <!-- Side-by-side Segmented Tab Controls -->
-                    <div class="logs-tabs-container" style="display: flex; gap: 12px; margin-bottom: 4px;">
-                        <button id="btn-show-build" class="log-tab-btn active" onclick="switchLogPanel('build')">
-                            <span>🛠️ Build (Yığılma)</span>
-                        </button>
-                        <button id="btn-show-live" class="log-tab-btn" onclick="switchLogPanel('live')">
-                            <span>🚀 Deployment (Canlı Server)</span>
-                        </button>
+                    <!-- Side-by-side Segmented Tab Controls and Selector -->
+                    <div class="logs-tabs-container" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 12px; flex-wrap: wrap;">
+                        <div style="display: flex; gap: 12px;">
+                            <button id="btn-show-build" class="log-tab-btn active" onclick="switchLogPanel('build')">
+                                <span>🛠️ Build (Yığılma)</span>
+                            </button>
+                            <button id="btn-show-live" class="log-tab-btn" onclick="switchLogPanel('live')">
+                                <span>🚀 Deployment (Canlı Server)</span>
+                            </button>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <label style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; margin: 0;">Yayım Tarixçəsi:</label>
+                            <select id="log-deployment-selector" onchange="onLogDeploymentChange()" style="background: var(--bg-card); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; font-family: monospace; outline: none; cursor: pointer; max-width: 250px;">
+                                <option value="latest">Son Aktiv Yayım</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- Log Panel Display -->

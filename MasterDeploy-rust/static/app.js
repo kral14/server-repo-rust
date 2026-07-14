@@ -4358,6 +4358,17 @@ function viewDeploymentLogs(appId, deployId = null) {
     }
 }
 
+async function onLogDeploymentChange() {
+    const selector = document.getElementById('log-deployment-selector');
+    if (!selector) return;
+    const val = selector.value;
+    if (val === 'latest') {
+        viewLogs(currentAppId, false, null);
+    } else {
+        viewLogs(currentAppId, false, val);
+    }
+}
+
 async function cancelDeploymentFromOverview(deployId, appId) {
     showConfirmCard({
         icon: '🛑',
