@@ -2280,7 +2280,8 @@ async fn trigger_deployment_impl(
     Ok(deployment)
 }
 
-async fn get_changelog() -> axum::response::Response {
+async fn get_changelog(State(state): State<AppState>) -> axum::response::Response {
+    add_activity_log_impl(&state.db, "[Yenilənmə] MasterDeploy üçün mövcud panel versiyaları yoxlanılır...", "info").await;
     let url = "https://raw.githubusercontent.com/kral14/server-repo-rust/main/MasterDeploy-rust/static/changelog.json";
     let output = std::process::Command::new("curl").args(["-s", url]).output();
     let text = if let Ok(out) = output {
@@ -2437,6 +2438,16 @@ async fn trigger_system_update(
     }
 }
 
+async fn add_activity_log_impl(db: &SqlitePool, message: &str, log_type: &str) {
+    let id = Uuid::new_v4().to_string();
+    let _ = sqlx::query("INSERT INTO activity_logs (id, message, log_type) VALUES (?, ?, ?)")
+        .bind(&id)
+        .bind(message)
+        .bind(log_type)
+        .execute(db)
+        .await;
+}
+
 async fn git_polling_loop(db: SqlitePool) {
     println!("[INFO] Git Auto-Deploy Polling Service is running... 🕵️");
     loop {
@@ -2465,14 +2476,13 @@ async fn git_polling_loop(db: SqlitePool) {
             let deploy_type = app.deploy_type.clone().unwrap_or_else(|| "git".to_string());
 
             if deploy_type == "image" {
-                // Docker Registry auto-deploy məntiqi
                 let reg_image = match app.registry_image.clone() {
                     Some(img) if !img.is_empty() => img,
                     _ => continue,
                 };
 
-                // Uzaq registry-dən imicin SHA-sını (digest) manifest vasitəsilə öyrənirik
-                // Yerli olaraq "docker manifest inspect" əmrini 5 saniyəlik timeout ilə çağırırıq
+                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün registry imici yoxlanılır (İmic: {})...", app.name, reg_image), "info").await;
+
                 let inspect_output = tokio::time::timeout(
                     tokio::time::Duration::from_secs(8),
                     tokio::process::Command::new("docker")
@@ -2480,10 +2490,9 @@ async fn git_polling_loop(db: SqlitePool) {
                         .output()
                 ).await;
 
-                if let Ok(Ok(out)) = inspect_output {
-                    if out.status.success() {
+                match inspect_output {
+                    Ok(Ok(out)) if out.status.success() => {
                         let inspect_json = String::from_utf8_lossy(&out.stdout);
-                        // manifest list və ya tək manifest digest-i tapırıq
                         let mut remote_digest = String::new();
                         if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&inspect_json) {
                             if let Some(digest) = parsed.pointer("/config/digest").and_then(|v| v.as_str()) {
@@ -2505,9 +2514,11 @@ async fn git_polling_loop(db: SqlitePool) {
                                         .bind(&app.id)
                                         .execute(&db)
                                         .await;
+                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin imic imzası qeyd edildi: {}", app.name, remote_digest), "info").await;
                                 }
                                 Some(ref local_digest) if local_digest != &remote_digest => {
                                     println!("[AUTO-DEPLOY] Yeni registry image versiyası tapıldı ({} -> {}), layihə: {}", local_digest, remote_digest, app.name);
+                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni registry imici tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_digest, remote_digest), "success").await;
                                     
                                     let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
                                         .bind(&remote_digest)
@@ -2517,22 +2528,37 @@ async fn git_polling_loop(db: SqlitePool) {
 
                                     if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
                                         eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger image deployment for {}: {}", app.name, e);
+                                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error").await;
                                     }
                                 }
-                                _ => {}
+                                _ => {
+                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info").await;
+                                }
                             }
+                        } else {
+                            add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün imic manifestindən digest oxuna bilmədi.", app.name), "error").await;
                         }
+                    }
+                    Ok(Ok(out)) => {
+                        let err_str = String::from_utf8_lossy(&out.stderr);
+                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün manifest yoxlanışı xəta verdi: {}", app.name, err_str.trim()), "error").await;
+                    }
+                    Ok(Err(e)) => {
+                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün yoxlanış əmri icra edilə bilmədi: {}", app.name, e), "error").await;
+                    }
+                    Err(_) => {
+                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün manifest yoxlanışı vaxt aşımına uğradı (8s).", app.name), "error").await;
                     }
                 }
                 continue;
             }
 
-            // Əgər repo manual deyil, GitHub/Git linkidirsə
             if app.repo_url.is_empty() || app.repo_url.starts_with("DOCKER_IMAGE:") {
                 continue;
             }
 
-            // Uzaq repodakı ən son commit SHA-nı alırıq
+            add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni Git commit yoxlanılır (Budaq: {})...", app.name, app.branch), "info").await;
+
             let output = tokio::time::timeout(
                 tokio::time::Duration::from_secs(15),
                 tokio::process::Command::new("git")
@@ -2549,42 +2575,46 @@ async fn git_polling_loop(db: SqlitePool) {
                         
                         match app.last_commit_hash {
                             None => {
-                                // İlk dəfə qoşulduqda sadəcə commit hash-i yazaq, lazımsız deploy başlamasın
                                 let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
                                     .bind(&remote_sha)
                                     .bind(&app.id)
                                     .execute(&db)
                                     .await;
+                                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin Git commit imzası qeyd edildi: {}", app.name, remote_sha), "info").await;
                             }
                             Some(ref local_sha) if local_sha != &remote_sha => {
-                                // Fərqli commit tapıldı! Yeni deployment-i başladırıq.
                                 println!("[AUTO-DEPLOY] Yeni commit tapıldı ({} -> {}), layihə: {}", local_sha, remote_sha, app.name);
+                                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni commit tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_sha, remote_sha), "success").await;
                                 
-                                // Yeniləyirik
                                 let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
                                     .bind(&remote_sha)
                                     .bind(&app.id)
                                     .execute(&db)
                                     .await;
  
-                                // Dərhal deploy et
                                 if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
                                     eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger deployment for {}: {}", app.name, e);
+                                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error").await;
                                 }
                             }
-                            _ => {} // Dəyişiklik yoxdur
+                            _ => {
+                                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info").await;
+                            }
                         }
                     }
                 }
                 Ok(Ok(out)) => {
                     let err_str = String::from_utf8_lossy(&out.stderr);
                     eprintln!("[AUTO-DEPLOY ERROR] git ls-remote failed for {}: {}", app.name, err_str.trim());
+                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün git ls-remote uğursuz oldu: {}", app.name, err_str.trim()), "error").await;
                 }
                 Ok(Err(e)) => {
                     eprintln!("[AUTO-DEPLOY ERROR] Failed to execute git command for {}: {}", app.name, e);
+                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git əmri icra edilə bilmədi: {}", app.name, e), "error").await;
                 }
                 Err(_) => {
-                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out (5s limit) for {}", app.name);
+                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out (15s limit) for {}", app.name);
+                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git sorğusu vaxt aşımına uğradı (15s).", app.name), "error").await;
                 }
             }
         }
