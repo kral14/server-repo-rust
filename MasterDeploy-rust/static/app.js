@@ -1054,7 +1054,7 @@ async function loadApplications() {
                     <div class="item-info" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
                         <div style="flex: 1; min-width: 0;">
                             <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                                🚀 ${app.name}
+                                <span style="display: inline-block; width: 200px; min-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${app.name}">🚀 ${app.name}</span>
                                 ${app.status === 'success' || app.status === 'running' ? `
                                 <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: var(--accent-color); text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 210, 255, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
                                     🔗 Lokal Keçid

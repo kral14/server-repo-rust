@@ -5,3 +5,7 @@ temp_*
 MasterDeploy-rust/temp_*
 MasterDeploy-rust/target/
 .env
+*.db
+*.db.backup
+MasterDeploy-rust/masterdeploy.db
+MasterDeploy-rust/masterdeploy.db.backup
