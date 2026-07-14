@@ -2516,11 +2516,24 @@ async fn git_polling_loop(db: SqlitePool) {
         };
 
         for app in apps {
+            if app.status == "deploying" || app.status == "building" {
+                continue;
+            }
+
             let deploy_type = app.deploy_type.clone().unwrap_or_else(|| "git".to_string());
 
             if deploy_type == "image" {
                 let reg_image = match app.registry_image.clone() {
                     Some(img) if !img.is_empty() => img,
+                    _ => continue,
+                };
+
+                let server = match sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+                    .bind(&app.server_id)
+                    .fetch_optional(&db)
+                    .await
+                {
+                    Ok(Some(s)) => s,
                     _ => continue,
                 };
 
@@ -2550,33 +2563,31 @@ async fn git_polling_loop(db: SqlitePool) {
                         }
 
                         if !remote_digest.is_empty() {
-                            match app.last_commit_hash {
-                                None => {
-                                    let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
-                                        .bind(&remote_digest)
-                                        .bind(&app.id)
-                                        .execute(&db)
-                                        .await;
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin imic imzası qeyd edildi: {}", app.name, remote_digest), "info").await;
-                                }
-                                Some(ref local_digest) if local_digest != &remote_digest => {
-                                    println!("[AUTO-DEPLOY] Yeni registry image versiyası tapıldı ({} -> {}), layihə: {}", local_digest, remote_digest, app.name);
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni registry imici tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_digest, remote_digest), "success").await;
-                                    
-                                    let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
-                                        .bind(&remote_digest)
-                                        .bind(&app.id)
-                                        .execute(&db)
-                                        .await;
+                            // Target VM serverində işləyən konteynerin imic digest-ini SSH ilə yoxlayırıq
+                            let inspect_cmd = format!("sudo docker inspect --format='{{{{index .RepoDigests 0}}}}' {} 2>/dev/null || echo 'none'", app.name);
+                            let running_digest = match run_ssh_command(&server, &inspect_cmd).await {
+                                Ok(out) => out.trim().to_string(),
+                                Err(_) => "none".to_string(),
+                            };
 
-                                    if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
-                                        eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger image deployment for {}: {}", app.name, e);
-                                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error").await;
-                                    }
+                            let is_up_to_date = running_digest != "none" && !running_digest.is_empty() && running_digest.contains(&remote_digest);
+
+                            if !is_up_to_date {
+                                println!("[AUTO-DEPLOY] Serverdə işləyən imic köhnədir və ya tapılmadı. Yenilənmə başladılır, layihə: {}", app.name);
+                                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni registry imici aşkar edildi (Serverdəki imic fərqlidir). Avtomatik yenilənmə başladılır...", app.name), "success").await;
+                                
+                                let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                    .bind(&remote_digest)
+                                    .bind(&app.id)
+                                    .execute(&db)
+                                    .await;
+
+                                if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
+                                    eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger image deployment for {}: {}", app.name, e);
+                                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error").await;
                                 }
-                                _ => {
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info").await;
-                                }
+                            } else {
+                                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Serverdəki versiya yenidir (Yenilik yoxdur).", app.name), "info").await;
                             }
                         } else {
                             add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün imic manifestindən digest oxuna bilmədi.", app.name), "error").await;
