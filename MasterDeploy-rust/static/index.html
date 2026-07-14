@@ -977,35 +977,29 @@
 
     <!-- Fəaliyyət Jurnalı Modal -->
     <div id="activity-log-modal" class="modal-backdrop">
-        <div class="modal-card" style="max-width: 500px; width: 95%;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <div>
-                    <h2 style="margin: 0; font-size: 1.3rem;">📋 Fəaliyyət Jurnalı</h2>
-                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Panel daxilində icra
-                        edilmiş hərəkətlər</p>
+        <div class="modal-card" style="max-width: 800px; width: 95%; height: 75vh; display: flex; flex-direction: column;">
+            <div style="padding: 1.5rem 1.5rem 10px 1.5rem; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.3rem;">📋 Fəaliyyət Jurnalı</h2>
+                        <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Panel daxilində icra edilmiş hərəkətlər</p>
+                    </div>
                 </div>
-                <button onclick="closeModal('activity-log-modal')"
-                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
-                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
-                    onmouseout="this.style.background='transparent'">✕</button>
-            </div>
-            <div class="activity-tabs" style="display: flex; gap: 8px; margin-bottom: 12px;">
-                <button class="activity-tab-btn active" onclick="filterActivityLogs('all')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--primary-color); background: var(--bg-card); color: var(--text-primary); transition: all 0.2s;">Hamısı</button>
-                <button class="activity-tab-btn" onclick="filterActivityLogs('masterdeploy')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">MasterDeploy</button>
-                <button class="activity-tab-btn" onclick="filterActivityLogs('apps')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">Layihələr</button>
-                <button class="activity-tab-btn" onclick="filterActivityLogs('servers')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">Serverlər</button>
-            </div>
-            <div id="activity-log-list"
-                style="max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; padding-bottom: 10px;">
-                <div
-                    style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">
-                    Hərəkət qeydə alınmayıb</div>
-            </div>
-            <div class="modal-actions"
-                style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border);">
-                <button class="btn btn-secondary" onclick="clearActivityLogs()"
-                    style="color: var(--danger-color) !important;">🧹 Jurnalı Təmizlə</button>
-                <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')">Bağla</button>
+                <div class="activity-tabs" style="display: flex; gap: 8px; margin-bottom: 12px;">
+                    <button class="activity-tab-btn active" onclick="filterActivityLogs('all')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--primary-color); background: var(--bg-card); color: var(--text-primary); transition: all 0.2s;">Hamısı</button>
+                    <button class="activity-tab-btn" onclick="filterActivityLogs('masterdeploy')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">MasterDeploy</button>
+                    <button class="activity-tab-btn" onclick="filterActivityLogs('apps')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">Layihələr</button>
+                    <button class="activity-tab-btn" onclick="filterActivityLogs('servers')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">Serverlər</button>
+                </div>
+                <div id="activity-log-list"
+                    style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; padding-bottom: 10px; min-height: 0;">
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>
+                </div>
+                <div class="modal-actions"
+                    style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border); margin-bottom: 0px;">
+                    <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important;">🧹 Jurnalı Təmizlə</button>
+                    <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')">Bağla</button>
+                </div>
             </div>
         </div>
     </div>
