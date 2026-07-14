@@ -6,21 +6,18 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
     gcc \
-    libc6-dev
+    libc6-dev && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Cargo fayllarını əvvəlcə kopyalayırıq ki, dependency-lər cache-də qalsın
-COPY Cargo.toml Cargo.lock ./
-# Dummy src yaradaraq asılılıqları (dependencies) yükləyib build edirik
-RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo build --release
-RUN rm -f target/release/deps/masterdeploy_rust* src/main.rs
-
-# İndi əsl kodu kopyalayırıq
+# Əsl kodu kopyalayırıq
 COPY . .
 
-# Və yalnız bizim kodumuz compile olur (dependency-lər cache-dən gəlir)
-RUN cargo build --release
+# ⚡ DOCKER BUILDX CACHE MOUNT: Cargo registry və target qovluqlarını keşləyirik.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release && \
+    cp /app/target/release/masterdeploy-rust /app/masterdeploy-rust
 
 # ---------------------------------------------------
 # Runtime Stage (Yüngül və son imic)
@@ -44,7 +41,7 @@ RUN curl -fsSLO https://download.docker.com/linux/static/stable/x86_64/docker-24
 WORKDIR /app
 
 # Binary faylı builder stage-dən gətiririk
-COPY --from=builder /app/target/release/masterdeploy-rust /usr/local/bin/masterdeploy-rust
+COPY --from=builder /app/masterdeploy-rust /usr/local/bin/masterdeploy-rust
 
 # Frontend fayllarını (UI) gətiririk
 COPY --from=builder /app/static /app/static

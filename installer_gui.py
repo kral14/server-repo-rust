@@ -32,6 +32,16 @@ class RemoteInstallerGUI:
         self.docker_compose_var = tk.BooleanVar(value=True)
         self.docker_containerd_var = tk.BooleanVar(value=True)
         
+        # GitHub Token shared variable
+        self.token_var = tk.StringVar()
+        
+        # Clean Options Variables
+        self.clean_masterdeploy_var = tk.BooleanVar(value=True)
+        self.clean_all_docker_var = tk.BooleanVar(value=False)
+        self.clean_data_var = tk.BooleanVar(value=False)
+        self.clean_ufw_var = tk.BooleanVar(value=False)
+        self.clean_wsl_distro_var = tk.BooleanVar(value=False)
+        
         # Fonts
         self.font_title = ("Segoe UI", 16, "bold")
         self.font_label = ("Segoe UI", 10, "bold")
@@ -53,9 +63,19 @@ class RemoteInstallerGUI:
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill=tk.BOTH, expand=True, pady=(5, 5))
         
-        # Yuxarıda Relaunch GUI düyməsini yerləşdiririk
+        # Yuxarıda Relaunch GUI düyməsini və Həmişə ən üstdə seçimini yerləşdiririk
         relaunch_frame = tk.Frame(root, bg=BG_COLOR)
         relaunch_frame.pack(fill=tk.X, before=self.notebook)
+        
+        self.always_on_top_var = tk.BooleanVar(value=False)
+        self.always_on_top_cb = tk.Checkbutton(
+            relaunch_frame, text="📌 Həmişə ən üstdə (Always on Top)", font=self.font_btn,
+            bg=BG_COLOR, fg=TEXT_COLOR, selectcolor=CARD_COLOR,
+            activebackground=BG_COLOR, activeforeground=TEXT_COLOR,
+            variable=self.always_on_top_var, command=self.toggle_always_on_top
+        )
+        self.always_on_top_cb.pack(side=tk.LEFT, padx=5, pady=2)
+        
         self.create_button(relaunch_frame, "🔄 Relaunch GUI", "#2980B9", self.backend.relaunch_app).pack(side=tk.RIGHT, padx=5, pady=2, ipady=3, ipadx=10)
 
         self.tab_remote = tk.Frame(self.notebook, bg=BG_COLOR)
@@ -69,6 +89,11 @@ class RemoteInstallerGUI:
         self.setup_local_tab()
         
         self.backend.load_config()
+        
+        # Tray setup and close protocol
+        self.tray_icon = None
+        self.setup_tray()
+        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
         
         if self.ip_entry.get() and self.key_entry.get():
             self.root.after(500, lambda: self.backend.test_connection(auto=True))
@@ -103,6 +128,10 @@ class RemoteInstallerGUI:
         self.key_entry = tk.Entry(key_frame, width=15, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT)
         self.key_entry.pack(side=tk.LEFT, ipady=3)
         self.create_button(key_frame, "Seç", "#555", self.browse_key).pack(side=tk.LEFT, padx=3, ipady=1, ipadx=5)
+
+        tk.Label(cred_lf, text="GitHub Token:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=3, column=0, sticky=tk.W, pady=4, padx=8)
+        self.token_entry = tk.Entry(cred_lf, width=22, font=self.font_entry, bg=ENTRY_BG, fg="white", insertbackground="white", relief=tk.FLAT, show="*", textvariable=self.token_var)
+        self.token_entry.grid(row=3, column=1, pady=4, padx=8, ipady=3)
 
         # Config Group
         config_lf = tk.LabelFrame(top_split_frame, text=" ⚙️ Konfiqurasiya ", font=(self.font_label[0], 9, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
@@ -209,7 +238,7 @@ class RemoteInstallerGUI:
         self.btn_update.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
         self.btn_stop = self.create_button(sys_lf, "🛑 Durdur", "#D35400", self.backend.stop_all_services)
         self.btn_stop.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
-        self.btn_clean = self.create_button(sys_lf, "🗑️ Təmizlə", BTN_CLEAN, lambda: self.backend.run_remote_task(self.backend.get_cmd_clean, confirm="Serveri tamamilə sıfırlamaq istəyirsiniz?"))
+        self.btn_clean = self.create_button(sys_lf, "🗑️ Təmizlə", BTN_CLEAN, lambda: self.open_clean_settings(is_local=False))
         self.btn_clean.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
         self.btn_portainer = self.create_button(sys_lf, "🐳 Portainer", "#00A2D3", lambda: self.backend.run_remote_task(self.backend.get_cmd_portainer))
         self.btn_portainer.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
@@ -262,6 +291,10 @@ class RemoteInstallerGUI:
         tk.Label(cred_lf, text="Sudo Parolu:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=0, column=0, sticky=tk.W, pady=4, padx=8)
         self.local_pass_entry = tk.Entry(cred_lf, width=22, font=self.font_entry, bg=ENTRY_BG, fg="white", show="*", insertbackground="white", relief=tk.FLAT)
         self.local_pass_entry.grid(row=0, column=1, pady=4, padx=8, ipady=3)
+
+        tk.Label(cred_lf, text="GitHub Token:", font=self.font_label, bg=BG_COLOR, fg=TEXT_COLOR).grid(row=1, column=0, sticky=tk.W, pady=4, padx=8)
+        self.local_token_entry = tk.Entry(cred_lf, width=22, font=self.font_entry, bg=ENTRY_BG, fg="white", show="*", insertbackground="white", relief=tk.FLAT, textvariable=self.token_var)
+        self.local_token_entry.grid(row=1, column=1, pady=4, padx=8, ipady=3)
 
         config_lf = tk.LabelFrame(top_split_frame, text=" ⚙️ Konfiqurasiya ", font=(self.font_label[0], 9, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
         config_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0), ipady=5)
@@ -352,7 +385,7 @@ class RemoteInstallerGUI:
         local_sys_lf = tk.LabelFrame(btn_frame, text=" 🖥️ Server & Servislər ", font=(self.font_label[0], 8, "bold"), bg=BG_COLOR, fg="#FFCC00", bd=1, relief=tk.GROOVE)
         local_sys_lf.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=2)
 
-        self.btn_local_clean = self.create_button(local_sys_lf, "🗑️ Təmizlə", BTN_CLEAN, lambda: self.backend.run_local_task(self.backend.get_cmd_clean, confirm="Bütün sistemi təmizləmək istədiyinizə əminsiniz?"))
+        self.btn_local_clean = self.create_button(local_sys_lf, "🗑️ Təmizlə", BTN_CLEAN, lambda: self.open_clean_settings(is_local=True))
         self.btn_local_clean.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
         self.btn_local_portainer = self.create_button(local_sys_lf, "🐳 Portainer", "#00A2D3", lambda: self.backend.run_local_task(self.backend.get_cmd_portainer))
         self.btn_local_portainer.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=2, pady=5, ipady=4)
@@ -448,6 +481,38 @@ class RemoteInstallerGUI:
                 elif btn == self.btn_local_port_toggle: btn.config(bg="#27AE60", fg="white")
                 elif btn == self.btn_local_port_list: btn.config(bg="#8E44AD", fg="white")
 
+    def open_clean_settings(self, is_local=False):
+        win = tk.Toplevel(self.root)
+        win.title("Sistemi Təmizlə / Sıfırla")
+        win.geometry("380x300")
+        win.configure(bg=BG_COLOR)
+        win.grab_set()
+        win.transient(self.root)
+        
+        # Center the window relative to parent
+        x = self.root.winfo_x() + (self.root.winfo_width() / 2) - 190
+        y = self.root.winfo_y() + (self.root.winfo_height() / 2) - 150
+        win.geometry(f"380x300+{int(x)}+{int(y)}")
+        
+        tk.Label(win, text="Təmizlənəcək komponentləri seçin:", font=self.font_label, bg=BG_COLOR, fg=ACCENT_COLOR).pack(anchor=tk.W, padx=20, pady=10)
+        
+        tk.Checkbutton(win, text="Yalnız MasterDeploy Konteyneri", variable=self.clean_masterdeploy_var, bg=BG_COLOR, fg=TEXT_COLOR, selectcolor=BG_COLOR, font=self.font_entry, activebackground=BG_COLOR, activeforeground="white").pack(anchor=tk.W, padx=40, pady=4)
+        tk.Checkbutton(win, text="Bütün Docker Konteynerləri və İmicləri", variable=self.clean_all_docker_var, bg=BG_COLOR, fg=TEXT_COLOR, selectcolor=BG_COLOR, font=self.font_entry, activebackground=BG_COLOR, activeforeground="white").pack(anchor=tk.W, padx=40, pady=4)
+        tk.Checkbutton(win, text="MasterDeploy Data Qovluğu (/data/masterdeploy)", variable=self.clean_data_var, bg=BG_COLOR, fg=TEXT_COLOR, selectcolor=BG_COLOR, font=self.font_entry, activebackground=BG_COLOR, activeforeground="white").pack(anchor=tk.W, padx=40, pady=4)
+        tk.Checkbutton(win, text="Firewall Qaydalarını Sıfırla (UFW)", variable=self.clean_ufw_var, bg=BG_COLOR, fg=TEXT_COLOR, selectcolor=BG_COLOR, font=self.font_entry, activebackground=BG_COLOR, activeforeground="white").pack(anchor=tk.W, padx=40, pady=4)
+        
+        if is_local:
+            tk.Checkbutton(win, text="WSL Ubuntu Distribütivini Tam Sil (Sıfırla)", variable=self.clean_wsl_distro_var, bg=BG_COLOR, fg="#E74C3C", selectcolor=BG_COLOR, font=self.font_entry, activebackground=BG_COLOR, activeforeground="white").pack(anchor=tk.W, padx=40, pady=4)
+        
+        def run_clean():
+            win.destroy()
+            if is_local:
+                self.backend.run_local_clean_task()
+            else:
+                self.backend.run_remote_clean_task()
+                
+        self.create_button(win, "Seçilənləri Təmizlə 🗑️", BTN_CLEAN, run_clean).pack(pady=15, ipady=3, ipadx=10)
+
     def zoom_in_remote(self):
         self.backend.zoom_text(self.console_remote, 1)
 
@@ -459,3 +524,43 @@ class RemoteInstallerGUI:
 
     def zoom_out_local(self):
         self.backend.zoom_text(self.console_local, -1)
+
+    def toggle_always_on_top(self):
+        is_top = self.always_on_top_var.get()
+        self.root.attributes("-topmost", is_top)
+        self.backend.save_config()
+
+    def minimize_to_tray(self):
+        self.root.withdraw()
+
+    def restore_from_tray(self, icon=None, item=None):
+        self.root.after(0, self.root.deiconify)
+        self.root.after(0, lambda: self.root.focus_force())
+
+    def exit_app(self, icon=None, item=None):
+        if self.tray_icon:
+            self.tray_icon.stop()
+        self.root.after(0, self.root.destroy)
+
+    def setup_tray(self):
+        try:
+            import pystray
+            from PIL import Image, ImageDraw
+            import threading
+            
+            def create_image():
+                image = Image.new('RGB', (64, 64), color=(18, 18, 18))
+                dc = ImageDraw.Draw(image)
+                dc.rectangle((16, 16, 48, 48), fill=(0, 210, 255))
+                return image
+
+            image = create_image()
+            menu = pystray.Menu(
+                pystray.MenuItem("Göstər (Restore)", self.restore_from_tray, default=True),
+                pystray.MenuItem("Yenidən Başlat", self.backend.relaunch_app),
+                pystray.MenuItem("Çıxış (Exit)", self.exit_app)
+            )
+            self.tray_icon = pystray.Icon("MasterDeploy", image, "MasterDeploy Installer", menu)
+            threading.Thread(target=self.tray_icon.run, daemon=True).start()
+        except Exception as e:
+            print(f"Tray startup error: {e}")

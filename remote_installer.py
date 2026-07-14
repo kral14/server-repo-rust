@@ -18,8 +18,10 @@ class RemoteInstallerLogic:
 
     def center_window(self, size_str):
         try:
-            size = size_str.split('+')[0] if '+' in size_str else size_str
-            w, h = map(int, size.split('x'))
+            if '+' in size_str:
+                self.gui.root.geometry(size_str)
+                return
+            w, h = map(int, size_str.split('x'))
             ws = self.gui.root.winfo_screenwidth()
             hs = self.gui.root.winfo_screenheight()
             x = (ws / 2) - (w / 2)
@@ -39,6 +41,10 @@ class RemoteInstallerLogic:
                     self.gui.user_entry.insert(0, data.get("user", "ubuntu"))
                     self.gui.key_entry.insert(0, data.get("key", ""))
                     
+                    # Load GitHub Token
+                    if hasattr(self.gui, 'token_var'):
+                        self.gui.token_var.set(data.get("github_token", ""))
+                    
                     swap_val = data.get("swap", "2")
                     self.gui.swap_entry.delete(0, tk.END)
                     self.gui.swap_entry.insert(0, swap_val)
@@ -52,6 +58,11 @@ class RemoteInstallerLogic:
                     port_val = data.get("portainer_port", "9000")
                     self.gui.portainer_port_entry.insert(0, port_val)
                     self.gui.local_portainer_port_entry.insert(0, port_val)
+                    
+                    # Load always on top preference
+                    always_top = data.get("always_on_top", False)
+                    self.gui.always_on_top_var.set(always_top)
+                    self.gui.root.attributes("-topmost", always_top)
                     
                     geom = data.get("geometry", "850x780")
                     self.center_window(geom)
@@ -86,15 +97,19 @@ class RemoteInstallerLogic:
                 portainer_val = self.gui.local_portainer_port_entry.get().strip()
                 
             geom = self.gui.root.geometry()
+            always_top = self.gui.always_on_top_var.get()
+            token_val = self.gui.token_var.get().strip() if hasattr(self.gui, 'token_var') else ""
             
             data = {
                 "ip": self.gui.ip_entry.get().strip(),
                 "user": self.gui.user_entry.get().strip(),
                 "key": self.gui.key_entry.get().strip(),
+                "github_token": token_val,
                 "swap": swap_val,
                 "panel_port": panel_val,
                 "portainer_port": portainer_val,
-                "geometry": geom
+                "geometry": geom,
+                "always_on_top": always_top
             }
             with open("config.json", "w") as f:
                 json.dump(data, f)
@@ -739,6 +754,117 @@ echo '✅ MasterDeploy uğurla yeniləndi!'
                 self.log_local(f"❌ Xəta: {e}")
         threading.Thread(target=task, daemon=True).start()
 
+    def enable_docker_wsl_integration(self):
+        if os.name != 'nt': return
+        try:
+            appdata = os.environ.get("APPDATA", "")
+            docker_dir = os.path.join(appdata, "Docker")
+            os.makedirs(docker_dir, exist_ok=True)
+            
+            # Docker CLI inteqrasiyasını yoxlayırıq (hər hansı warning vermədən 0 qaytarmalıdır)
+            integration_active = False
+            try:
+                check_cli = subprocess.run(["wsl", "-d", "Ubuntu", "docker", "--version"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                if check_cli.returncode == 0:
+                    integration_active = True
+            except:
+                pass
+
+            # Docker Engine (daemon) arxa planda işləyirmi?
+            daemon_running = False
+            if integration_active:
+                try:
+                    check_daemon = subprocess.run(["wsl", "-d", "Ubuntu", "docker", "ps"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                    if check_daemon.returncode == 0:
+                        daemon_running = True
+                except:
+                    pass
+
+            updated = False
+            
+            # 1. settings.json yenilənir
+            settings_path = os.path.join(docker_dir, "settings.json")
+            settings = {}
+            if os.path.exists(settings_path):
+                try:
+                    with open(settings_path, "r") as f:
+                        settings = json.load(f)
+                except:
+                    pass
+            
+            settings["wslEngineEnabled"] = True
+            active_distros = settings.get("activeWslDistros", [])
+            if "Ubuntu" not in active_distros:
+                active_distros.append("Ubuntu")
+                settings["activeWslDistros"] = active_distros
+                updated = True
+                
+            with open(settings_path, "w") as f:
+                json.dump(settings, f, indent=2)
+                
+            # 2. settings-store.json yenilənir
+            store_path = os.path.join(docker_dir, "settings-store.json")
+            store_settings = {}
+            if os.path.exists(store_path):
+                try:
+                    with open(store_path, "r") as f:
+                        store_settings = json.load(f)
+                except:
+                    pass
+            
+            store_settings["wslEngineEnabled"] = True
+            store_distros = store_settings.get("activeWslDistros", [])
+            if "Ubuntu" not in store_distros:
+                store_distros.append("Ubuntu")
+                store_settings["activeWslDistros"] = store_distros
+                updated = True
+                
+            with open(store_path, "w") as f:
+                json.dump(store_settings, f, indent=2)
+            
+            # İnteqrasiya aktiv deyilsə, yenidən başladılma mütləqdir
+            if not integration_active:
+                updated = True
+            
+            if updated:
+                self.log_local("✅ Docker WSL İnteqrasiya faylları yeniləndi/yoxlanıldı.")
+                self.log_local("🔄 Ayarların aktiv edilməsi üçün Docker Desktop backend prosesləri dayandırılır...")
+                subprocess.run(["taskkill", "/F", "/IM", "Docker Desktop.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+                subprocess.run(["taskkill", "/F", "/IM", "com.docker.backend.exe"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW)
+                time.sleep(3)
+            
+            # Start/Ensure Docker is running
+            try:
+                task_check = subprocess.run(["tasklist", "/FI", "IMAGENAME eq Docker Desktop.exe"], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+                if "Docker Desktop.exe" not in task_check.stdout or updated:
+                    self.log_local("🔄 Docker Desktop başladılır...")
+                    possible_paths = [
+                        "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe",
+                        "E:\\Docker\\Docker\\Docker Desktop.exe",
+                        "E:\\Docker\\Docker Desktop.exe"
+                    ]
+                    started = False
+                    for path in possible_paths:
+                        if os.path.exists(path):
+                            subprocess.Popen([path])
+                            started = True
+                            break
+                    if started:
+                        self.log_local("✅ Docker Desktop başladıldı (İnteqrasiyanın və xidmətlərin açılması üçün 15 saniyə gözlənilir)...")
+                        time.sleep(15)
+                    else:
+                        self.log_local("⚠️ Docker Desktop.exe tapılmadı. Lütfən Docker Desktop-u əllə başladın.")
+                else:
+                    if not daemon_running:
+                        self.log_local("⚠️ Docker Desktop açıqdır, lakin Docker Engine (daemon) hələ tam hazır deyil. Zəhmət olmasa Docker-in tam açılmasını gözləyin.")
+                    else:
+                        self.log_local("✅ Docker Desktop və WSL İnteqrasiyası tam aktiv və işlək vəziyyətdədir.")
+            except Exception as e:
+                self.log_local(f"⚠️ Docker-i başladarkən xəbərdarlıq: {e}")
+                
+        except Exception as e:
+            self.log_local(f"⚠️ Docker WSL inteqrasiyası zamanı xəta: {e}")
+
     def run_local_task(self, cmd_func, confirm=None):
         if os.name == 'nt':
             # Windows-da bəzi əmrlər (məsələn Docker və ya WSL qurmaq) birbaşa Windows API/PowerShell istifadə edir
@@ -756,6 +882,7 @@ echo '✅ MasterDeploy uğurla yeniləndi!'
         portainer_port = self.gui.local_portainer_port_entry.get().strip() or "9000"
         
         self.save_config()
+        self.enable_docker_wsl_integration()
         cmd = cmd_func(swap_gb, panel_port, portainer_port)
         
         self.log_local("\n--- Yerli Quraşdırma Başladı ---")
@@ -765,7 +892,11 @@ echo '✅ MasterDeploy uğurla yeniləndi!'
             try:
                 if os.name == 'nt':
                     self.log_local("Windows-da WSL (Ubuntu) üzərindən işə salınır...")
-                    wsl_cmd = ["wsl", "bash", "-c", cmd]
+                    # Sudo docker əmrlərini normal docker ilə əvəzləyirik (çünki root PATH-ində Windows qovluqları olmur)
+                    wsl_cmd_str = cmd.replace("sudo docker ", "docker ")
+                    # İnteqrasiya helper xətasını aradan qaldırmaq üçün konfiqurasiya faylını sıfırlayırıq
+                    wsl_cmd_str = "mkdir -p ~/.docker && echo '{}' > ~/.docker/config.json && " + wsl_cmd_str
+                    wsl_cmd = ["wsl", "-d", "Ubuntu", "bash", "-c", wsl_cmd_str]
                     creationflags = subprocess.CREATE_NO_WINDOW
                     proc = subprocess.Popen(wsl_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True, creationflags=creationflags)
                 else:
@@ -851,9 +982,12 @@ echo '✅ Docker komponentləri uğurla quraşdırıldı!';
 """
 
     def get_cmd_panel(self, swap_gb, panel_p, port_p):
-        from tkinter import simpledialog
-        token = simpledialog.askstring("GitHub Token", "GitHub Personal Access Token (PAT) daxil edin:", show="*")
+        token = ""
+        if hasattr(self.gui, 'token_var'):
+            token = self.gui.token_var.get().strip()
+            
         if not token:
+            self.log_local("❌ XƏTA: GitHub Token daxil edilməyib! Zəhmət olmasa sol paneldə GitHub Tokeninizi qeyd edin.")
             token = "dummy_token"
         return f"""
 echo 'MasterDeploy Qurulur (GHCR hazır imic)...';
@@ -896,6 +1030,85 @@ sudo rm -rf /data/masterdeploy;
 sudo ufw reset --force;
 echo '✅ Bütün təmizlik işləri uğurla bitdi!';
 """
+
+    def run_remote_clean_task(self):
+        confirm = messagebox.askyesno("Təsdiq", "Seçilmiş komponentləri uzaq serverdən silmək istədiyinizə əminsiniz?")
+        if not confirm: return
+        
+        commands = []
+        commands.append("echo 'Uzaq Server Təmizlənməsi Başladı...';")
+        
+        if self.gui.clean_masterdeploy_var.get():
+            commands.append("echo 'Yalnız MasterDeploy konteyneri dayandırılır və silinir...';")
+            commands.append("sudo docker stop masterdeploy 2>/dev/null || true;")
+            commands.append("sudo docker rm masterdeploy 2>/dev/null || true;")
+            
+        if self.gui.clean_all_docker_var.get():
+            commands.append("echo 'Bütün Docker konteynerləri və imicləri silinir...';")
+            commands.append("sudo docker stop $(sudo docker ps -aq) 2>/dev/null || true;")
+            commands.append("sudo docker rm $(sudo docker ps -aq) 2>/dev/null || true;")
+            commands.append("sudo docker rmi $(sudo docker images -q) 2>/dev/null || true;")
+            commands.append("sudo docker system prune -a --volumes -f 2>/dev/null || true;")
+            
+        if self.gui.clean_data_var.get():
+            commands.append("echo 'MasterDeploy Data qovluğu silinir...';")
+            commands.append("sudo rm -rf /data/masterdeploy;")
+            
+        if self.gui.clean_ufw_var.get():
+            commands.append("echo 'Firewall qaydaları sıfırlanır...';")
+            commands.append("sudo ufw reset --force;")
+            
+        commands.append("echo '✅ Seçilənlər uğurla təmizləndi!';")
+        
+        full_cmd = "\n".join(commands)
+        self.run_remote_task(lambda sw, pa, po: full_cmd)
+
+    def run_local_clean_task(self):
+        confirm = messagebox.askyesno("Təsdiq", "Seçilmiş komponentləri yerli kompüterdən silmək istədiyinizə əminsiniz?")
+        if not confirm: return
+        
+        if self.gui.clean_wsl_distro_var.get():
+            def wsl_task():
+                self.log_local("\n--- Yerli Quraşdırma Başladı ---")
+                self.gui.toggle_local_buttons(tk.DISABLED)
+                self.log_local("🐧 WSL Ubuntu distribütivi tamamilə silinir...")
+                try:
+                    subprocess.run(["wsl", "--unregister", "Ubuntu"], creationflags=subprocess.CREATE_NO_WINDOW)
+                    self.log_local("✅ WSL Ubuntu uğurla silindi!")
+                except Exception as e:
+                    self.log_local(f"❌ Xəta: {e}")
+                self.gui.root.after(0, lambda: self.gui.toggle_local_buttons(tk.NORMAL))
+            threading.Thread(target=wsl_task, daemon=True).start()
+            return
+            
+        commands = []
+        commands.append("echo 'Yerli PC Təmizlənməsi Başladı...';")
+        
+        if self.gui.clean_masterdeploy_var.get():
+            commands.append("echo 'Yalnız MasterDeploy konteyneri dayandırılır və silinir...';")
+            commands.append("docker stop masterdeploy 2>/dev/null || true;")
+            commands.append("docker rm masterdeploy 2>/dev/null || true;")
+            
+        if self.gui.clean_all_docker_var.get():
+            commands.append("echo 'Bütün Docker konteynerləri və imicləri silinir...';")
+            commands.append("docker stop $(docker ps -aq) 2>/dev/null || true;")
+            commands.append("docker rm $(docker ps -aq) 2>/dev/null || true;")
+            commands.append("docker rmi $(docker images -q) 2>/dev/null || true;")
+            commands.append("docker system prune -a --volumes -f 2>/dev/null || true;")
+            
+        if self.gui.clean_data_var.get():
+            commands.append("echo 'MasterDeploy Data qovluğu silinir...';")
+            commands.append("sudo rm -rf /data/masterdeploy;")
+            
+        if self.gui.clean_ufw_var.get():
+            commands.append("echo 'Firewall qaydaları sıfırlanır...';")
+            commands.append("sudo ufw reset --force;")
+            
+        commands.append("echo '✅ Seçilənlər uğurla təmizləndi!';")
+        
+        full_cmd = "\n".join(commands)
+        self.run_local_task(lambda sw, pa, po: full_cmd)
+
 
     def get_cmd_portainer(self, swap_gb, panel_p, port_p):
         return f"""
@@ -1040,7 +1253,7 @@ fi;
             try:
                 if os.name == 'nt':
                     self.log_local("Windows-da WSL (Ubuntu) üzərindən icra olunur...")
-                    exec_cmd = ["wsl", "bash", "-c", cmd]
+                    exec_cmd = ["wsl", "-d", "Ubuntu", "bash", "-c", cmd]
                     creationflags = subprocess.CREATE_NO_WINDOW
                     proc = subprocess.Popen(
                         exec_cmd,
@@ -1239,6 +1452,12 @@ fi;
             if install_dir.endswith(':') or install_dir.endswith(':\\') or install_dir.endswith(':/'):
                 install_dir = os.path.join(install_dir, "Docker")
                 
+            self.log_local(f"\n--- YERLİ WINDOWS DOCKER QURAŞDIRILMASI BAŞLADI ---")
+            self.log_local(f"Seçilmiş hədəf qovluq: {install_dir}")
+            self.gui.toggle_local_buttons(tk.DISABLED)
+            
+            # Check if docker exists first
+            # Check if docker exists on disk, path, or registry
             possible_paths = [
                 "C:\\Program Files\\Docker\\Docker\\resources\\bin\\docker.exe",
                 os.path.join(install_dir, "Docker\\resources\\bin\\docker.exe"),
@@ -1252,33 +1471,50 @@ fi;
                 except:
                     pass
             
+            # Check registry uninstall entries
+            reg_exists = False
+            try:
+                import winreg
+                reg_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Docker Desktop"
+                winreg.CloseKey(winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path, 0, winreg.KEY_READ))
+                reg_exists = True
+            except:
+                pass
+                
+            if reg_exists:
+                docker_exists = True
+            
             force_install = False
             if docker_exists:
-                if messagebox.askyesno("Docker Desktop Mövcuddur", "Docker Desktop artıq sistemdə tapıldı.\nYenə də seçilmiş qovluğa (" + install_dir + ") yenidən quraşdırmaq istəyirsiniz?"):
+                msg_box_text = "Docker Desktop artıq sistemdə tapıldı."
+                if reg_exists and not any(os.path.exists(p) for p in possible_paths):
+                    msg_box_text = "Docker Desktop-un köhnə registry qalıqları tapıldı (fayllar yoxdur)."
+                if messagebox.askyesno("Docker Desktop Mövcuddur", f"{msg_box_text}\nYenə də seçilmiş qovluğa ({install_dir}) yenidən təmiz quraşdırmaq istəyirsiniz?"):
                     force_install = True
-                
-            self.log_local(f"\n--- YERLİ WINDOWS DOCKER QURAŞDIRILMASI BAŞLADI ---")
-            self.log_local(f"Seçilmiş hədəf qovluq: {install_dir}")
-            self.gui.toggle_local_buttons(tk.DISABLED)
-            
+
             def task():
                 try:
-                    installer_path = None
+                    installer_path = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "DockerDesktopInstaller.exe")
                     if docker_exists and not force_install:
                         self.log_local("✅ Docker Desktop artıq sistemdə mövcuddur. Yenidən quraşdırılma atlanır.")
                     else:
-                        installer_path = os.path.join(os.environ.get("TEMP", "C:\\Temp"), "DockerDesktopInstaller.exe")
-                        self.log_local("1. Docker Desktop yükləyicisi internetdən çəkilir (təxminən 500-600 MB)...")
-                        url = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
-                        
-                        def download_progress(count, block_size, total_size):
-                            percent = int(count * block_size * 100 / total_size)
-                            if percent % 10 == 0:
-                                self.log_local(f"Yüklənir: {percent}% ...")
-                                
-                        os.makedirs(os.path.dirname(installer_path), exist_ok=True)
-                        urllib.request.urlretrieve(url, installer_path, reporthook=download_progress)
-                        self.log_local("✅ Docker Desktop Installer uğurla yükləndi!")
+                        already_downloaded = False
+                        if os.path.exists(installer_path) and os.path.getsize(installer_path) > 100000000:
+                            already_downloaded = True
+                            self.log_local("1. Docker Desktop yükləyicisi artıq diskdə mövcuddur. Yüklənmə atlanır.")
+                            
+                        if not already_downloaded:
+                            self.log_local("1. Docker Desktop yükləyicisi internetdən çəkilir (təxminən 500-600 MB)...")
+                            url = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
+                            
+                            def download_progress(count, block_size, total_size):
+                                percent = int(count * block_size * 100 / total_size)
+                                if percent % 10 == 0:
+                                    self.log_local(f"Yüklənir: {percent}% ...")
+                                    
+                            os.makedirs(os.path.dirname(installer_path), exist_ok=True)
+                            urllib.request.urlretrieve(url, installer_path, reporthook=download_progress)
+                            self.log_local("✅ Docker Desktop Installer uğurla yükləndi!")
 
                         if force_install:
                             self.log_local("⚠️ Köhnə Docker xidmətləri dayandırılır və qovluqlar təmizlənir...")
@@ -1291,6 +1527,17 @@ fi;
                                         shutil.rmtree(path_to_clean, ignore_errors=True)
                                     except:
                                         pass
+                            
+                            # Registry təmizliyi
+                            try:
+                                import winreg
+                                reg_path = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
+                                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, reg_path, 0, winreg.KEY_ALL_ACCESS)
+                                winreg.DeleteKey(key, "Docker Desktop")
+                                winreg.CloseKey(key)
+                                self.log_local("✅ Köhnə Docker Registry qeydləri silindi!")
+                            except Exception as reg_err:
+                                self.log_local(f"⚠️ Registry silinərkən xəbərdarlıq (ola bilsin artıq yoxdur): {reg_err}")
 
                         self.log_local(f"2. Docker Desktop quraşdırıcısı ekranda açılır (Zəhmət olmasa ekrandakı pəncərədən quraşdırmanı tamamlayın)...")
                         install_cmd = [installer_path, "install", f"--installation-dir={install_dir}"]
@@ -1329,10 +1576,6 @@ fi;
                 except Exception as e:
                     self.log_local(f"❌ XƏTA: {e}")
                 
-                if installer_path and os.path.exists(installer_path):
-                    try: os.remove(installer_path)
-                    except: pass
-                    
                 self.gui.root.after(0, lambda: self.gui.toggle_local_buttons(tk.NORMAL))
                 
             threading.Thread(target=task, daemon=True).start()
@@ -1362,12 +1605,28 @@ fi;
                     
                     self.log_local("2. Ubuntu Distribütivi yoxlanılır...")
                     dist_check = subprocess.run(["wsl", "-l"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=subprocess.CREATE_NO_WINDOW)
-                    if dist_check.returncode != 0 or b"distrib" in dist_check.stdout.lower() or b"yok" in dist_check.stdout.lower() or len(dist_check.stdout) < 10:
+                    
+                    out_bytes = dist_check.stdout
+                    try:
+                        out_str = out_bytes.decode('utf-16-le', errors='ignore').lower()
+                    except:
+                        try:
+                            out_str = out_bytes.decode('utf-16', errors='ignore').lower()
+                        except:
+                            try:
+                                out_str = out_bytes.decode('utf-8', errors='ignore').lower()
+                            except:
+                                out_str = ""
+                    
+                    out_str_clean = "".join(out_str.split())
+                    has_ubuntu = "ubuntu" in out_str_clean
+                    
+                    if dist_check.returncode != 0 or not has_ubuntu:
                         self.log_local("Ubuntu minimal Linux sistemi birbaşa endirilir və idxal (import) edilir...")
                         ps_command = (
                             "Write-Host 'Ubuntu arxivi yuklenir...'; "
                             "New-Item -ItemType Directory -Force -Path 'E:\\DockerWSL\\ubuntu' | Out-Null; "
-                            "Invoke-WebRequest -Uri 'https://cloud-images.ubuntu.com/wsl/focal/current/ubuntu-focal-wsl-amd64-wsl.rootfs.tar.gz' -OutFile 'E:\\DockerWSL\\ubuntu.tar.gz' -UseBasicParsing; "
+                            "Invoke-WebRequest -Uri 'https://cloud-images.ubuntu.com/wsl/jammy/current/ubuntu-jammy-wsl-amd64-ubuntu22.04lts.rootfs.tar.gz' -OutFile 'E:\\DockerWSL\\ubuntu.tar.gz' -UseBasicParsing; "
                             "Write-Host 'Ubuntu WSL daxiline idxal (import) edilir...'; "
                             "wsl --import Ubuntu 'E:\\DockerWSL\\ubuntu' 'E:\\DockerWSL\\ubuntu.tar.gz' --version 2; "
                             "if (Test-Path 'E:\\DockerWSL\\ubuntu.tar.gz') { Remove-Item 'E:\\DockerWSL\\ubuntu.tar.gz' }; "
@@ -1388,6 +1647,18 @@ fi;
         return
 
 if __name__ == "__main__":
+    if os.name == 'nt':
+        import ctypes
+        import sys
+        if ctypes.windll.shell32.IsUserAnAdmin() == 0:
+            try:
+                script_path = os.path.abspath(sys.argv[0])
+                params = " ".join([f'"{arg}"' for arg in sys.argv[1:]])
+                ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{script_path}" {params}', None, 1)
+            except:
+                pass
+            sys.exit(0)
+
     root = tk.Tk()
     backend = RemoteInstallerLogic()
     app = RemoteInstallerGUI(root, backend)
