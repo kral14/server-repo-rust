@@ -4030,6 +4030,39 @@ function filterActivityLogs(filterType) {
     renderActivityLogs();
 }
 
+function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(text);
+    } else {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+            document.execCommand('copy');
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+        }
+        document.body.removeChild(textarea);
+        return Promise.resolve();
+    }
+}
+
+function toggleGithubTokenVisibility(event) {
+    if (event) event.stopPropagation();
+    const input = document.getElementById('gh-token');
+    const btn = event.currentTarget;
+    if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '🙈';
+    } else {
+        input.type = 'password';
+        btn.textContent = '👁️';
+    }
+}
+
 function escapeHtml(text) {
     if (!text) return '';
     return text
@@ -4042,9 +4075,11 @@ function escapeHtml(text) {
 
 function copySingleLog(event, text) {
     if (event) event.stopPropagation();
-    navigator.clipboard.writeText(text);
+    copyToClipboard(text);
     showInfoCard('Kopyalandı', '', 'Loq uğurla kopyalandı.');
 }
+
+let activeActivityLogs = [];
 
 async function copyCurrentSectionLogs() {
     try {
@@ -4061,12 +4096,18 @@ async function copyCurrentSectionLogs() {
             }
             
             const textToCopy = filteredLogs.map(l => `[${l.created_at}] ${l.message}`).join('\n');
-            navigator.clipboard.writeText(textToCopy);
+            copyToClipboard(textToCopy);
             showInfoCard('Kopyalandı', '', 'Bölmədəki bütün loqlar buferə kopyalandı.');
         }
     } catch (e) {
         console.error("Failed to copy section logs", e);
     }
+}
+
+function showLogDetailsByIndex(index) {
+    const l = activeActivityLogs[index];
+    if (!l) return;
+    showLogDetails(l.message, l.log_type, l.created_at);
 }
 
 function showLogDetails(message, logType, createdAt) {
@@ -4112,7 +4153,7 @@ function showLogDetails(message, logType, createdAt) {
 
 function copyLogDetailText() {
     const text = document.getElementById('log-detail-text').value;
-    navigator.clipboard.writeText(text);
+    copyToClipboard(text);
     showInfoCard('Kopyalandı', '', 'Uğurla buferə kopyalandı.');
 }
 
@@ -4134,11 +4175,13 @@ async function renderActivityLogs() {
                 filteredLogs = logs.filter(l => l.log_type === 'server' || l.message.toLowerCase().includes('server'));
             }
 
+            activeActivityLogs = filteredLogs;
+
             if (filteredLogs.length === 0) {
                 container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>';
                 return;
             }
-            container.innerHTML = filteredLogs.map(l => {
+            container.innerHTML = filteredLogs.map((l, i) => {
                 const meta = LOG_ICONS[l.log_type] || LOG_ICONS.info;
                 let timeStr = '--:--';
                 if (l.created_at) {
@@ -4154,7 +4197,7 @@ async function renderActivityLogs() {
                 }
                 const escapedMessage = escapeHtml(l.message);
                 return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.02); border: 1px solid var(--card-border); margin-bottom: 2px;">
-                    <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1; cursor:pointer;" onclick="showLogDetails('${escapedMessage}', '${l.log_type}', '${l.created_at}')">
+                    <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1; cursor:pointer;" onclick="showLogDetailsByIndex(${i})">
                         <span style="font-size:1.1rem; flex-shrink:0; display:flex; align-items:center; justify-content:center; width:28px; height:28px; background:rgba(255,255,255,0.03); border-radius:8px;">${meta.icon}</span>
                         <div style="flex:1; min-width:0;">
                             <div style="font-size:0.82rem; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis;" title="Detalları görmək üçün klikləyin">${l.message}</div>
