@@ -997,8 +997,43 @@
                 </div>
                 <div class="modal-actions"
                     style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border); margin-bottom: 0px;">
-                    <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important;">🧹 Jurnalı Təmizlə</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important;">🧹 Jurnalı Təmizlə</button>
+                        <button class="btn btn-secondary" onclick="copyCurrentSectionLogs()">📋 Bölməni Kopyala</button>
+                    </div>
                     <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')">Bağla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Detalı Modalı -->
+    <div id="log-detail-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 650px; width: 90%; max-height: 80vh; display: flex; flex-direction: column;">
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.2rem;">📋 Loq Təfərrüatı</h2>
+                        <p id="log-detail-meta" style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);"></p>
+                    </div>
+                </div>
+                
+                <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px;">
+                    <div style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500; margin-bottom: 4px;">Mesaj / Xəta mətni:</div>
+                    <textarea id="log-detail-text" readonly style="flex: 1; width: 100%; min-height: 120px; font-family: monospace; font-size: 0.85rem; background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); color: #fff; padding: 12px; border-radius: 8px; resize: none; outline: none;"></textarea>
+                    
+                    <div id="log-detail-extra-section" style="display: none; flex: 1.5; min-height: 0; flex-direction: column;">
+                        <div style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500; margin-bottom: 6px;" id="log-detail-extra-title">Terminal Çıxışı (Loqlar):</div>
+                        <div id="log-detail-extra-terminal" style="flex: 1; overflow-y: auto; background: #1e1e1e; border: 1px solid #333; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 0.82rem; color: #00e676; white-space: pre-wrap; min-height: 100px;"></div>
+                    </div>
+                </div>
+
+                <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); padding-top: 15px; margin-top: auto;">
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="copyLogDetailText()">📋 Kopyala</button>
+                        <button id="log-detail-view-deploy-btn" class="btn btn-secondary btn-sm" style="display: none;">🚀 Yayım Loqlarına Keç</button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="closeModal('log-detail-modal')">Bağla</button>
                 </div>
             </div>
         </div>

@@ -1,6 +1,8 @@
 let githubToken = '';
 let currentDeploymentCreatedAt = null;
 let currentDeploymentStatus = null;
+let globalApps = [];
+let deletionLogsCache = {};
 
 // Deploy növü seçimindən asılı olaraq sahələri gizlədib-göstərir
 // prefix: 'app' | 'settings' | 'wiz'
@@ -963,6 +965,7 @@ async function loadApplications() {
             fetch('/api/servers')
         ]);
         const apps = await appRes.json();
+        globalApps = apps;
         const servers = await srvRes.json();
 
         const serverMap = {};
@@ -1537,6 +1540,11 @@ async function deleteApp(appId, appName) {
                 div.textContent = text;
                 termBody.appendChild(div);
                 termBody.scrollTop = termBody.scrollHeight;
+                
+                if (!deletionLogsCache[appName]) {
+                    deletionLogsCache[appName] = [];
+                }
+                deletionLogsCache[appName].push(text);
             };
 
             addLog(`[SİSTEM] Layihə silinməsi başladıldı: ${appName}...`);
@@ -3988,6 +3996,92 @@ function filterActivityLogs(filterType) {
     renderActivityLogs();
 }
 
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function copySingleLog(event, text) {
+    if (event) event.stopPropagation();
+    navigator.clipboard.writeText(text);
+    showInfoCard('Kopyalandı', '', 'Loq uğurla kopyalandı.');
+}
+
+async function copyCurrentSectionLogs() {
+    try {
+        const res = await fetch('/api/activity-logs');
+        if (res.ok) {
+            const logs = await res.json();
+            let filteredLogs = logs;
+            if (currentActivityFilter === 'masterdeploy') {
+                filteredLogs = logs.filter(l => l.message.includes('[Yenilənmə]') || l.message.includes('[Sistem]') || l.log_type === 'system');
+            } else if (currentActivityFilter === 'apps') {
+                filteredLogs = logs.filter(l => l.message.includes('[Auto-Deploy]') || l.message.includes('[Auto-Deploy Xətası]') || l.log_type === 'app' || l.log_type === 'delete' || l.log_type === 'setup' || l.message.toLowerCase().includes('layihə'));
+            } else if (currentActivityFilter === 'servers') {
+                filteredLogs = logs.filter(l => l.log_type === 'server' || l.message.toLowerCase().includes('server'));
+            }
+            
+            const textToCopy = filteredLogs.map(l => `[${l.created_at}] ${l.message}`).join('\n');
+            navigator.clipboard.writeText(textToCopy);
+            showInfoCard('Kopyalandı', '', 'Bölmədəki bütün loqlar buferə kopyalandı.');
+        }
+    } catch (e) {
+        console.error("Failed to copy section logs", e);
+    }
+}
+
+function showLogDetails(message, logType, createdAt) {
+    const meta = document.getElementById('log-detail-meta');
+    const text = document.getElementById('log-detail-text');
+    const extraSection = document.getElementById('log-detail-extra-section');
+    const extraTerminal = document.getElementById('log-detail-extra-terminal');
+    const viewDeployBtn = document.getElementById('log-detail-view-deploy-btn');
+    
+    meta.textContent = `${logType.toUpperCase()} | ${createdAt}`;
+    text.value = message;
+    
+    extraSection.style.display = 'none';
+    viewDeployBtn.style.display = 'none';
+    
+    const appMatch = message.match(/'([^']+)'/);
+    let appName = null;
+    let foundApp = null;
+    if (appMatch) {
+        appName = appMatch[1];
+        if (Array.isArray(globalApps)) {
+            foundApp = globalApps.find(a => a.name === appName);
+        }
+    }
+    
+    if (appName && deletionLogsCache[appName]) {
+        extraSection.style.display = 'flex';
+        document.getElementById('log-detail-extra-title').textContent = 'Silinmə Prosesi Loqları:';
+        extraTerminal.textContent = deletionLogsCache[appName].join('\n');
+    }
+    
+    if (foundApp && (message.toLowerCase().includes('yenilənmə') || message.toLowerCase().includes('deploy') || message.toLowerCase().includes('manifest') || message.toLowerCase().includes('commit') || message.toLowerCase().includes('xətası'))) {
+        viewDeployBtn.style.display = 'inline-block';
+        viewDeployBtn.onclick = () => {
+            closeModal('log-detail-modal');
+            closeModal('activity-log-modal');
+            viewLogs(foundApp.id);
+        };
+    }
+    
+    showModal('log-detail-modal');
+}
+
+function copyLogDetailText() {
+    const text = document.getElementById('log-detail-text').value;
+    navigator.clipboard.writeText(text);
+    showInfoCard('Kopyalandı', '', 'Uğurla buferə kopyalandı.');
+}
+
 async function renderActivityLogs() {
     const container = document.getElementById('activity-log-list');
     if (!container) return;
@@ -4024,14 +4118,18 @@ async function renderActivityLogs() {
                         timeStr = l.created_at;
                     }
                 }
+                const escapedMessage = escapeHtml(l.message);
                 return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.02); border: 1px solid var(--card-border); margin-bottom: 2px;">
-                    <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1;">
+                    <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1; cursor:pointer;" onclick="showLogDetails('${escapedMessage}', '${l.log_type}', '${l.created_at}')">
                         <span style="font-size:1.1rem; flex-shrink:0; display:flex; align-items:center; justify-content:center; width:28px; height:28px; background:rgba(255,255,255,0.03); border-radius:8px;">${meta.icon}</span>
                         <div style="flex:1; min-width:0;">
-                            <div style="font-size:0.82rem; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis;" title="${l.message}">${l.message}</div>
+                            <div style="font-size:0.82rem; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis;" title="Detalları görmək üçün klikləyin">${l.message}</div>
                         </div>
                     </div>
-                    <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace; opacity:0.8; flex-shrink:0;">${timeStr}</span>
+                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                        <button onclick="copySingleLog(event, '${escapedMessage}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:0.95rem; padding:4px 6px; border-radius:4px; transition:color 0.2s;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='var(--text-secondary)'" title="Kopyala">📋</button>
+                        <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace; opacity:0.8;">${timeStr}</span>
+                    </div>
                 </div>`;
             }).join('');
         }
