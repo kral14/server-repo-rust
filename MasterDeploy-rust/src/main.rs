@@ -16,6 +16,30 @@ mod plugins;
 
 use models::{Application, CreateApplicationInput, CreateServerInput, UpdateServerInput, Deployment, Server, ActivityLog, CreateActivityLogInput};
 
+async fn perform_docker_login(token: &str) {
+    if token.is_empty() {
+        return;
+    }
+    let output = tokio::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("echo '{}' | docker login ghcr.io -u kral14 --password-stdin", token))
+        .output()
+        .await;
+        
+    match output {
+        Ok(out) if out.status.success() => {
+            println!("[INFO] Docker GHCR login succeeded automatically inside container.");
+        }
+        Ok(out) => {
+            let err = String::from_utf8_lossy(&out.stderr);
+            eprintln!("[ERROR] Docker GHCR login failed inside container: {}", err.trim());
+        }
+        Err(e) => {
+            eprintln!("[ERROR] Failed to run docker login inside container: {}", e);
+        }
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
     db: SqlitePool,
@@ -41,6 +65,14 @@ async fn main() {
     let _ = sqlx::query("UPDATE applications SET status = 'stopped' WHERE status = 'deploying'")
         .execute(&pool)
         .await;
+
+    // Start-up zamanı GitHub tokeni mövcuddursa, konteyner daxilində GHCR login edirik
+    if let Ok(Some((github_token,))) = sqlx::query_as::<_, (String,)>("SELECT value FROM settings WHERE key = 'github_token'")
+        .fetch_optional(&pool)
+        .await 
+    {
+        perform_docker_login(&github_token).await;
+    }
 
     // Git repositoriyalarını yeniliklər üçün yoxlayan arxa plan loopunu başladırıq
     tokio::spawn(git_polling_loop(pool.clone()));
@@ -1049,6 +1081,9 @@ async fn save_github_token(
     .execute(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Token yadda saxlandıqda avtomatik olaraq konteyner daxilində GHCR login edirik
+    perform_docker_login(&input.token).await;
 
     Ok(Json(true))
 }
@@ -2452,6 +2487,14 @@ async fn git_polling_loop(db: SqlitePool) {
     println!("[INFO] Git Auto-Deploy Polling Service is running... 🕵️");
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+
+        // Hər dövrdə GitHub tokenini oxuyub daxildə GHCR login-in aktiv olmasını təmin edirik
+        if let Ok(Some((github_token,))) = sqlx::query_as::<_, (String,)>("SELECT value FROM settings WHERE key = 'github_token'")
+            .fetch_optional(&db)
+            .await 
+        {
+            perform_docker_login(&github_token).await;
+        }
 
         // 30 gündən köhnə deployment qeydlərini avtomatik silirik
         let _ = sqlx::query("DELETE FROM deployments WHERE created_at < datetime('now', '-30 days')")
