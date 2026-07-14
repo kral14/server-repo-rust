@@ -3968,6 +3968,26 @@ async function addActivityLog(message, type = 'info') {
     }
 }
 
+let currentActivityFilter = 'all';
+
+function filterActivityLogs(filterType) {
+    currentActivityFilter = filterType;
+    const buttons = document.querySelectorAll('.activity-tab-btn');
+    buttons.forEach(btn => {
+        const onclickAttr = btn.getAttribute('onclick');
+        if (onclickAttr && onclickAttr.includes(`'${filterType}'`)) {
+            btn.classList.add('active');
+            btn.style.color = 'var(--text-primary)';
+            btn.style.borderColor = 'var(--primary-color)';
+        } else {
+            btn.classList.remove('active');
+            btn.style.color = 'var(--text-secondary)';
+            btn.style.borderColor = 'var(--card-border)';
+        }
+    });
+    renderActivityLogs();
+}
+
 async function renderActivityLogs() {
     const container = document.getElementById('activity-log-list');
     if (!container) return;
@@ -3975,11 +3995,22 @@ async function renderActivityLogs() {
         const res = await fetch('/api/activity-logs');
         if (res.ok) {
             const logs = await res.json();
-            if (logs.length === 0) {
+            
+            // Filtrləmə məntiqi
+            let filteredLogs = logs;
+            if (currentActivityFilter === 'masterdeploy') {
+                filteredLogs = logs.filter(l => l.message.includes('[Yenilənmə]') || l.message.includes('[Sistem]') || l.log_type === 'system');
+            } else if (currentActivityFilter === 'apps') {
+                filteredLogs = logs.filter(l => l.message.includes('[Auto-Deploy]') || l.message.includes('[Auto-Deploy Xətası]') || l.log_type === 'app' || l.log_type === 'delete' || l.log_type === 'setup' || l.message.toLowerCase().includes('layihə'));
+            } else if (currentActivityFilter === 'servers') {
+                filteredLogs = logs.filter(l => l.log_type === 'server' || l.message.toLowerCase().includes('server'));
+            }
+
+            if (filteredLogs.length === 0) {
                 container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>';
                 return;
             }
-            container.innerHTML = logs.map(l => {
+            container.innerHTML = filteredLogs.map(l => {
                 const meta = LOG_ICONS[l.log_type] || LOG_ICONS.info;
                 let timeStr = '--:--';
                 if (l.created_at) {
