@@ -136,7 +136,7 @@ def main():
     build_cmd = f"docker buildx build {tags_arg} --push ./MasterDeploy-rust"
     
     start_time = time.time()
-    build_proc = subprocess.Popen(build_cmd, shell=True, cwd=server_repo_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, universal_newlines=True)
+    build_proc = subprocess.Popen(build_cmd, shell=True, cwd=server_repo_dir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors='replace', bufsize=1, universal_newlines=True)
     
     while True:
         line = build_proc.stdout.readline()
