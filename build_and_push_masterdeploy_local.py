@@ -153,31 +153,7 @@ def main():
         
     log(f"✅ MasterDeploy imici uğurla build olundu və push edildi! Sərf olunan vaxt: {elapsed_time:.1f} saniyə.")
     
-    # 4. SSH vasitəsilə serverə bağlanıb yeni MasterDeploy-u yenidən başladaq
-    log("SSH vasitəsilə Oracle VM-ə bağlanılır və MasterDeploy redeploy əmri göndərilir...")
-    
-    server_commands = [
-        f"echo '{token}' | sudo docker login ghcr.io -u oauth2 --password-stdin",
-        f"sudo docker pull {image_base}:latest",
-        "sudo docker stop masterdeploy || true",
-        "sudo docker rm masterdeploy || true",
-        f"sudo docker run -d --name masterdeploy --restart always -p {panel_port}:3000 -v /var/run/docker.sock:/var/run/docker.sock -v /data/masterdeploy:/app/data -v ~/.ssh:/root/.ssh -e PORT=3000 {image_base}:latest",
-        "sudo docker image prune -f",
-        "echo '✅ Serverdə MasterDeploy paneli uğurla yeniləndi!'"
-    ]
-    
-    full_server_cmd = " && ".join(server_commands)
-    ssh_cmd = ["ssh", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10", "-i", key_path, f"{user}@{ip}", full_server_cmd]
-    
-    creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
-    deploy_proc = subprocess.run(ssh_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', creationflags=creationflags)
-    
-    print(deploy_proc.stdout)
-    
-    if deploy_proc.returncode == 0:
-        log("🎉 UĞURLU! MasterDeploy build olundu, GHCR-a göndərildi və Serverdə uğurla yeniləndi!")
-    else:
-        log(f"❌ XƏTA: Serverdə MasterDeploy yenilənmə əməliyyatı uğursuz oldu! Kod: {deploy_proc.returncode}")
+    log("🎉 UĞURLU! MasterDeploy build olundu və GHCR-a göndərildi! Artıq istifadəçi tərəfindən paneldən yenilənə bilər.")
 
 if __name__ == "__main__":
     main()

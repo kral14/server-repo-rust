@@ -2402,11 +2402,28 @@ async fn trigger_system_update(
             
             let host_port = if host_port.is_empty() { "3000".to_string() } else { host_port };
  
-            // Pull uğurludursa, yenilənmə skriptini işə salırıq (düzgün volume, dinamik port və təmizlik ilə)
-            let script = format!(
-                "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && docker run -d --name masterdeploy --restart always -p {}:3000 -v /data/masterdeploy:/app/data -v /var/run/docker.sock:/var/run/docker.sock -v ~/.ssh:/root/.ssh '{}' && docker image prune -f",
-                host_port, image
-            );
+            // Cari işləyən MasterDeploy imic ID-sini tapırıq ki, onu silə bilək
+            let current_image_output = std::process::Command::new("docker")
+                .args(["inspect", "--format", "{{.Image}}", "masterdeploy"])
+                .output();
+            let current_image_id = if let Ok(out) = current_image_output {
+                String::from_utf8_lossy(&out.stdout).trim().to_string()
+            } else {
+                "".to_string()
+            };
+
+            // Pull uğurludursa, yenilənmə skriptini işə salırıq (düzgün volume, dinamik port, köhnə imicin silinməsi və təmizlik ilə)
+            let script = if !current_image_id.is_empty() {
+                format!(
+                    "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && (docker rmi -f {} || true) && docker run -d --name masterdeploy --restart always -p {}:3000 -v /data/masterdeploy:/app/data -v /var/run/docker.sock:/var/run/docker.sock -v ~/.ssh:/root/.ssh -e PORT=3000 '{}' && docker image prune -f",
+                    current_image_id, host_port, image
+                )
+            } else {
+                format!(
+                    "sleep 3 && docker stop masterdeploy && docker rm masterdeploy && docker run -d --name masterdeploy --restart always -p {}:3000 -v /data/masterdeploy:/app/data -v /var/run/docker.sock:/var/run/docker.sock -v ~/.ssh:/root/.ssh -e PORT=3000 '{}' && docker image prune -f",
+                    host_port, image
+                )
+            };
 
             let _ = std::process::Command::new("docker")
                 .args(["run", "-d", "--rm", "--name", "masterdeploy-updater", "-v", "/var/run/docker.sock:/var/run/docker.sock", &image, "sh", "-c", &script])
