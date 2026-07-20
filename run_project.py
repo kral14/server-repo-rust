@@ -27,86 +27,6 @@ def get_backend_mtime(src_dir):
                     pass
     return max(mtimes) if mtimes else 0
 
-def sync_database_from_remote():
-    import json
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(base_dir, "config.json")
-    
-    if not os.path.exists(config_path):
-        print("[SYNC ERROR] config.json tapilmadi, sinxronizasiya es gecilir.")
-        return
-        
-    try:
-        with open(config_path, "r") as f:
-            config = json.load(f)
-        ip = config.get("ip", "").strip()
-        user = config.get("user", "ubuntu").strip()
-        key_path = config.get("key", "").strip()
-        
-        if not ip or not key_path:
-            print("[SYNC ERROR] IP ve ya Key tapilmadi, sinxronizasiya es gecilir.")
-            return
-
-        print(f"[SYNC] Uzak merkezi serverden ({ip}) SQLite verilenler bazasi yuklenir...")
-        local_db_path = os.path.join(base_dir, "MasterDeploy-rust", "masterdeploy.db")
-
-        # Database faylını SCP ilə kopyalayırıq
-        scp_cmd = [
-            "scp.exe", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
-            "-i", key_path,
-            f"{user}@{ip}:/data/masterdeploy/masterdeploy.db",
-            local_db_path
-        ]
-        res = subprocess.run(scp_cmd, capture_output=True, text=True)
-        if res.returncode == 0:
-            print("[SYNC] Baza ugurla sinxronlasdirildi! (masterdeploy.db yenilendi)")
-        else:
-            print("[SYNC ERROR] SCP ugursuz oldu. Kohne bazadan istifade olunacaq.")
-            print(res.stderr)
-    except Exception as e:
-        print(f"[SYNC ERROR] Sinxronizasiya zamani gozlenilmez xeta: {e}")
-
-
-def upload_database_to_remote():
-    import json
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(base_dir, "config.json")
-    
-    if not os.path.exists(config_path):
-        print("[SYNC ERROR] config.json tapilmadi, sinxronizasiya es gecilir.")
-        return
-        
-    try:
-        with open(config_path, "r") as f:
-            config = json.load(f)
-        ip = config.get("ip", "").strip()
-        user = config.get("user", "ubuntu").strip()
-        key_path = config.get("key", "").strip()
-        
-        if not ip or not key_path:
-            print("[SYNC ERROR] IP ve ya Key tapilmadi, sinxronizasiya es gecilir.")
-            return
-
-        print(f"[SYNC] Lokal SQLite verilenler bazasi uzak merkezi servere ({ip}) yuklenir...")
-        local_db_path = os.path.join(base_dir, "MasterDeploy-rust", "masterdeploy.db")
-
-        # Database-i uzaq servere geri yukleyirik
-        scp_cmd = [
-            "scp.exe", "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=10",
-            "-i", key_path,
-            local_db_path,
-            f"{user}@{ip}:/data/masterdeploy/masterdeploy.db"
-        ]
-        res = subprocess.run(scp_cmd, capture_output=True, text=True)
-        if res.returncode == 0:
-            print("[SYNC] Lokal baza ugurla uzaq servere yazildi! (VM yenilendi)")
-        else:
-            print("[SYNC ERROR] SCP ile bazani geri yuklemek mumkun olmadi.")
-            print(res.stderr)
-    except Exception as e:
-        print(f"[SYNC ERROR] Geri yukleme zamani gozlenilmez xeta: {e}")
-
-
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     project_dir = os.path.join(base_dir, 'masterdeploy-rust')
@@ -117,7 +37,6 @@ def main():
         sys.exit(1)
 
     kill_previous_instances()
-    sync_database_from_remote()
 
     print(">> MasterDeploy Backend server ise salinir (cargo run)...")
     
@@ -177,7 +96,6 @@ def main():
         
         # Tauri pəncərəsi bağlandıqda backend-i dayandırırıq
         backend_process.terminate()
-        upload_database_to_remote()
         
     except KeyboardInterrupt:
         print("\n[STOP] Istifadeci terefinden serverler dayandirildi.")
@@ -189,7 +107,6 @@ def main():
             backend_process.terminate()
         except:
             pass
-        upload_database_to_remote()
     except FileNotFoundError:
         print("[X] Xeta: 'cargo' ve ya 'tauri' emri tapilmadi. Qurasdirildiqlarindan emin olun.")
     except Exception as e:
