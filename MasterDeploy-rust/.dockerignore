@@ -1,5 +1,9 @@
 target/
+src-tauri/target/
+.cargo_cache/
 *.db
 *.db.backup
 masterdeploy.db
 masterdeploy.db.backup
+temp_*
+

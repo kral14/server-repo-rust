@@ -1,11 +1,12 @@
 node_modules/
-target/
+**/target/
+.cargo_cache/
 *.key
 temp_*
-MasterDeploy-rust/temp_*
-MasterDeploy-rust/target/
+**/temp_*
 .env
 *.db
 *.db.backup
-MasterDeploy-rust/masterdeploy.db
-MasterDeploy-rust/masterdeploy.db.backup
+**/*.db
+**/*.db.backup
+
