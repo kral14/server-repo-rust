@@ -65,31 +65,18 @@ def main():
     # 1. Konfiqurasiyaları oxu
     server_repo_dir = r"c:\Users\nesib\.gemini\antigravity-ide\scratch\mezuniyyet-rust-taurisiz-olan\server-repo-rust"
     main_config_path = os.path.join(server_repo_dir, "..", "config.json")
-    server_config_path = os.path.join(server_repo_dir, "config.json")
     
     if not os.path.exists(main_config_path):
         log("XƏTA: Əsas config.json tapılmadı!")
         sys.exit(1)
-    if not os.path.exists(server_config_path):
-        log("XƏTA: server-repo-rust/config.json tapılmadı!")
-        sys.exit(1)
         
     with open(main_config_path, "r", encoding="utf-8") as f:
         main_config = json.load(f)
-    with open(server_config_path, "r", encoding="utf-8") as f:
-        server_config = json.load(f)
         
     token = main_config.get("github_token", "").strip()
-    ip = server_config.get("ip", "").strip()
-    user = server_config.get("user", "ubuntu").strip()
-    key_path = server_config.get("key", "").strip()
-    panel_port = server_config.get("panel_port", "3000").strip()
     
     if not token:
         log("XƏTA: GitHub Token tapılmadı!")
-        sys.exit(1)
-    if not ip or not key_path:
-        log("XƏTA: Server məlumatları (IP və ya SSH Key) tapılmadı!")
         sys.exit(1)
         
     version = bump_cargo_version(server_repo_dir)
@@ -105,12 +92,9 @@ def main():
         log(f"Warning: Git push ugursuz oldu: {git_push.stderr.strip()}")
     else:
         log("✅ Kod ugurla GitHub-a push edildi. Yeni versiya panelinizde gorunecek!")
-
+ 
     log(f"Oxunmuş Məlumatlar:")
-    log(f"  - Server IP: {ip}")
-    log(f"  - Panel Portu: {panel_port}")
     log(f"  - MasterDeploy Versiyası: {version}")
-    log(f"  - SSH Key: {key_path}")
     log(f"  - GitHub Token: {token[:6]}...{token[-4:]}")
     
     # 2. Local Docker-i GHCR-a login et
