@@ -2247,7 +2247,7 @@ async fn trigger_deployment_impl(
         // Köhnə konteynerin işlətdiyi imicin SHA və Tarix məlumatını çəkirik
         let mut old_image_id = String::new();
         let inspect_old_cmd = format!(
-            "sudo docker inspect --format 'SHA: {{{{.Image}}}} | İmic: {{{{.Config.Image}}}} | Yaradılma: {{{{.Created}}}} | Başlama: {{{{.State.StartedAt}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
+            "sudo docker inspect --format 'SHA: {{{{.Image}}}} | İmic: {{{{.Config.Image}}}} | Yaradılma: {{{{.Created}}}} | Başlama: {{{{.State.StartedAt}}}} | Digest: {{{{range .RepoDigests}}}}{{{{.}}}}{{{{end}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
             app.name
         );
         let old_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
@@ -2316,7 +2316,7 @@ async fn trigger_deployment_impl(
             Ok(true) => {
                 // Yeni başladılmış konteynerin SHA, yaradılma və işə düşmə tarixini çəkirik
                 let inspect_new_cmd = format!(
-                    "sudo docker inspect --format 'SHA: {{{{.Image}}}} | Yaradılma: {{{{.Created}}}} | Başlama: {{{{.State.StartedAt}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
+                    "sudo docker inspect --format 'SHA: {{{{.Image}}}} | Yaradılma: {{{{.Created}}}} | Başlama: {{{{.State.StartedAt}}}} | Digest: {{{{range .RepoDigests}}}}{{{{.}}}}{{{{end}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
                     app.name
                 );
                 let new_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
