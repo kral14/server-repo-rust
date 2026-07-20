@@ -2154,6 +2154,9 @@ function startUpdateBadgeTimer() {
                             statusDot.style.color = 'var(--success-color)';
                             const linkBtn = document.getElementById('deploy-app-link-btn');
                             if (linkBtn) linkBtn.style.display = 'inline-block';
+                            
+                            // Build uğurlu olduqdan sonra avtomatik olaraq Canlı Server loqlarına keçid edirik
+                            switchLogPanel('live');
                         } else {
                             statusDot.innerText = 'Dayandırıldı ❌';
                             statusDot.style.color = 'var(--danger-color)';
@@ -2340,6 +2343,7 @@ function stopLogPolling() {
 
 let currentSettingsAppId = null;
 
+
 async function openAppSettings(appId, showModalBool = true) {
     currentSettingsAppId = appId;
     try {
@@ -2347,10 +2351,27 @@ async function openAppSettings(appId, showModalBool = true) {
         if (!res.ok) { alert('Layihə məlumatları yüklənmədi.'); return; }
         const app = await res.json();
 
+        if (githubToken && gitHubRepos.length === 0) {
+            await loadGithubRepos();
+        }
+
         const nameLabel = document.getElementById('settings-app-name-label');
         if (nameLabel) nameLabel.innerText = `🚀 ${app.name}`;
 
         document.getElementById('settings-repo-url').value = app.repo_url || '';
+        
+        let repoNameOnly = '';
+        if (app.repo_url) {
+            repoNameOnly = app.repo_url.replace('https://github.com/', '').replace('https://', '');
+            if (repoNameOnly.endsWith('.git')) {
+                repoNameOnly = repoNameOnly.slice(0, -4);
+            }
+        }
+        const searchInput = document.getElementById('settings-repo-search');
+        if (searchInput) {
+            searchInput.value = repoNameOnly || '';
+        }
+
         document.getElementById('settings-branch').value = app.branch || 'main';
         document.getElementById('settings-port').value = app.port || 8080;
         populateSettingsEnvVars(app.env_vars || '');
@@ -2658,6 +2679,7 @@ async function verifyGithubToken(token) {
 async function loadGithubRepos() {
     const token = githubToken;
     const repoSelect = document.getElementById('app-repo-select');
+    const settingsRepoSelect = document.getElementById('settings-repo-select');
     const wizardReposList = document.getElementById('github-repos-list');
 
     if (repoSelect) {
@@ -2665,6 +2687,14 @@ async function loadGithubRepos() {
             repoSelect.innerHTML = '<option value="">Öncə GitHub Token daxil edin</option>';
         } else {
             repoSelect.innerHTML = '<option value="">Repolar yüklənir...</option>';
+        }
+    }
+
+    if (settingsRepoSelect) {
+        if (!token) {
+            settingsRepoSelect.innerHTML = '<option value="">Öncə GitHub Token daxil edin</option>';
+        } else {
+            settingsRepoSelect.innerHTML = '<option value="">Repolar yüklənir...</option>';
         }
     }
 
@@ -2686,15 +2716,33 @@ async function loadGithubRepos() {
         if (res.ok) {
             gitHubRepos = await res.json();
 
+            const optionsHtml = '<option value="">Repozitoriya seçin...</option>' +
+                gitHubRepos.map(repo => {
+                    const isPrivate = repo.private ? "🔒" : "🔓";
+                    return `<option value="${repo.full_name}" data-private="${repo.private}">${isPrivate} ${repo.full_name}</option>`;
+                }).join('');
+
             if (repoSelect) {
-                if (gitHubRepos.length === 0) {
-                    repoSelect.innerHTML = '<option value="">Heç bir repozitoriya tapılmadı</option>';
-                } else {
-                    repoSelect.innerHTML = '<option value="">Repozitoriya seçin...</option>' +
-                        gitHubRepos.map(repo => {
-                            const isPrivate = repo.private ? "🔒" : "🔓";
-                            return `<option value="${repo.full_name}" data-private="${repo.private}">${isPrivate} ${repo.full_name}</option>`;
-                        }).join('');
+                repoSelect.innerHTML = optionsHtml;
+            }
+
+            if (settingsRepoSelect) {
+                settingsRepoSelect.innerHTML = optionsHtml;
+            }
+
+            // Populate custom searchable list
+            renderSettingsRepoList(gitHubRepos);
+            if (currentSettingsAppId) {
+                const repoUrlInput = document.getElementById('settings-repo-url');
+                if (repoUrlInput && repoUrlInput.value) {
+                    let repoNameOnly = repoUrlInput.value.replace('https://github.com/', '').replace('https://', '');
+                    if (repoNameOnly.endsWith('.git')) {
+                        repoNameOnly = repoNameOnly.slice(0, -4);
+                    }
+                    const searchInput = document.getElementById('settings-repo-search');
+                    if (searchInput) {
+                        searchInput.value = repoNameOnly || '';
+                    }
                 }
             }
 
@@ -2703,11 +2751,13 @@ async function loadGithubRepos() {
             }
         } else {
             if (repoSelect) repoSelect.innerHTML = '<option value="">Repoları yükləmək alınmadı ❌</option>';
+            if (settingsRepoSelect) settingsRepoSelect.innerHTML = '<option value="">Repoları yükləmək alınmadı ❌</option>';
             if (wizardReposList) wizardReposList.innerHTML = '<div class="no-data" style="color: var(--danger-color);">Repoları yükləmək alınmadı ❌</div>';
         }
     } catch (e) {
         console.error(e);
         if (repoSelect) repoSelect.innerHTML = '<option value="">Bağlantı xətası ❌</option>';
+        if (settingsRepoSelect) settingsRepoSelect.innerHTML = '<option value="">Bağlantı xətası ❌</option>';
         if (wizardReposList) wizardReposList.innerHTML = '<div class="no-data" style="color: var(--danger-color);">Bağlantı xətası ❌</div>';
     }
 }
@@ -4963,3 +5013,54 @@ document.querySelectorAll('.nav-btn').forEach(el => {
 });
 
 setTimeout(fitTerminalHeight, 500);
+
+// ── Custom Searchable Repo Dropdown for Settings ───────────────────────────────
+function showSettingsRepoDropdown() {
+    const listEl = document.getElementById('settings-repo-dropdown-list');
+    if (listEl) {
+        listEl.style.display = 'block';
+        renderSettingsRepoList(gitHubRepos);
+    }
+}
+
+function filterSettingsRepos(val) {
+    const filtered = gitHubRepos.filter(r => r.full_name.toLowerCase().includes(val.toLowerCase()));
+    renderSettingsRepoList(filtered);
+}
+
+function selectSettingsRepo(fullName) {
+    const searchInput = document.getElementById('settings-repo-search');
+    const urlInput = document.getElementById('settings-repo-url');
+    if (searchInput) searchInput.value = fullName;
+    if (urlInput) urlInput.value = 'https://github.com/' + fullName;
+    
+    const listEl = document.getElementById('settings-repo-dropdown-list');
+    if (listEl) listEl.style.display = 'none';
+}
+
+function renderSettingsRepoList(repos) {
+    const listEl = document.getElementById('settings-repo-dropdown-list');
+    if (!listEl) return;
+    if (repos.length === 0) {
+        listEl.innerHTML = '<div style="padding:10px; color:var(--text-secondary); text-align:center; font-size:0.9rem;">Heç bir repo tapılmadı</div>';
+        return;
+    }
+    listEl.innerHTML = repos.map(repo => {
+        const isPrivate = repo.private ? "🔒" : "🔓";
+        return `
+            <div onclick="selectSettingsRepo('${repo.full_name}')" style="padding:10px 15px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.02); display:flex; align-items:center; justify-content:space-between; transition:background 0.2s; font-size:0.92rem;" onmouseover="this.style.background='rgba(255,255,255,0.05)'" onmouseout="this.style.background='transparent'">
+                <span style="color:#f5f5f7; display:flex; align-items:center; gap:8px;">${isPrivate} ${repo.full_name}</span>
+                <span style="font-size:0.8rem; padding:2px 6px; border-radius:4px; background:${repo.private ? 'rgba(235,94,85,0.1)' : 'rgba(46,204,113,0.1)'}; color:${repo.private ? '#eb5e55' : '#2ecc71'};">${repo.private ? 'Private' : 'Public'}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+// Close settings repo dropdown on click outside
+document.addEventListener('click', function(e) {
+    const list = document.getElementById('settings-repo-dropdown-list');
+    const search = document.getElementById('settings-repo-search');
+    if (list && search && !search.contains(e.target) && !list.contains(e.target)) {
+        list.style.display = 'none';
+    }
+});

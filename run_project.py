@@ -3,114 +3,104 @@ import subprocess
 import sys
 import time
 
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except:
+    pass
+
+CONTAINER_NAME = "masterdeploy-local-dev"
+PORT = "3000"
+
 def kill_previous_instances():
     print("[INFO] Evvelki server prosesleri yoxlanilir ve dayandirilir...")
-    try:
-        if os.name == 'nt':
-            subprocess.run(['taskkill', '/F', '/IM', 'masterdeploy-rust.exe', '/T'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(['taskkill', '/F', '/IM', 'tauri.exe', '/T'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(['taskkill', '/F', '/IM', 'app.exe', '/T'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        else:
-            subprocess.run(['pkill', '-f', 'masterdeploy-rust'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(['pkill', '-f', 'tauri'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+    subprocess.run(["docker", "stop", CONTAINER_NAME], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run(["docker", "rm", CONTAINER_NAME], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def get_backend_mtime(src_dir):
     mtimes = []
     for root, _, files in os.walk(src_dir):
         for f in files:
-            if f.endswith('.rs'):
+            if f.endswith('.rs') or f.endswith('.toml'):
                 try:
                     mtimes.append(os.path.getmtime(os.path.join(root, f)))
                 except:
                     pass
     return max(mtimes) if mtimes else 0
 
+def start_container(project_dir):
+    print("[RUN] Rust Docker konteyneri hazirlanir...")
+    
+    local_data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "local_data")
+    os.makedirs(local_data_dir, exist_ok=True)
+
+    docker_socket = "/var/run/docker.sock:/var/run/docker.sock"
+    user_home = os.path.expanduser("~")
+    ssh_dir_volume = f"{user_home}/.ssh:/root/.ssh"
+
+    # Named volumes istifade edirik ki, Windows-Linux kecidi zamani fayl icazeleri korlanmasin ve suretli olsun
+    cmd = [
+        "docker", "run", "-d", "--name", CONTAINER_NAME,
+        "-p", f"{PORT}:3000",
+        "-v", f"{project_dir}:/app",
+        "-v", f"{local_data_dir}:/app/data",
+        "-v", "masterdeploy-cargo-registry:/usr/local/cargo/registry",
+        "-v", "masterdeploy-cargo-git:/usr/local/cargo/git",
+        "-v", "masterdeploy-cargo-target:/app/target",
+        "-v", docker_socket,
+        "-v", ssh_dir_volume,
+        "-w", "/app",
+        "rust:1-slim-bookworm",
+        "sh", "-c", "apt-get update && apt-get install -y pkg-config libssl-dev gcc libc6-dev sqlite3 openssh-client git curl && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz | tar -xz -C /usr/local/bin --strip-components=1 docker/docker && cargo run --bin masterdeploy-rust"
+    ]
+    
+    subprocess.run(cmd, stdout=subprocess.DEVNULL)
+    print("\n🛸 MasterDeploy indi Rust Docker Konteynerinde canli (cargo run) baslayir!")
+    print(f"🔗 URL: http://localhost:{PORT}")
+    print("[INFO] Kodu deyisdikde daxilde avtomatik yenilenme bash verecek.")
+    print("-" * 60)
+
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    project_dir = os.path.join(base_dir, 'masterdeploy-rust')
-    src_dir = os.path.join(project_dir, 'src')
-    
+    project_dir = os.path.join(base_dir, 'MasterDeploy-rust')
     if not os.path.exists(project_dir):
-        print(f"[X] Xeta: '{project_dir}' qovlugu tapilmadi.")
-        sys.exit(1)
+        project_dir = os.path.join(base_dir, 'masterdeploy-rust')
+        if not os.path.exists(project_dir):
+            print(f"[X] Xeta: 'MasterDeploy-rust' qovlugu tapilmadi.")
+            sys.exit(1)
 
     kill_previous_instances()
+    start_container(project_dir)
 
-    print(">> MasterDeploy Backend server ise salinir (cargo run)...")
-    
+    # Loglari tail edirik
+    log_proc = subprocess.Popen(["docker", "logs", "-f", CONTAINER_NAME])
+
+    src_dir = os.path.join(project_dir, "src")
+    last_mtime = get_backend_mtime(src_dir)
+
     try:
-        backend_process = subprocess.Popen(
-            ["cargo", "run", "--bin", "masterdeploy-rust"],
-            cwd=project_dir,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            text=True
-        )
-        
-        time.sleep(3)
-        
-        print("\n>> Tauri dev ise salinir (npx @tauri-apps/cli dev)...")
-        tauri_process = subprocess.Popen(
-            ["npx", "@tauri-apps/cli", "dev"],
-            cwd=project_dir,
-            stdout=sys.stdout,
-            stderr=sys.stderr,
-            text=True,
-            shell=True
-        )
-        
-        # Backend kodlarının ilkin modifikasiya vaxtını alırıq
-        last_mtime = get_backend_mtime(src_dir)
-        
-        # Tauri aktiv olduğu müddətdə nəzarət edirik
-        while tauri_process.poll() is None:
+        while True:
             time.sleep(1)
-            
-            # Backend kodlarında dəyişiklik yoxlanılır
+            # Kodda deyisiklik olub-olmadigini yoxlayiriq
             current_mtime = get_backend_mtime(src_dir)
             if current_mtime > last_mtime:
-                print("\n[WATCH] Backend kodunda deyisiklik askar olundu. Backend yeniden basladilir...")
+                print("\n[WATCH] Kodda deyisiklik askar olundu! Konteyner yeniden basladilir...")
                 
-                # Köhnə backend prosesini öldürürük
-                backend_process.terminate()
-                try:
-                    backend_process.wait(timeout=2)
-                except:
-                    if os.name == 'nt':
-                        subprocess.run(['taskkill', '/F', '/IM', 'masterdeploy-rust.exe', '/T'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                    else:
-                        subprocess.run(['pkill', '-f', 'masterdeploy-rust'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                # Kohne log izleyicisini baglayiriq
+                log_proc.terminate()
+                log_proc.wait()
                 
-                # Yeni backend-i başladırıq
-                backend_process = subprocess.Popen(
-                    ["cargo", "run", "--bin", "masterdeploy-rust"],
-                    cwd=project_dir,
-                    stdout=sys.stdout,
-                    stderr=sys.stderr,
-                    text=True
-                )
+                # Konteyneri restart edirik (bu zaman daxildeki cargo run yeniden tetbiq olunur)
+                subprocess.run(["docker", "restart", CONTAINER_NAME], stdout=subprocess.DEVNULL)
+                
+                # Yeni log izleyicisini aciriq
+                log_proc = subprocess.Popen(["docker", "logs", "-f", CONTAINER_NAME])
                 last_mtime = current_mtime
-                print("[WATCH] Backend yeni kodla ugurla ise salindi.\n")
-        
-        # Tauri pəncərəsi bağlandıqda backend-i dayandırırıq
-        backend_process.terminate()
-        
+                print("[WATCH] Konteyner yeni kodla yeniden basladildi.\n")
+                
     except KeyboardInterrupt:
-        print("\n[STOP] Istifadeci terefinden serverler dayandirildi.")
-        try:
-            tauri_process.terminate()
-        except:
-            pass
-        try:
-            backend_process.terminate()
-        except:
-            pass
-    except FileNotFoundError:
-        print("[X] Xeta: 'cargo' ve ya 'tauri' emri tapilmadi. Qurasdirildiqlarindan emin olun.")
-    except Exception as e:
-        print(f"[X] Gozlenilmez xeta bas verdi: {e}")
+        print("\n[STOP] Konteyner dayandirilir...")
+        log_proc.terminate()
+        kill_previous_instances()
 
 if __name__ == "__main__":
     main()

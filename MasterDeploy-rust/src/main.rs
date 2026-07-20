@@ -1977,21 +1977,39 @@ async fn trigger_deployment_impl(
             update_logs_helper(&db_clone, &deploy_id, &lock).await;
         }
 
-        let port_check_cmd = format!(
-            "if sudo ss -tuln | grep -q \":{} \"; then \
-                # Əgər portu istifadə edən elə bu tətbiqdirsə (update/redeploy), toqquşma saymırıq \
-                if sudo docker ps --filter \"name={}\" --format \"{{{{.Ports}}}}\" | grep -q \"{}\"; then \
+        let port_check_cmd = if server.ip == "local" || server.ip == "127.0.0.1" {
+            format!(
+                "other_container=$(docker ps --filter \"publish={}\" --format \"{{{{.Names}}}}\" | grep -v \"^{}$\"); \
+                 if [ ! -z \"$other_container\" ]; then \
+                     echo \"===PORT_CONFLICT===\"; \
+                 elif ! docker ps --filter \"name={}\" --format \"{{{{.Names}}}}\" | grep -q \"^{}$\"; then \
+                     if docker run --rm -p {}:{} alpine:3.18 true 2>&1 | grep -q \"port is already allocated\"; then \
+                         echo \"===PORT_CONFLICT===\"; \
+                     else \
+                         echo \"===PORT_OK===\"; \
+                     fi; \
+                 else \
+                     echo \"===PORT_OK===\"; \
+                 fi",
+                app.port, app.name, app.name, app.name, app.port, app.port
+            )
+        } else {
+            format!(
+                "if sudo ss -tuln | grep -q \":{} \"; then \
+                    # Əgər portu istifadə edən elə bu tətbiqdirsə (update/redeploy), toqquşma saymırıq \
+                    if sudo docker ps --filter \"name={}\" --format \"{{{{.Ports}}}}\" | grep -q \"{}\"; then \
+                        echo \"===PORT_OK===\"; \
+                    else \
+                        echo \"===PORT_CONFLICT===\"; \
+                    fi; \
+                 elif sudo ufw status | grep -q \"Status: active\" && ! sudo ufw status | grep -q \"{}/tcp\"; then \
+                    echo \"===FIREWALL_BLOCKED===\"; \
+                 else \
                     echo \"===PORT_OK===\"; \
-                else \
-                    echo \"===PORT_CONFLICT===\"; \
-                fi; \
-             elif sudo ufw status | grep -q \"Status: active\" && ! sudo ufw status | grep -q \"{}/tcp\"; then \
-                echo \"===FIREWALL_BLOCKED===\"; \
-             else \
-                echo \"===PORT_OK===\"; \
-             fi",
-            app.port, app.name, app.port, app.port
-        );
+                 fi",
+                app.port, app.name, app.port, app.port
+            )
+        };
 
         let mut port_ok = false;
         let mut err_msg = String::new();
