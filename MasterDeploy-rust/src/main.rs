@@ -415,12 +415,12 @@ async fn sync_remote_applications(db: &sqlx::SqlitePool, server: &Server, temp_k
         }
     }
 
-    // Əgər uzaq serverdə masterdeploy tapılmadısa və ya boşdursa, mərkəzi server (84.8.148.216) üzərindən cəhd edirik
+    // Əgər uzaq serverdə masterdeploy tapılmadısa və ya boşdursa, digər uzaq serverlər üzərindən cəhd edirik
     if apps.is_empty() {
-        println!("[SYNC] Uzaq serverin özündə MasterDeploy verilənlər bazası tapılmadı. Mərkəzi veritabanı (84.8.148.216) yoxlanılır...");
+        println!("[SYNC] Uzaq serverin özündə MasterDeploy verilənlər bazası tapılmadı. Digər uzaq serverlər yoxlanılır...");
         
         let central_row: Option<(String, String, String, String)> = sqlx::query_as(
-            "SELECT name, ip, ssh_user, ssh_key FROM servers WHERE ip = '84.8.148.216' OR (ip != 'local' AND ip != ?) LIMIT 1"
+            "SELECT name, ip, ssh_user, ssh_key FROM servers WHERE ip != 'local' AND ip != ? LIMIT 1"
         )
         .bind(&server.ip)
         .fetch_optional(db)
