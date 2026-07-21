@@ -128,12 +128,28 @@
 
             <!-- Servers Tab -->
             <section id="tab-servers" class="tab-section">
-                <header class="tab-header-btn">
+                <header class="tab-header-btn" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                     <div>
                         <h2>🖥️ Serverlər (Servers)</h2>
                         <p>Layihələrin yayına çıxarılacağı uzaqdakı serverlər</p>
                     </div>
-                    <button class="btn btn-primary" onclick="showModal('server-modal')">+ Yeni Server</button>
+
+                    <!-- Complete Unified Global Toolbar Container -->
+                    <div id="global-server-toolbar" style="display: flex; align-items: center; gap: 0.4rem; background: rgba(10, 12, 20, 0.75); backdrop-filter: blur(10px); padding: 0.4rem 0.8rem; border-radius: 12px; border: 1px solid var(--card-border); box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
+                        <button class="toolbar-btn" onclick="executeGlobalServerAction('edit')" title="Redaktə Et (Seçilmiş Server)" style="background: transparent; border: none; color: #00d2ff; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(0,210,255,0.15)'" onmouseout="this.style.background='transparent'">✏️</button>
+                        
+                        <button class="toolbar-btn" onclick="executeGlobalServerAction('console')" title="SSH Konsolu" style="background: transparent; border: none; color: #4ade80; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.15)'" onmouseout="this.style.background='transparent'">💻</button>
+                        
+                        <button class="toolbar-btn" onclick="executeGlobalServerAction('volumes')" title="Docker Volumları (Disk)" style="background: transparent; border: none; color: #38bdf8; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.15)'" onmouseout="this.style.background='transparent'">💾</button>
+                        
+                        <button class="toolbar-btn" onclick="openServerConnModal()" title="Bağlantı Və Avto-Bərpa Tənzimləmələri" style="background: transparent; border: none; color: #facc15; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(250,204,21,0.15)'" onmouseout="this.style.background='transparent'">🔌</button>
+                        
+                        <button class="toolbar-btn" onclick="executeGlobalServerAction('delete')" title="Serveri Sil" style="background: transparent; border: none; color: #f87171; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='transparent'">🗑️</button>
+
+                        <div style="height: 20px; width: 1px; background: rgba(255,255,255,0.15); margin: 0 0.4rem;"></div>
+
+                        <button class="btn btn-primary" onclick="showModal('server-modal')" style="padding: 0.35rem 0.8rem; font-size: 0.82rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; border-radius: 6px; font-weight: 600; display: flex; align-items: center; gap: 0.3rem;">➕ Yeni Server</button>
+                    </div>
                 </header>
 
                 <div id="servers-list" class="items-list">
@@ -1462,6 +1478,81 @@
                 style="display: flex; justify-content: flex-end; margin-top: 25px; border-top: 1px solid var(--card-border); padding-top: 15px;">
                 <button class="btn btn-primary" onclick="closeModal('cloudflare-help-modal')"
                     style="padding: 8px 20px;">Bağladım, Hazırdır!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Server Connection & Auto-Retry Settings Modal -->
+    <div id="server-conn-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 500px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">🔌 Server Bağlantı Və Avto-Bərpa Tənzimləmələri</h3>
+            </div>
+            <form id="server-conn-form" onsubmit="saveServerConnSettings(event)">
+                <input type="hidden" id="conn-server-id">
+                
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">🖥️ Seçilmiş Server:</label>
+                    <input type="text" id="conn-server-name" readonly style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #00d2ff; font-weight: 600;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">⏱️ Cəhd İntervalı (Saniyə):</label>
+                    <input type="number" id="conn-retry-sec" min="3" max="300" value="15" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Qoşulma qırıldıqda neçə saniyədən bir təkrar cəhd edilsin.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">🔄 Maksimum Cəhd Sayı:</label>
+                    <input type="number" id="conn-max-retries" min="1" max="10" value="3" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Fasiləyə keçməzdən əvvəl neçə cəhd edilsin.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.2rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">⏳ Fasilə Müddəti (Dəqiqə):</label>
+                    <input type="number" id="conn-pause-min" min="1" max="60" value="5" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Bütün cəhdlər uğursuz olduqdan sonra neçə dəqiqə gözlənilsin.</small>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-conn-modal')">Ləğv Et</button>
+                    <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none;">Yadda Saxla Və Bağlantını Yoxla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SSH Console Modal Window (Ekran Pəncərəsi) -->
+    <div id="server-console-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 820px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 15px 40px rgba(0,0,0,0.6);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    💻 SSH Konsolu (<span id="modal-console-server-name" style="color:#00d2ff;">--</span>)
+                </h3>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <button class="btn btn-secondary" onclick="copyServerConsoleModal(this)" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px;">📋 Kopyala</button>
+                    <button class="btn btn-secondary" onclick="clearServerConsoleModal()" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px;">🧹 Təmizlə</button>
+                </div>
+            </div>
+            <div id="modal-console-container" style="width: 100%; height: 350px; padding: 1rem; background: #07080d; border-radius: 8px; font-family: monospace; color: #4ade80; font-size: 0.88rem; overflow-x: auto; white-space: pre-wrap; border: 1px solid var(--card-border); overflow-y: auto;">
+                [Sistem] Konsol hazır.
+            </div>
+        </div>
+    </div>
+
+    <!-- Docker Volumes Modal Window (Ekran Pəncərəsi) -->
+    <div id="server-volumes-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 850px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 15px 40px rgba(0,0,0,0.6);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    💾 Docker Volumları & Disk (<span id="modal-volumes-server-name" style="color:#00d2ff;">--</span>)
+                </h3>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <button class="btn btn-secondary" onclick="reloadModalVolumes()" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">🔄 Yenilə</button>
+                </div>
+            </div>
+            <div id="modal-volumes-container" style="max-height: 400px; overflow-y: auto; font-size: 0.85rem;">
+                Yüklənir...
             </div>
         </div>
     </div>

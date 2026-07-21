@@ -187,6 +187,9 @@ const windowNames = {
     'activity-log-modal': '📋 Fəaliyyət Jurnalı',
     'server-modal': '🖥️ Server Əlavə Et',
     'server-edit-modal': '✏️ Server Redaktə Et',
+    'server-conn-modal': '🔌 Server Bağlantı Ayarları',
+    'server-console-modal': '💻 SSH Konsolu',
+    'server-volumes-modal': '💾 Docker Volumları & Disk',
     'app-settings-modal': '⚙️ Layihə Ayarları',
     'cf-terminal-modal': '☁️ Cloudflare Terminalı',
     'logs-modal': '📋 Layihə Loqları',
@@ -320,11 +323,15 @@ function initializeWindow(backdropId, titleText) {
     card.querySelector('.win-btn-min').onclick = (e) => { e.stopPropagation(); minimizeWindow(backdropId); };
     card.querySelector('.win-btn-max').onclick = (e) => { e.stopPropagation(); maximizeWindow(backdropId); };
     card.querySelector('.win-btn-close').onclick = (e) => { e.stopPropagation(); closeModal(backdropId); };
-
-    // Bind dragging on header
     const header = card.querySelector('.win-header');
     let isDragging = false;
     let startX, startY, initialLeft, initialTop;
+
+    // Double click to maximize/restore window
+    header.addEventListener('dblclick', (e) => {
+        if (e.target.tagName === 'BUTTON') return;
+        maximizeWindow(backdropId);
+    });
 
     header.addEventListener('mousedown', (e) => {
         bringToFront(backdropId);
@@ -339,8 +346,22 @@ function initializeWindow(backdropId, titleText) {
             if (!isDragging) return;
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
-            card.style.left = (initialLeft + dx) + 'px';
-            card.style.top = (initialTop + dy) + 'px';
+            
+            let nextLeft = initialLeft + dx;
+            let nextTop = initialTop + dy;
+            
+            // Constrain within screen boundaries so the header is always reachable
+            const cardWidth = card.offsetWidth || 530;
+            const headerHeight = header.offsetHeight || 40;
+            const minVisibleSide = 100; // at least 100px of side must remain visible
+            
+            if (nextTop < 0) nextTop = 0; // Header can't go above top edge
+            if (nextTop > window.innerHeight - headerHeight - 40) nextTop = window.innerHeight - headerHeight - 40; // Can't drop below taskbar
+            if (nextLeft < -cardWidth + minVisibleSide) nextLeft = -cardWidth + minVisibleSide;
+            if (nextLeft > window.innerWidth - minVisibleSide) nextLeft = window.innerWidth - minVisibleSide;
+            
+            card.style.left = nextLeft + 'px';
+            card.style.top = nextTop + 'px';
         };
 
         const onMouseUp = () => {
@@ -578,6 +599,81 @@ function updateTaskbar() {
     });
 }
 
+// Premium Toast Notifications System
+function showToast(message, type = 'info') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            pointer-events: none;
+        `;
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        min-width: 280px;
+        padding: 12px 20px;
+        border-radius: 8px;
+        background: rgba(18, 20, 30, 0.9);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        color: #fff;
+        font-family: inherit;
+        font-size: 0.88rem;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        pointer-events: auto;
+        opacity: 0;
+        transform: translateY(-20px);
+        transition: all 0.35s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        border: 1px solid rgba(255,255,255,0.08);
+    `;
+
+    let icon = 'ℹ️';
+    if (type === 'success') {
+        icon = '✅';
+        toast.style.borderLeft = '4px solid #00e676';
+    } else if (type === 'warning') {
+        icon = '⚠️';
+        toast.style.borderLeft = '4px solid #ff9800';
+    } else if (type === 'error') {
+        icon = '❌';
+        toast.style.borderLeft = '4px solid #ff1744';
+    } else {
+        toast.style.borderLeft = '4px solid #00d2ff';
+    }
+
+    toast.innerHTML = `<span style="font-size: 1.1rem; line-height: 1;">${icon}</span><span style="flex:1;">${message}</span>`;
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+    }, 10);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px) scale(0.9)';
+        setTimeout(() => {
+            toast.remove();
+            if (container.children.length === 0) {
+                container.remove();
+            }
+        }, 350);
+    }, 4000);
+}
+
 // Modal management
 function showModal(id) {
     const backdrop = document.getElementById(id);
@@ -637,114 +733,88 @@ async function loadServers() {
 
         serverSelect.innerHTML = servers.map(s => `<option value="${s.id}">${s.name} (${s.ip})</option>`).join('');
 
-        // Trigger the advisor update since the default selected option has changed
-        updateServerStatsAdvisor('app-server', 'app-server-advisor', 'app-memory', 'app-cpu');
+        currentServersList = servers;
+        if (!currentSelectedServerId || !servers.some(s => s.id === currentSelectedServerId)) {
+            currentSelectedServerId = servers[0].id;
+        }
 
-        serversList.innerHTML = servers.map(s => `
-            <div class="list-item server-card" style="flex-direction: column; align-items: stretch; gap: 0.8rem; padding: 1.2rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
-                <!-- Top Row: Server Name & Info + Icon Toolbar -->
-                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.8rem;">
-                    <div class="item-info" style="display: flex; align-items: center; gap: 0.8rem;">
-                        <div style="width: 40px; height: 40px; background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🖥️</div>
-                        <div>
-                            <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
-                                ${s.name}
-                                <span id="status-${s.id}" class="server-status-badge" style="font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 12px; background: rgba(255,255,255,0.08); color: #aaa; cursor: pointer;" onclick="checkConnection('${s.id}')">🔌 Yoxla</span>
-                            </h3>
-                            <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary); display: flex; gap: 0.8rem;">
-                                <span><strong>IP:</strong> ${s.ip}</span>
-                                <span><strong>İstifadəçi:</strong> ${s.ssh_user}</span>
-                            </p>
+        const selectedServer = servers.find(s => s.id === currentSelectedServerId);
+        const labelEl = document.getElementById('selected-server-label');
+        if (labelEl && selectedServer) {
+            labelEl.innerText = `Seçilib: ${selectedServer.name}`;
+        }
+
+        serversList.innerHTML = servers.map(s => {
+            const isSelected = s.id === currentSelectedServerId;
+            const selectedClass = isSelected ? 'selected-server-card' : '';
+            return `
+            <div class="list-item server-card ${selectedClass}" data-server-id="${s.id}" onclick="selectServer('${s.id}')" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 1rem; border-radius: 10px; cursor: pointer; transition: all 0.2s; background: var(--card-bg); border: 1px solid var(--card-border); flex-wrap: wrap;">
+                <!-- Left Section: Server Name, Badge & IP/User on 1 Line -->
+                <div class="item-info" style="display: flex; align-items: center; gap: 0.6rem; min-width: 220px;">
+                    <div style="width: 32px; height: 32px; background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;">🖥️</div>
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 0.4rem;">
+                            <strong style="font-size: 0.95rem; color: #fff; white-space: nowrap;">${s.name}</strong>
+                            <span id="status-${s.id}" class="server-status-badge" style="font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 10px; background: rgba(255,255,255,0.08); color: #aaa; cursor: pointer;" onclick="event.stopPropagation(); openServerConnModal('${s.id}')">🔌 Yoxla</span>
                         </div>
-                    </div>
-
-                    <!-- Sleek Icon Action Toolbar -->
-                    <div class="server-toolbar" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(0,0,0,0.4); padding: 0.3rem 0.5rem; border-radius: 8px; border: 1px solid var(--card-border);">
-                        <button class="toolbar-btn" onclick="editServer('${s.id}')" title="Redaktə Et" style="background: transparent; border: none; color: #00d2ff; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(0,210,255,0.15)'" onmouseout="this.style.background='transparent'">✏️</button>
-                        <button class="toolbar-btn" onclick="setupServer('${s.id}', '${s.name}')" title="Serveri Hazırla" style="background: transparent; border: none; color: #a78bfa; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(167,139,250,0.15)'" onmouseout="this.style.background='transparent'">⚙️</button>
-                        <button class="toolbar-btn" onclick="toggleServerConsole('${s.id}')" title="SSH Konsolu" style="background: transparent; border: none; color: #4ade80; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.15)'" onmouseout="this.style.background='transparent'">💻</button>
-                        <button class="toolbar-btn" onclick="toggleServerVolumes('${s.id}')" title="Docker Volumları (Disk)" style="background: transparent; border: none; color: #38bdf8; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.15)'" onmouseout="this.style.background='transparent'">💾</button>
-                        <button class="toolbar-btn" onclick="checkConnection('${s.id}')" title="Bağlantını Yoxla" style="background: transparent; border: none; color: #facc15; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(250,204,21,0.15)'" onmouseout="this.style.background='transparent'">🔌</button>
-                        <button class="toolbar-btn" onclick="deleteServer('${s.id}', '${s.name}')" title="Serveri Sil" style="background: transparent; border: none; color: #f87171; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='transparent'">🗑️</button>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; margin-top: 0.1rem;">
+                            <span><strong>IP:</strong> ${s.ip}</span> | <span><strong>İstifadəçi:</strong> ${s.ssh_user}</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Live Resource Stats Grid (RAM, SWAP, CPU, DISK) -->
-                <div id="server-metrics-${s.id}" class="server-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; width: 100%; margin-top: 0.2rem;">
-                    <!-- RAM Widget -->
-                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0.7rem; border-radius: 8px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.2rem;">
+                <!-- Right Section: 4 Compact Metrics Side by Side in 1 Horizontal Line -->
+                <div id="server-metrics-${s.id}" class="server-metrics-grid" style="display: flex; align-items: center; gap: 0.5rem; flex-grow: 1; justify-content: flex-end; max-width: 750px;">
+                    <!-- RAM -->
+                    <div style="flex: 1; min-width: 110px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.6rem; border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.15rem;">
                             <span style="color: var(--text-secondary);">🧠 RAM</span>
                             <span id="ram-pct-${s.id}" style="color: #00d2ff; font-weight: 600;">--%</span>
                         </div>
-                        <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 0.2rem;">
+                        <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 0.15rem;">
                             <div id="ram-bar-${s.id}" style="width: 0%; height: 100%; background: linear-gradient(90deg, #00d2ff, #3b82f6); transition: width 0.4s;"></div>
                         </div>
-                        <div id="ram-val-${s.id}" style="font-size: 0.7rem; color: #aaa; text-align: right;">-- / -- MB</div>
+                        <div id="ram-val-${s.id}" style="font-size: 0.65rem; color: #aaa; text-align: right;">-- / -- MB</div>
                     </div>
 
-                    <!-- SWAP Widget -->
-                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0.7rem; border-radius: 8px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.2rem;">
+                    <!-- SWAP -->
+                    <div style="flex: 1; min-width: 110px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.6rem; border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.15rem;">
                             <span style="color: var(--text-secondary);">🔄 SWAP</span>
                             <span id="swap-pct-${s.id}" style="color: #a78bfa; font-weight: 600;">--%</span>
                         </div>
-                        <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 0.2rem;">
+                        <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 0.15rem;">
                             <div id="swap-bar-${s.id}" style="width: 0%; height: 100%; background: linear-gradient(90deg, #a78bfa, #8b5cf6); transition: width 0.4s;"></div>
                         </div>
-                        <div id="swap-val-${s.id}" style="font-size: 0.7rem; color: #aaa; text-align: right;">-- / -- MB</div>
+                        <div id="swap-val-${s.id}" style="font-size: 0.65rem; color: #aaa; text-align: right;">-- / -- MB</div>
                     </div>
 
-                    <!-- CPU Widget -->
-                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0.7rem; border-radius: 8px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.2rem;">
+                    <!-- CPU -->
+                    <div style="flex: 1; min-width: 100px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.6rem; border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.15rem;">
                             <span style="color: var(--text-secondary);">⚡ CPU</span>
                             <span id="cpu-pct-${s.id}" style="color: #4ade80; font-weight: 600;">--%</span>
                         </div>
-                        <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 0.2rem;">
+                        <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 0.15rem;">
                             <div id="cpu-bar-${s.id}" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4ade80, #22c55e); transition: width 0.4s;"></div>
                         </div>
-                        <div id="cpu-val-${s.id}" style="font-size: 0.7rem; color: #aaa; text-align: right;">-- Nüvə</div>
+                        <div id="cpu-val-${s.id}" style="font-size: 0.65rem; color: #aaa; text-align: right;">-- Nüvə</div>
                     </div>
 
-                    <!-- DISK Widget -->
-                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0.7rem; border-radius: 8px;">
-                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.2rem;">
+                    <!-- DISK -->
+                    <div style="flex: 1; min-width: 120px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.6rem; border-radius: 6px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.15rem;">
                             <span style="color: var(--text-secondary);">💾 DISK</span>
                             <span id="disk-pct-${s.id}" style="color: #facc15; font-weight: 600;">--%</span>
                         </div>
-                        <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 0.2rem;">
+                        <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 0.15rem;">
                             <div id="disk-bar-${s.id}" style="width: 0%; height: 100%; background: linear-gradient(90deg, #facc15, #eab308); transition: width 0.4s;"></div>
                         </div>
-                        <div id="disk-val-${s.id}" style="font-size: 0.7rem; color: #aaa; text-align: right;">-- / --</div>
+                        <div id="disk-val-${s.id}" style="font-size: 0.65rem; color: #aaa; text-align: right;">-- / --</div>
                     </div>
                 </div>
-
-                <div id="console-wrapper-${s.id}" class="server-console-wrapper" style="display: none; position: relative; margin-top: 0.5rem; width: 100%;">
-                    <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 0.5rem; z-index: 10;">
-                        <button class="btn btn-secondary" onclick="copyServerConsole('${s.id}', this)" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">📋 Kopyala</button>
-                        <button class="btn btn-secondary" onclick="clearServerConsole('${s.id}')" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">🧹 Təmizlə</button>
-                    </div>
-                    <div id="console-container-${s.id}" class="server-console-container" style="width: 100%; padding: 1rem; padding-top: 2.5rem; background: #07080d; border-radius: 8px; font-family: monospace; color: #ccc; font-size: 0.85rem; overflow-x: auto; white-space: pre-wrap; border: 1px solid var(--card-border); max-height: 200px; overflow-y: auto;">
-                        [Sistem] Bağlantı hələ yoxlanılmayıb. Yoxlamaq üçün "🔌 Yoxla" düyməsinə klikləyin.
-                    </div>
-                </div>
-                
-                <div id="volumes-wrapper-${s.id}" class="server-volumes-wrapper" style="display: none; position: relative; margin-top: 0.5rem; width: 100%; border: 1px solid var(--card-border); border-radius: 8px; background: rgba(10, 11, 16, 0.8); padding: 1rem; padding-top: 2.5rem;">
-                    <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 0.5rem; z-index: 10;">
-                        <button class="btn btn-secondary" onclick="copyServerVolumes('${s.id}', this)" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">📋 Kopyala</button>
-                        <button class="btn btn-secondary" onclick="clearServerVolumes('${s.id}')" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">🧹 Təmizlə</button>
-                        <button class="btn btn-secondary" onclick="loadServerVolumes('${s.id}')" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; display: flex; align-items: center; gap: 0.2rem;">🔄 Yenilə</button>
-                    </div>
-                    <h4 style="position: absolute; top: 8px; left: 12px; margin: 0; font-size: 0.85rem; color: #fff; line-height: 24px;">
-                        <span>💾 Docker Volumları (Disk İdarəetməsi)</span>
-                    </h4>
-                    <div id="volumes-container-${s.id}" style="max-height: 250px; overflow-y: auto; font-size: 0.8rem; margin-top: 5px;">
-                        Yüklənir...
-                    </div>
-                </div>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
 
         // Automatically load metrics for each server card
         servers.forEach(s => loadServerLiveMetrics(s.id));
@@ -804,21 +874,144 @@ async function loadServerLiveMetrics(serverId) {
     }
 }
 
-function toggleServerVolumes(serverId) {
-    const el = document.getElementById(`volumes-wrapper-${serverId}`);
+let currentSelectedServerId = null;
+let currentServersList = [];
+
+function selectServer(serverId) {
+    currentSelectedServerId = serverId;
+    
+    // Highlight selected card with rotating glow animation class
+    document.querySelectorAll('.server-card').forEach(card => {
+        if (card.getAttribute('data-server-id') === serverId) {
+            card.classList.add('selected-server-card');
+        } else {
+            card.classList.remove('selected-server-card');
+        }
+    });
+}
+
+function executeGlobalServerAction(action) {
+    if (!currentSelectedServerId && currentServersList.length > 0) {
+        selectServer(currentServersList[0].id);
+    }
+    if (!currentSelectedServerId) {
+        showToast('Zəhmət olmasa siyahıdan bir server seçin', 'warning');
+        return;
+    }
+    const server = currentServersList.find(s => s.id === currentSelectedServerId);
+    if (!server) return;
+
+    if (action === 'edit') editServer(server.id);
+    else if (action === 'console') toggleServerConsole(server.id);
+    else if (action === 'volumes') toggleServerVolumes(server.id);
+    else if (action === 'delete') deleteServer(server.id, server.name);
+    else if (action === 'check') checkConnection(server.id);
+}
+
+function openServerConnModal(serverId) {
+    const targetId = serverId || currentSelectedServerId;
+    if (!targetId) {
+        showToast('Lütfən bir server seçin', 'warning');
+        return;
+    }
+    const server = currentServersList.find(s => s.id === targetId);
+    if (!server) return;
+
+    document.getElementById('conn-server-id').value = server.id;
+    document.getElementById('conn-server-name').value = `${server.name} (${server.ip})`;
+
+    const settings = getServerConnSettings(server.id);
+    document.getElementById('conn-retry-sec').value = settings.retrySec;
+    document.getElementById('conn-max-retries').value = settings.maxRetries;
+    document.getElementById('conn-pause-min').value = settings.pauseMin;
+
+    showModal('server-conn-modal');
+}
+
+function getServerConnSettings(serverId) {
+    try {
+        const raw = localStorage.getItem(`server_conn_${serverId}`);
+        if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return { retrySec: 15, maxRetries: 3, pauseMin: 5 };
+}
+
+function saveServerConnSettings(e) {
+    e.preventDefault();
+    const id = document.getElementById('conn-server-id').value;
+    const retrySec = parseInt(document.getElementById('conn-retry-sec').value) || 15;
+    const maxRetries = parseInt(document.getElementById('conn-max-retries').value) || 3;
+    const pauseMin = parseInt(document.getElementById('conn-pause-min').value) || 5;
+
+    const settings = { retrySec, maxRetries, pauseMin };
+    localStorage.setItem(`server_conn_${id}`, JSON.stringify(settings));
+
+    closeModal('server-conn-modal');
+    showToast('Bağlantı tənzimləmələri yadda saxlanıldı!', 'success');
+
+    // Trigger connection check with new settings
+    checkConnection(id);
+}
+
+let currentModalServerId = null;
+
+function toggleServerConsole(serverId) {
+    const server = currentServersList.find(s => s.id === serverId);
+    if (!server) return;
+    currentModalServerId = serverId;
+
+    const titleNameEl = document.getElementById('modal-console-server-name');
+    if (titleNameEl) titleNameEl.innerText = `${server.name} (${server.ip})`;
+
+    const container = document.getElementById('modal-console-container');
+    if (container) {
+        container.innerHTML = serverConsoleLogs[serverId] || `[Sistem] "${server.name}" serverinin konsolu aktivdir. Qoşulma yoxlanarkən çıxan loqlar burada görünəcək.`;
+        container.style.color = '#4ade80';
+    }
+    showModal('server-console-modal');
+}
+
+function copyServerConsoleModal(btn) {
+    const el = document.getElementById('modal-console-container');
     if (!el) return;
-    if (el.style.display === 'none') {
-        el.style.display = 'block';
-        loadServerVolumes(serverId);
-    } else {
-        el.style.display = 'none';
+    const text = el.innerText || el.textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            if (btn) {
+                const orig = btn.innerHTML;
+                btn.innerHTML = '✅ Kopyalandı!';
+                setTimeout(() => { btn.innerHTML = orig; }, 2000);
+            }
+        });
+    }
+}
+
+function clearServerConsoleModal() {
+    const el = document.getElementById('modal-console-container');
+    if (el) el.innerText = '[Sistem] Konsol təmizləndi.\n';
+}
+
+function toggleServerVolumes(serverId) {
+    const server = currentServersList.find(s => s.id === serverId);
+    if (!server) return;
+    currentModalServerId = serverId;
+
+    const titleNameEl = document.getElementById('modal-volumes-server-name');
+    if (titleNameEl) titleNameEl.innerText = `${server.name} (${server.ip})`;
+    showModal('server-volumes-modal');
+    loadServerVolumes(serverId);
+}
+
+function reloadModalVolumes() {
+    if (currentModalServerId) {
+        loadServerVolumes(currentModalServerId);
     }
 }
 
 async function loadServerVolumes(serverId) {
-    const container = document.getElementById(`volumes-container-${serverId}`);
+    const container = document.getElementById('modal-volumes-container');
     if (!container) return;
-    container.innerHTML = '<div style="color:#888; padding: 10px;">Docker volumları oxunur, zəhmət olmasa gözləyin...</div>';
+    container.innerHTML = '<div style="color:#888; padding: 15px;">Docker volumları oxunur, zəhmət olmasa gözləyin...</div>';
 
     try {
         const res = await fetch(`/api/servers/${serverId}/volumes`);
@@ -1324,10 +1517,44 @@ async function handleUpdateServer(event) {
     }
 }
 
-// Check real server connection via backend SSH check
+const serverRetryState = {};
+const serverConsoleLogs = {};
+
+function logToServerConsole(id, text, color = '#4ade80') {
+    serverConsoleLogs[id] = text;
+    if (currentModalServerId === id) {
+        const container = document.getElementById('modal-console-container');
+        if (container) {
+            container.innerHTML = text;
+            container.style.color = color;
+        }
+    }
+}
+
+// Check real server connection via backend SSH check with custom retry & pause loop
 async function checkConnection(id) {
     const statusEl = document.getElementById(`status-${id}`);
-    const consoleEl = document.getElementById(`console-container-${id}`);
+    
+    // Get user-customized settings for this server
+    const settings = getServerConnSettings(id);
+    const retrySec = settings.retrySec || 15;
+    const maxRetries = settings.maxRetries || 3;
+    const pauseMin = settings.pauseMin || 5;
+
+    if (!serverRetryState[id]) {
+        serverRetryState[id] = { failCount: 0, isPaused: false };
+    }
+    const state = serverRetryState[id];
+
+    if (state.isPaused) {
+        if (statusEl) {
+            statusEl.innerHTML = `⏳ Fasilə (${pauseMin} dəq gözlənilir...)`;
+            statusEl.style.color = '#facc15';
+            statusEl.style.background = 'rgba(250, 204, 21, 0.1)';
+        }
+        return false;
+    }
+
     if (statusEl) {
         statusEl.innerHTML = `⏳ Yoxlanılır...`;
         statusEl.style.color = '#ccc';
@@ -1339,91 +1566,66 @@ async function checkConnection(id) {
         const timeoutId = setTimeout(() => controller.abort(), 15000);
         const res = await fetch(`/api/servers/${id}/check`, { signal: controller.signal });
         clearTimeout(timeoutId);
+
         if (res.ok) {
             const data = await res.json();
             if (data.success) {
+                state.failCount = 0; // Reset fail count on success
                 if (statusEl) {
                     statusEl.innerHTML = `Qoşulub ✅`;
                     statusEl.style.color = '#00e676';
                     statusEl.style.background = 'rgba(0, 230, 118, 0.1)';
                 }
-                if (consoleEl) {
-                    consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ✅ Bağlantı uğurludur!\nCavab: ${data.message}`;
-                    consoleEl.style.color = '#00e676';
-                }
+                logToServerConsole(id, `[${new Date().toLocaleTimeString()}] ✅ Bağlantı uğurludur!\nCavab: ${data.message}`, '#00e676');
+                // Also trigger live metrics update
+                loadServerLiveMetrics(id);
+                return true;
             } else {
-                if (statusEl) {
-                    statusEl.innerHTML = `Xəta var ❌`;
-                    statusEl.style.color = '#ff1744';
-                    statusEl.style.background = 'rgba(255, 23, 68, 0.1)';
-                }
-                if (consoleEl) {
-                    consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ❌ Qoşulma Xətası:\n${data.error}`;
-                    consoleEl.style.color = '#ff1744';
-                }
-                const wrapper = document.getElementById(`console-wrapper-${id}`);
-                if (wrapper) {
-                    wrapper.style.display = 'block';
-                }
+                throw new Error(data.error || 'Qoşulma xətası');
             }
         } else {
             throw new Error(`HTTP Error ${res.status}`);
         }
     } catch (e) {
+        state.failCount++;
         let errMsg = e.message;
         if (e.name === 'AbortError') {
             errMsg = 'Bağlantı yoxlaması üçün gözləmə vaxtı bitdi (Timeout 15s).';
         }
-        if (statusEl) {
-            statusEl.innerHTML = `Xəta var ❌`;
-            statusEl.style.color = '#ff1744';
-            statusEl.style.background = 'rgba(255, 23, 68, 0.1)';
-        }
-        if (consoleEl) {
-            consoleEl.innerHTML = `[${new Date().toLocaleTimeString()}] ❌ Qoşulma Xətası:\n${errMsg}`;
-            consoleEl.style.color = '#ff1744';
-        }
-        const wrapper = document.getElementById(`console-wrapper-${id}`);
-        if (wrapper) {
-            wrapper.style.display = 'block';
-        }
-    }
-}
 
-// Toggle server console display
-function toggleServerConsole(id) {
-    const el = document.getElementById(`console-wrapper-${id}`);
-    if (el) {
-        if (el.style.display === 'none') {
-            el.style.display = 'block';
-        } else {
-            el.style.display = 'none';
-        }
-    }
-}
-
-// Copy server console content to clipboard
-function copyServerConsole(id, btn) {
-    const el = document.getElementById(`console-container-${id}`);
-    if (!el) return;
-    const text = el.innerText || el.textContent;
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(() => {
-            if (btn) {
-                const orig = btn.innerHTML;
-                btn.innerHTML = '✅ Kopyalandı!';
-                setTimeout(() => { btn.innerHTML = orig; }, 2000);
+        if (state.failCount >= maxRetries) {
+            // Enter Pause state for pauseMin minutes
+            state.isPaused = true;
+            if (statusEl) {
+                statusEl.innerHTML = `⏳ Fasilə (${pauseMin} dəq gözlənilir...)`;
+                statusEl.style.color = '#facc15';
+                statusEl.style.background = 'rgba(250, 204, 21, 0.1)';
             }
-        }).catch(err => console.error("Copy failed", err));
-    }
-}
+            logToServerConsole(id, `[${new Date().toLocaleTimeString()}] ❌ ${maxRetries} dəfə uğursuz cəhd. ${pauseMin} dəqiqə fasilə rejiminə keçildi.\nSon xəta: ${errMsg}`, '#ff1744');
 
-// Clear server console content
-function clearServerConsole(id) {
-    const el = document.getElementById(`console-container-${id}`);
-    if (el) {
-        el.innerHTML = `[Sistem] Konsol təmizləndi.\n`;
+            // Unpause after pauseMin minutes and reset failCount
+            setTimeout(() => {
+                state.isPaused = false;
+                state.failCount = 0;
+                checkConnection(id);
+            }, pauseMin * 60 * 1000);
+
+        } else {
+            // Reconnecting state
+            if (statusEl) {
+                statusEl.innerHTML = `🔄 Qoşulur (${state.failCount}/${maxRetries} - ${retrySec}s)`;
+                statusEl.style.color = '#ff9800';
+                statusEl.style.background = 'rgba(255, 152, 0, 0.1)';
+            }
+            logToServerConsole(id, `[${new Date().toLocaleTimeString()}] ⚠️ Uğursuz cəhd ${state.failCount}/${maxRetries}. ${retrySec} saniyə sonra təkrar cəhd ediləcək...\nXəta: ${errMsg}`, '#ff9800');
+
+            // Retry after retrySec seconds
+            setTimeout(() => {
+                checkConnection(id);
+            }, retrySec * 1000);
+        }
+
+        return false;
     }
 }
 
@@ -1457,42 +1659,24 @@ async function deleteServer(id, name) {
 
 // Setup (Provision) server
 async function setupServer(id, name) {
-    const btn = event.currentTarget;
-    const originalText = btn.innerHTML;
+    showToast(`"${name}" serverində avtomatik hazırlıq başladı...`, 'info');
 
-    showConfirmCard({
-        icon: '🛠️',
-        title: 'Hazırlıq Başladılsın?',
-        subtitle: name,
-        body: `"${name}" serverində avtomatik hazırlıq (Swap artırmaq və Docker qurmaq) başladılsın?<br>Bu proses 1-2 dəqiqə çəkə bilər.`,
-        confirmText: '🚀 Başlat',
-        onConfirm: async () => {
-            btn.innerHTML = "⏳ Hazırlanır (Gözləyin)...";
-            btn.disabled = true;
+    try {
+        const res = await fetch(`/api/servers/${id}/setup`, { method: 'POST' });
 
-            try {
-                const res = await fetch(`/api/servers/${id}/setup`, { method: 'POST' });
-
-                if (res.ok) {
-                    addActivityLog(`Server hazırlandı: ${name}`, 'setup');
-                    showInfoCard('✅ Uğurlu', `"${name}" serveri`, 'Docker uğurla quraşdırıldı. Artıq layihə yükləyə bilərsiniz.');
-                    btn.innerHTML = "✅ Hazırdır";
-                } else {
-                    const err = await res.text();
-                    addActivityLog(`Server hazırlıq uğursuz: ${name}`, 'error');
-                    showInfoCard('❌ Xəta', 'Hazırlıq zamanı problem', err);
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                }
-            } catch (e) {
-                console.error("Setup error", e);
-                addActivityLog(`Server hazırlıq xətası: ${name}`, 'error');
-                showInfoCard('❌ Bağlantı Xətası', 'Serverə qoşula bilmədi.', e.message);
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
+        if (res.ok) {
+            addActivityLog(`Server hazırlandı: ${name}`, 'setup');
+            showInfoCard('✅ Uğurlu', `"${name}" serveri`, 'Docker uğurla quraşdırıldı. Artıq layihə yükləyə bilərsiniz.');
+        } else {
+            const err = await res.text();
+            addActivityLog(`Server hazırlıq uğursuz: ${name}`, 'error');
+            showInfoCard('❌ Xəta', 'Hazırlıq zamanı problem', err);
         }
-    });
+    } catch (e) {
+        console.error("Setup error", e);
+        addActivityLog(`Server hazırlıq xətası: ${name}`, 'error');
+        showInfoCard('❌ Bağlantı Xətası', 'Serverə qoşula bilmədi.', e.message);
+    }
 }
 
 let activeSourceMode = 'manual';
