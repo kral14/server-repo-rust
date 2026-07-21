@@ -79,12 +79,15 @@ def main():
         log("XƏTA: GitHub Token tapılmadı!")
         sys.exit(1)
         
+    token_url = f"https://oauth2:{token}@github.com/kral14/server-repo-rust.git"
+    subprocess.run(f"git remote set-url origin {token_url}", shell=True, cwd=server_repo_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run("git checkout main", shell=True, cwd=server_repo_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.run("git pull origin main --rebase", shell=True, cwd=server_repo_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     version = bump_cargo_version(server_repo_dir)
     
     # Kodu GitHub-a göndəririk ki, changelog.json və Cargo.toml yenilənsin (MasterDeploy-da yeni versiya görünün)
-    log("Kod deyilşiklikləri GitHub-a push edilir...")
-    token_url = f"https://oauth2:{token}@github.com/kral14/server-repo-rust.git"
-    subprocess.run(f"git remote set-url origin {token_url}", shell=True, cwd=server_repo_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    log("Kod dəyişiklikləri GitHub-a push edilir...")
     subprocess.run("git add .", shell=True, cwd=server_repo_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(f'git commit -m "Lokal build yenilenmesi: {version}"', shell=True, cwd=server_repo_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     git_push = subprocess.run("git push origin main", shell=True, cwd=server_repo_dir, capture_output=True, text=True)
