@@ -84,7 +84,32 @@ def main():
         main_config = json.load(f)
         
     token = main_config.get("github_token", "").strip()
-    
+    if not token:
+        token = os.environ.get("GITHUB_TOKEN", "").strip() or os.environ.get("GH_TOKEN", "").strip()
+    if not token:
+        possible_token_paths = [
+            os.path.join(base_dir, "mezuniyyet", ".env.build"),
+            os.path.join(base_dir, ".env.build"),
+            os.path.join(base_dir, ".env"),
+            os.path.join(base_dir, "github", ".github_token")
+        ]
+        for tp in possible_token_paths:
+            if os.path.exists(tp):
+                try:
+                    with open(tp, "r", encoding="utf-8") as f:
+                        for line in f.read().splitlines():
+                            line = line.strip()
+                            if line.startswith("GITHUB_TOKEN="):
+                                token = line.split("=", 1)[1].strip().strip('"').strip("'")
+                                break
+                            elif line.startswith("ghp_") or line.startswith("github_pat_"):
+                                token = line
+                                break
+                    if token:
+                        break
+                except Exception:
+                    pass
+
     if not token:
         log("XƏTA: GitHub Token tapılmadı!")
         sys.exit(1)
