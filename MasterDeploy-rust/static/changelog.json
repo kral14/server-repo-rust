@@ -1,5 +1,11 @@
 [
   {
+    "version": "v1.0.133",
+    "changes": [
+      "Lokal suretli build ve tehlukesizlik tekmillesdirmeleri."
+    ]
+  },
+  {
     "version": "v1.0.132",
     "changes": [
       "Auto-Deploy va GHCR token giris tekmillesdirmeleri."
