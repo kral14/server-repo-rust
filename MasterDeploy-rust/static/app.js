@@ -641,24 +641,85 @@ async function loadServers() {
         updateServerStatsAdvisor('app-server', 'app-server-advisor', 'app-memory', 'app-cpu');
 
         serversList.innerHTML = servers.map(s => `
-            <div class="list-item" style="flex-direction: column; align-items: stretch; gap: 0.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 1rem;">
-                    <div class="item-info">
-                        <h3>🖥️ ${s.name}</h3>
-                        <p>
-                            <span><strong>IP:</strong> ${s.ip}</span>
-                            <span><strong>İstifadəçi:</strong> ${s.ssh_user}</span>
-                        </p>
+            <div class="list-item server-card" style="flex-direction: column; align-items: stretch; gap: 0.8rem; padding: 1.2rem; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                <!-- Top Row: Server Name & Info + Icon Toolbar -->
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 0.8rem;">
+                    <div class="item-info" style="display: flex; align-items: center; gap: 0.8rem;">
+                        <div style="width: 40px; height: 40px; background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem;">🖥️</div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+                                ${s.name}
+                                <span id="status-${s.id}" class="server-status-badge" style="font-size: 0.75rem; padding: 0.15rem 0.5rem; border-radius: 12px; background: rgba(255,255,255,0.08); color: #aaa; cursor: pointer;" onclick="checkConnection('${s.id}')">🔌 Yoxla</span>
+                            </h3>
+                            <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: var(--text-secondary); display: flex; gap: 0.8rem;">
+                                <span><strong>IP:</strong> ${s.ip}</span>
+                                <span><strong>İstifadəçi:</strong> ${s.ssh_user}</span>
+                            </p>
+                        </div>
                     </div>
-                    <div class="item-actions" style="display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;">
-                        <button class="btn btn-secondary" onclick="editServer('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">✏️ Redaktə Et</button>
-                        <button class="btn btn-primary" onclick="setupServer('${s.id}', '${s.name}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none;">⚙️ Serveri Hazırla</button>
-                        <button class="btn btn-secondary" onclick="toggleServerConsole('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem;">🖥️ Konsol</button>
-                        <button class="btn btn-secondary" onclick="toggleServerVolumes('${s.id}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; border-color: rgba(0, 210, 255, 0.3); color: #00d2ff !important;">💾 Volumlar (Disk)</button>
-                        <span id="status-${s.id}" class="btn btn-secondary" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; cursor: pointer; background: rgba(255,255,255,0.05); color: #ccc;" onclick="checkConnection('${s.id}')">🔌 Yoxla</span>
-                        <button class="btn btn-secondary" onclick="deleteServer('${s.id}', '${s.name}')" style="padding: 0.4rem 0.75rem; font-size: 0.8rem; background: rgba(255,0,0,0.1); color: #ff1744; border-color: rgba(255,0,0,0.2);">&#128465;</button>
+
+                    <!-- Sleek Icon Action Toolbar -->
+                    <div class="server-toolbar" style="display: flex; align-items: center; gap: 0.3rem; background: rgba(0,0,0,0.4); padding: 0.3rem 0.5rem; border-radius: 8px; border: 1px solid var(--card-border);">
+                        <button class="toolbar-btn" onclick="editServer('${s.id}')" title="Redaktə Et" style="background: transparent; border: none; color: #00d2ff; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(0,210,255,0.15)'" onmouseout="this.style.background='transparent'">✏️</button>
+                        <button class="toolbar-btn" onclick="setupServer('${s.id}', '${s.name}')" title="Serveri Hazırla" style="background: transparent; border: none; color: #a78bfa; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(167,139,250,0.15)'" onmouseout="this.style.background='transparent'">⚙️</button>
+                        <button class="toolbar-btn" onclick="toggleServerConsole('${s.id}')" title="SSH Konsolu" style="background: transparent; border: none; color: #4ade80; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.15)'" onmouseout="this.style.background='transparent'">💻</button>
+                        <button class="toolbar-btn" onclick="toggleServerVolumes('${s.id}')" title="Docker Volumları (Disk)" style="background: transparent; border: none; color: #38bdf8; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.15)'" onmouseout="this.style.background='transparent'">💾</button>
+                        <button class="toolbar-btn" onclick="checkConnection('${s.id}')" title="Bağlantını Yoxla" style="background: transparent; border: none; color: #facc15; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(250,204,21,0.15)'" onmouseout="this.style.background='transparent'">🔌</button>
+                        <button class="toolbar-btn" onclick="deleteServer('${s.id}', '${s.name}')" title="Serveri Sil" style="background: transparent; border: none; color: #f87171; font-size: 1.1rem; padding: 0.35rem 0.5rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='transparent'">🗑️</button>
                     </div>
                 </div>
+
+                <!-- Live Resource Stats Grid (RAM, SWAP, CPU, DISK) -->
+                <div id="server-metrics-${s.id}" class="server-metrics-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.6rem; width: 100%; margin-top: 0.2rem;">
+                    <!-- RAM Widget -->
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0.7rem; border-radius: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.2rem;">
+                            <span style="color: var(--text-secondary);">🧠 RAM</span>
+                            <span id="ram-pct-${s.id}" style="color: #00d2ff; font-weight: 600;">--%</span>
+                        </div>
+                        <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 0.2rem;">
+                            <div id="ram-bar-${s.id}" style="width: 0%; height: 100%; background: linear-gradient(90deg, #00d2ff, #3b82f6); transition: width 0.4s;"></div>
+                        </div>
+                        <div id="ram-val-${s.id}" style="font-size: 0.7rem; color: #aaa; text-align: right;">-- / -- MB</div>
+                    </div>
+
+                    <!-- SWAP Widget -->
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0.7rem; border-radius: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.2rem;">
+                            <span style="color: var(--text-secondary);">🔄 SWAP</span>
+                            <span id="swap-pct-${s.id}" style="color: #a78bfa; font-weight: 600;">--%</span>
+                        </div>
+                        <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 0.2rem;">
+                            <div id="swap-bar-${s.id}" style="width: 0%; height: 100%; background: linear-gradient(90deg, #a78bfa, #8b5cf6); transition: width 0.4s;"></div>
+                        </div>
+                        <div id="swap-val-${s.id}" style="font-size: 0.7rem; color: #aaa; text-align: right;">-- / -- MB</div>
+                    </div>
+
+                    <!-- CPU Widget -->
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0.7rem; border-radius: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.2rem;">
+                            <span style="color: var(--text-secondary);">⚡ CPU</span>
+                            <span id="cpu-pct-${s.id}" style="color: #4ade80; font-weight: 600;">--%</span>
+                        </div>
+                        <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 0.2rem;">
+                            <div id="cpu-bar-${s.id}" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4ade80, #22c55e); transition: width 0.4s;"></div>
+                        </div>
+                        <div id="cpu-val-${s.id}" style="font-size: 0.7rem; color: #aaa; text-align: right;">-- Nüvə</div>
+                    </div>
+
+                    <!-- DISK Widget -->
+                    <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.5rem 0.7rem; border-radius: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 0.2rem;">
+                            <span style="color: var(--text-secondary);">💾 DISK</span>
+                            <span id="disk-pct-${s.id}" style="color: #facc15; font-weight: 600;">--%</span>
+                        </div>
+                        <div style="width: 100%; height: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 0.2rem;">
+                            <div id="disk-bar-${s.id}" style="width: 0%; height: 100%; background: linear-gradient(90deg, #facc15, #eab308); transition: width 0.4s;"></div>
+                        </div>
+                        <div id="disk-val-${s.id}" style="font-size: 0.7rem; color: #aaa; text-align: right;">-- / --</div>
+                    </div>
+                </div>
+
                 <div id="console-wrapper-${s.id}" class="server-console-wrapper" style="display: none; position: relative; margin-top: 0.5rem; width: 100%;">
                     <div style="position: absolute; top: 8px; right: 8px; display: flex; gap: 0.5rem; z-index: 10;">
                         <button class="btn btn-secondary" onclick="copyServerConsole('${s.id}', this)" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 0.2rem;">📋 Kopyala</button>
@@ -685,11 +746,61 @@ async function loadServers() {
             </div>
         `).join('');
 
+        // Automatically load metrics for each server card
+        servers.forEach(s => loadServerLiveMetrics(s.id));
+
         if (document.body.classList.contains('debug-mode')) {
             updateDebugDimensions();
         }
     } catch (e) {
         console.error("Failed to load servers", e);
+    }
+}
+
+async function loadServerLiveMetrics(serverId) {
+    try {
+        const res = await fetch(`/api/servers/${serverId}/stats`);
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        // RAM
+        const ramPct = data.ram_percent || 0;
+        const ramBar = document.getElementById(`ram-bar-${serverId}`);
+        const ramPctEl = document.getElementById(`ram-pct-${serverId}`);
+        const ramValEl = document.getElementById(`ram-val-${serverId}`);
+        if (ramBar) ramBar.style.width = `${Math.min(ramPct, 100)}%`;
+        if (ramPctEl) ramPctEl.innerText = `${ramPct}%`;
+        if (ramValEl) ramValEl.innerText = `${data.used_ram_mb || 0} / ${data.total_ram_mb || 0} MB`;
+
+        // SWAP
+        const swapPct = data.swap_percent || 0;
+        const swapBar = document.getElementById(`swap-bar-${serverId}`);
+        const swapPctEl = document.getElementById(`swap-pct-${serverId}`);
+        const swapValEl = document.getElementById(`swap-val-${serverId}`);
+        if (swapBar) swapBar.style.width = `${Math.min(swapPct, 100)}%`;
+        if (swapPctEl) swapPctEl.innerText = `${swapPct}%`;
+        if (swapValEl) swapValEl.innerText = `${data.used_swap_mb || 0} / ${data.total_swap_mb || 0} MB`;
+
+        // CPU
+        const cpuPct = data.cpu_percent || 0;
+        const cpuBar = document.getElementById(`cpu-bar-${serverId}`);
+        const cpuPctEl = document.getElementById(`cpu-pct-${serverId}`);
+        const cpuValEl = document.getElementById(`cpu-val-${serverId}`);
+        if (cpuBar) cpuBar.style.width = `${Math.min(cpuPct, 100)}%`;
+        if (cpuPctEl) cpuPctEl.innerText = `${cpuPct}%`;
+        if (cpuValEl) cpuValEl.innerText = `${data.cores || 1} Nüvə`;
+
+        // DISK
+        const diskPct = data.disk_percent || 0;
+        const diskBar = document.getElementById(`disk-bar-${serverId}`);
+        const diskPctEl = document.getElementById(`disk-pct-${serverId}`);
+        const diskValEl = document.getElementById(`disk-val-${serverId}`);
+        if (diskBar) diskBar.style.width = `${Math.min(diskPct, 100)}%`;
+        if (diskPctEl) diskPctEl.innerText = `${diskPct}%`;
+        if (diskValEl) diskValEl.innerText = `${data.disk_free || '--'} Boş (${data.disk_used || '--'} / ${data.disk_total || '--'})`;
+
+    } catch (e) {
+        console.error('Failed to load server live metrics', e);
     }
 }
 

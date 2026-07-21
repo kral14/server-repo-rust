@@ -273,11 +273,10 @@ async fn get_server_stats(
         let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
     }
 
-    let cmd = "free -m | awk 'NR==2{print $2,$3}'; nproc; echo '---'; sudo docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' 2>/dev/null || true";
+    let cmd = "free -m | awk '/Mem:/{print $2,$3} /Swap:/{print $2,$3}'; nproc; df -h / | awk 'NR==2{print $2,$3,$4,$5}'; top -bn1 2>/dev/null | grep 'Cpu(s)' | awk '{print $2+$4}' || echo '0'; echo '---'; sudo docker stats --no-stream --format '{{.Name}} {{.CPUPerc}} {{.MemUsage}}' 2>/dev/null || true";
     
     let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
     
-    // 3 saniyəlik qəti gözləmə limiti (timeout) tətbiq edirik
     let run_future = async {
         if server.ip == "local" || server.ip == "127.0.0.1" {
             let local_cmd = cmd.replace("sudo ", "");
@@ -291,7 +290,7 @@ async fn get_server_stats(
                 .args(&[
                     "-o", "StrictHostKeyChecking=no",
                     "-o", "BatchMode=yes",
-                    "-o", "ConnectTimeout=1",
+                    "-o", "ConnectTimeout=2",
                     "-o", "ServerAliveInterval=1",
                     "-o", "ServerAliveCountMax=1",
                     "-i", &temp_key_path,
@@ -303,35 +302,100 @@ async fn get_server_stats(
         }
     };
 
-    let output_res = tokio::time::timeout(std::time::Duration::from_millis(1500), run_future).await;
+    let output_res = tokio::time::timeout(std::time::Duration::from_millis(2500), run_future).await;
     let _ = std::fs::remove_file(&temp_key_path);
 
     let output = match output_res {
         Ok(Ok(out)) => out,
         _ => {
-            // Həm timeout, həm də daxili icra xətası halında boş məlumat qaytarırıq
-            return Ok(Json(serde_json::json!({"total_ram_mb": 0, "used_ram_mb": 0, "cores": 0, "containers": {}})));
+            return Ok(Json(serde_json::json!({
+                "total_ram_mb": 0, "used_ram_mb": 0, "ram_percent": 0,
+                "total_swap_mb": 0, "used_swap_mb": 0, "swap_percent": 0,
+                "cores": 0, "cpu_percent": 0,
+                "disk_total": "--", "disk_used": "--", "disk_free": "--", "disk_percent": 0,
+                "containers": {}
+            })));
         }
     };
 
     if !output.status.success() {
-        return Ok(Json(serde_json::json!({"total_ram_mb": 0, "used_ram_mb": 0, "cores": 0, "containers": {}})));
+        return Ok(Json(serde_json::json!({
+            "total_ram_mb": 0, "used_ram_mb": 0, "ram_percent": 0,
+            "total_swap_mb": 0, "used_swap_mb": 0, "swap_percent": 0,
+            "cores": 0, "cpu_percent": 0,
+            "disk_total": "--", "disk_used": "--", "disk_free": "--", "disk_percent": 0,
+            "containers": {}
+        })));
     }
 
     let result_str = String::from_utf8_lossy(&output.stdout);
     let sections: Vec<&str> = result_str.split("---").collect();
 
-    let mut total_ram_mb = 0;
-    let mut used_ram_mb = 0;
-    let mut cores = 1;
+    let mut total_ram_mb: u64 = 0;
+    let mut used_ram_mb: u64 = 0;
+    let mut ram_percent: f64 = 0.0;
+
+    let mut total_swap_mb: u64 = 0;
+    let mut used_swap_mb: u64 = 0;
+    let mut swap_percent: f64 = 0.0;
+
+    let mut cores: u64 = 1;
+    let mut cpu_percent: f64 = 0.0;
+
+    let mut disk_total = String::from("--");
+    let mut disk_used = String::from("--");
+    let mut disk_free = String::from("--");
+    let mut disk_percent: f64 = 0.0;
+
     let mut containers = serde_json::json!({});
 
     if let Some(sys_section) = sections.get(0) {
-        let parts: Vec<&str> = sys_section.trim().split_whitespace().collect();
-        if parts.len() >= 3 {
-            total_ram_mb = parts[0].parse::<u64>().unwrap_or(0);
-            used_ram_mb = parts[1].parse::<u64>().unwrap_or(0);
-            cores = parts[2].parse::<u64>().unwrap_or(1);
+        let lines: Vec<&str> = sys_section.trim().lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+        
+        // Mem: total used
+        if let Some(mem_line) = lines.get(0) {
+            let parts: Vec<&str> = mem_line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                total_ram_mb = parts[0].parse::<u64>().unwrap_or(0);
+                used_ram_mb = parts[1].parse::<u64>().unwrap_or(0);
+                if total_ram_mb > 0 {
+                    ram_percent = ((used_ram_mb as f64) / (total_ram_mb as f64) * 100.0).round();
+                }
+            }
+        }
+
+        // Swap: total used
+        if let Some(swap_line) = lines.get(1) {
+            let parts: Vec<&str> = swap_line.split_whitespace().collect();
+            if parts.len() >= 2 {
+                total_swap_mb = parts[0].parse::<u64>().unwrap_or(0);
+                used_swap_mb = parts[1].parse::<u64>().unwrap_or(0);
+                if total_swap_mb > 0 {
+                    swap_percent = ((used_swap_mb as f64) / (total_swap_mb as f64) * 100.0).round();
+                }
+            }
+        }
+
+        // nproc
+        if let Some(cores_line) = lines.get(2) {
+            cores = cores_line.parse::<u64>().unwrap_or(1);
+        }
+
+        // df -h / (size used avail use%)
+        if let Some(df_line) = lines.get(3) {
+            let parts: Vec<&str> = df_line.split_whitespace().collect();
+            if parts.len() >= 4 {
+                disk_total = parts[0].to_string();
+                disk_used = parts[1].to_string();
+                disk_free = parts[2].to_string();
+                let pct_str = parts[3].trim_end_matches('%');
+                disk_percent = pct_str.parse::<f64>().unwrap_or(0.0);
+            }
+        }
+
+        // cpu_percent
+        if let Some(cpu_line) = lines.get(4) {
+            cpu_percent = cpu_line.parse::<f64>().unwrap_or(0.0);
         }
     }
 
@@ -359,7 +423,16 @@ async fn get_server_stats(
     let stats = serde_json::json!({
         "total_ram_mb": total_ram_mb,
         "used_ram_mb": used_ram_mb,
+        "ram_percent": ram_percent,
+        "total_swap_mb": total_swap_mb,
+        "used_swap_mb": used_swap_mb,
+        "swap_percent": swap_percent,
         "cores": cores,
+        "cpu_percent": cpu_percent,
+        "disk_total": disk_total,
+        "disk_used": disk_used,
+        "disk_free": disk_free,
+        "disk_percent": disk_percent,
         "containers": containers
     });
     Ok(Json(stats))
