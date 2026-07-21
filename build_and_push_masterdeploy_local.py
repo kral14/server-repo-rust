@@ -63,10 +63,20 @@ def main():
     log("=== LOKAL MASTERDEPLOY BUILD VƏ DEPLOY SKRİPTİ ===")
     
     # 1. Konfiqurasiyaları oxu
-    server_repo_dir = r"c:\Users\nesib\.gemini\antigravity-ide\scratch\mezuniyyet-rust-taurisiz-olan\server-repo-rust"
-    main_config_path = os.path.join(server_repo_dir, "..", "config.json")
-    
-    if not os.path.exists(main_config_path):
+    server_repo_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(server_repo_dir)
+    possible_config_paths = [
+        os.path.join(base_dir, "config.json"),
+        os.path.join(server_repo_dir, "..", "config.json"),
+        os.path.join(os.getcwd(), "config.json")
+    ]
+    main_config_path = None
+    for p in possible_config_paths:
+        if os.path.exists(p):
+            main_config_path = p
+            break
+            
+    if not main_config_path:
         log("XƏTA: Əsas config.json tapılmadı!")
         sys.exit(1)
         
