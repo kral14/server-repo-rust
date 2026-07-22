@@ -620,15 +620,15 @@ async fn sync_remote_applications(db: &sqlx::SqlitePool, server: &Server, temp_k
         let deploy_type = app["deploy_type"].as_str().unwrap_or("git").to_string();
         let registry_image = app["registry_image"].as_str().map(|s| s.to_string());
         let server_ip = app["server_ip"].as_str().unwrap_or(&server.ip).to_string();
-        let target_server_id = if server_ip == "local" {
-            "local-server-id".to_string()
+        let matched_server_id: Option<String> = if server_ip == "local" {
+            Some("local-server-id".to_string())
         } else {
             let row_res: Option<(String,)> = sqlx::query_as("SELECT id FROM servers WHERE ip = ?")
                 .bind(&server_ip)
                 .fetch_optional(db)
                 .await
                 .unwrap_or(None);
-            row_res.map(|r| r.0).unwrap_or_else(|| server.id.clone())
+            row_res.map(|r| r.0)
         };
 
         let mut exists: Option<(String,)> = sqlx::query_as("SELECT id FROM applications WHERE id = ?")
@@ -650,56 +650,77 @@ async fn sync_remote_applications(db: &sqlx::SqlitePool, server: &Server, temp_k
             }
         }
 
-        if exists.is_none() {
-            println!("[SYNC] Yeni layihə tapıldı. Lokal bazaya yazılır: '{}' (ID: {}, Server IP: {})", name, id, server_ip);
-            let _ = sqlx::query(
-                "INSERT INTO applications (id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, privileged, memory_limit, cpu_limit, cloudflare_url, cf_worker_url, deploy_type, registry_image) \
-                 VALUES (?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-            )
-            .bind(&id)
-            .bind(&name)
-            .bind(&repo_url)
-            .bind(&branch)
-            .bind(port)
-            .bind(&target_server_id)
-            .bind(env_vars)
-            .bind(build_pack_type)
-            .bind(build_command)
-            .bind(run_command)
-            .bind(dockerfile_path)
-            .bind(entrypoint)
-            .bind(command)
-            .bind(target)
-            .bind(work_dir)
-            .bind(privileged)
-            .bind(memory_limit)
-            .bind(cpu_limit)
-            .bind(cloudflare_url)
-            .bind(cf_worker_url)
-            .bind(deploy_type)
-            .bind(registry_image)
-            .execute(db)
-            .await;
-            
-            imported_count += 1;
+        if let Some(target_server_id) = matched_server_id {
+            if exists.is_none() {
+                println!("[SYNC] Yeni layihə tapıldı. Lokal bazaya yazılır: '{}' (ID: {}, Server IP: {})", name, id, server_ip);
+                let _ = sqlx::query(
+                    "INSERT INTO applications (id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, privileged, memory_limit, cpu_limit, cloudflare_url, cf_worker_url, deploy_type, registry_image) \
+                     VALUES (?, ?, ?, ?, ?, ?, 'stopped', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                )
+                .bind(&id)
+                .bind(&name)
+                .bind(&repo_url)
+                .bind(&branch)
+                .bind(port)
+                .bind(&target_server_id)
+                .bind(env_vars)
+                .bind(build_pack_type)
+                .bind(build_command)
+                .bind(run_command)
+                .bind(dockerfile_path)
+                .bind(entrypoint)
+                .bind(command)
+                .bind(target)
+                .bind(work_dir)
+                .bind(privileged)
+                .bind(memory_limit)
+                .bind(cpu_limit)
+                .bind(cloudflare_url)
+                .bind(cf_worker_url)
+                .bind(deploy_type)
+                .bind(registry_image)
+                .execute(db)
+                .await;
+                
+                imported_count += 1;
+            } else {
+                println!("[SYNC] '{}' layihəsi artıq lokal bazada mövcuddur. Mərkəzi bazadakı server və cloudflare/worker linkləri yenilənir...", name);
+                let _ = sqlx::query(
+                    "UPDATE applications SET server_id = ?, cloudflare_url = ?, cf_worker_url = ?, repo_url = ?, branch = ?, port = ?, env_vars = ?, deploy_type = ?, registry_image = ? WHERE id = ? OR name = ?"
+                )
+                .bind(&target_server_id)
+                .bind(&cloudflare_url)
+                .bind(&cf_worker_url)
+                .bind(&repo_url)
+                .bind(&branch)
+                .bind(port)
+                .bind(&env_vars)
+                .bind(&deploy_type)
+                .bind(&registry_image)
+                .bind(&id)
+                .bind(&name)
+                .execute(db)
+                .await;
+            }
         } else {
-            println!("[SYNC] '{}' layihəsi artıq lokal bazada mövcuddur. Mərkəzi bazadakı server və cloudflare/worker linkləri yenilənir...", name);
-            let _ = sqlx::query(
-                "UPDATE applications SET server_id = ?, cloudflare_url = ?, cf_worker_url = ?, repo_url = ?, branch = ?, port = ?, env_vars = ?, deploy_type = ?, registry_image = ? WHERE id = ? OR name = ?"
-            )
-            .bind(&target_server_id)
-            .bind(&cloudflare_url)
-            .bind(&cf_worker_url)
-            .bind(&repo_url)
-            .bind(&branch)
-            .bind(port)
-            .bind(&env_vars)
-            .bind(&deploy_type)
-            .bind(&registry_image)
-            .bind(&id)
-            .bind(&name)
-            .execute(db)
-            .await;
+            if exists.is_some() {
+                println!("[SYNC] '{}' layihəsinin server IP-si ({}) mövcud serverlər siyahısında yoxdur. Server_id dəyişdirilmədən digər məlumatlar yenilənir...", name, server_ip);
+                let _ = sqlx::query(
+                    "UPDATE applications SET cloudflare_url = ?, cf_worker_url = ?, repo_url = ?, branch = ?, port = ?, env_vars = ?, deploy_type = ?, registry_image = ? WHERE id = ? OR name = ?"
+                )
+                .bind(&cloudflare_url)
+                .bind(&cf_worker_url)
+                .bind(&repo_url)
+                .bind(&branch)
+                .bind(port)
+                .bind(&env_vars)
+                .bind(&deploy_type)
+                .bind(&registry_image)
+                .bind(&id)
+                .bind(&name)
+                .execute(db)
+                .await;
+            }
         }
     }
     

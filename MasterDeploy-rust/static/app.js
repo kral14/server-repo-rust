@@ -1321,8 +1321,12 @@ async function loadApplications() {
         let html = '';
         for (const sid of Object.keys(groupedApps)) {
             const srv = serverObjects[sid];
-            const srvName = srv ? srv.name : 'Naməlum Server';
-            const srvIp = srv ? srv.ip : 'localhost';
+            if (!srv) {
+                // If server is deleted or does not exist in servers list, do not render its applications
+                continue;
+            }
+            const srvName = srv.name;
+            const srvIp = srv.ip;
 
             // Server Header
             html += `

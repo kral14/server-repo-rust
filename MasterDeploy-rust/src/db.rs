@@ -125,5 +125,9 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
         }
     }
 
+    // Auto-purge orphan applications and deployments whose server_id does not exist in servers table
+    let _ = sqlx::query("DELETE FROM applications WHERE server_id NOT IN (SELECT id FROM servers)").execute(&pool).await;
+    let _ = sqlx::query("DELETE FROM deployments WHERE application_id NOT IN (SELECT id FROM applications)").execute(&pool).await;
+
     Ok(pool)
 }
