@@ -3673,6 +3673,14 @@ function updateStatsUI(servers) {
         const stats = serverStatsCache[server.id];
         if (!stats) return;
 
+        // Auto-update server status badge to connected if metrics respond
+        const statusEl = document.getElementById(`status-${server.id}`);
+        if (statusEl && (stats.total_ram_mb > 0 || stats.cores > 0)) {
+            statusEl.innerHTML = `Qoşulub ✅`;
+            statusEl.style.color = '#00e676';
+            statusEl.style.background = 'rgba(0, 230, 118, 0.1)';
+        }
+
         // Update CPU badge
         const cpuEl = document.getElementById(`srv-stats-cpu-${server.id}`);
         if (cpuEl) {
