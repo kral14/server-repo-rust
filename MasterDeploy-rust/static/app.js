@@ -1268,21 +1268,40 @@ async function loadApplications() {
             fetch('/api/applications'),
             fetch('/api/servers')
         ]);
-        const apps = await appRes.json();
-        globalApps = apps;
-        const servers = await srvRes.json();
+
+        let apps = [];
+        if (appRes.ok) {
+            try {
+                apps = await appRes.json();
+            } catch (err) {
+                console.error("Failed to parse applications JSON:", err);
+            }
+        } else {
+            console.warn("Failed to load applications, status:", appRes.status);
+        }
+        globalApps = Array.isArray(apps) ? apps : [];
+
+        let servers = [];
+        if (srvRes.ok) {
+            try {
+                servers = await srvRes.json();
+            } catch (err) {
+                console.error("Failed to parse servers JSON:", err);
+            }
+        } else {
+            console.warn("Failed to load servers, status:", srvRes.status);
+        }
+        if (!Array.isArray(servers)) servers = [];
 
         const serverMap = {};
         const serverObjects = {};
-        if (Array.isArray(servers)) {
-            servers.forEach(s => {
-                serverMap[s.id] = s.ip;
-                serverObjects[s.id] = s;
-            });
-        }
+        servers.forEach(s => {
+            serverMap[s.id] = s.ip;
+            serverObjects[s.id] = s;
+        });
 
         const appsList = document.getElementById('apps-list');
-        document.getElementById('stat-apps-count').innerText = apps.length;
+        document.getElementById('stat-apps-count').innerText = globalApps.length;
 
         if (apps.length === 0) {
             appsList.innerHTML = `<div class="no-data">Hələ heç bir layihə əlavə edilməyib.</div>`;

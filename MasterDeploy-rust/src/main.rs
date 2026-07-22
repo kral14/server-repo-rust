@@ -241,12 +241,22 @@ async fn get_server_stats(
     State(state): State<AppState>,
     AxumPath(server_id): AxumPath<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
-    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+    let server = match sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
         .bind(&server_id)
         .fetch_optional(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
+    {
+        Ok(Some(s)) => s,
+        _ => {
+            return Ok(Json(serde_json::json!({
+                "total_ram_mb": 0, "used_ram_mb": 0, "ram_percent": 0,
+                "total_swap_mb": 0, "used_swap_mb": 0, "swap_percent": 0,
+                "cores": 0, "cpu_percent": 0,
+                "disk_total": "--", "disk_used": "--", "disk_free": "--", "disk_percent": 0,
+                "containers": {}
+            })));
+        }
+    };
 
     let temp_key_path = format!("temp_stats_key_{}.key", uuid::Uuid::new_v4());
     let key_content = if server.ssh_key.contains("BEGIN ") {
@@ -1505,7 +1515,7 @@ async fn setup_server(
 }
 
 async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec<Application>>, (StatusCode, String)> {
-    let apps = sqlx::query_as::<_, Application>(
+    let apps = match sqlx::query_as::<_, Application>(
         "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
@@ -1514,8 +1524,13 @@ async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec<App
          FROM applications ORDER BY created_at DESC"
     )
     .fetch_all(&state.db)
-    .await
-    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    .await {
+        Ok(apps) => apps,
+        Err(e) => {
+            eprintln!("[ERROR] Failed to fetch applications from DB: {}", e);
+            Vec::new()
+        }
+    };
     Ok(Json(apps))
 }
 
