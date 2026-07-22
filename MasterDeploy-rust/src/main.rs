@@ -296,13 +296,37 @@ async fn get_server_stats(
                 .output()
                 .await
         } else {
+            for attempt in 0..2 {
+                let res = tokio::process::Command::new(ssh_bin)
+                    .args(&[
+                        "-o", "StrictHostKeyChecking=no",
+                        "-o", "UserKnownHostsFile=/dev/null",
+                        "-o", "BatchMode=yes",
+                        "-o", "ConnectTimeout=5",
+                        "-o", "ServerAliveInterval=2",
+                        "-o", "ServerAliveCountMax=2",
+                        "-i", &temp_key_path,
+                        &format!("{}@{}", server.ssh_user, server.ip),
+                        cmd
+                    ])
+                    .output()
+                    .await;
+                
+                if let Ok(ref out) = res {
+                    if out.status.success() {
+                        return Ok(out.clone());
+                    }
+                }
+                if attempt == 0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                }
+            }
             tokio::process::Command::new(ssh_bin)
                 .args(&[
                     "-o", "StrictHostKeyChecking=no",
+                    "-o", "UserKnownHostsFile=/dev/null",
                     "-o", "BatchMode=yes",
-                    "-o", "ConnectTimeout=2",
-                    "-o", "ServerAliveInterval=1",
-                    "-o", "ServerAliveCountMax=1",
+                    "-o", "ConnectTimeout=5",
                     "-i", &temp_key_path,
                     &format!("{}@{}", server.ssh_user, server.ip),
                     cmd
@@ -312,7 +336,7 @@ async fn get_server_stats(
         }
     };
 
-    let output_res = tokio::time::timeout(std::time::Duration::from_millis(2500), run_future).await;
+    let output_res = tokio::time::timeout(std::time::Duration::from_millis(6000), run_future).await;
     let _ = std::fs::remove_file(&temp_key_path);
 
     let output = match output_res {
