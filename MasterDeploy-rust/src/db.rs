@@ -125,6 +125,13 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
         }
     }
 
+    // Restore correct server_id for applications that were misassigned to local/master server
+    let _ = sqlx::query(
+        "UPDATE applications SET server_id = (SELECT id FROM servers WHERE ip = '132.145.76.194') \
+         WHERE (name = 'yeni-test' OR name = 'mezuniyyet-newapi') \
+         AND EXISTS (SELECT 1 FROM servers WHERE ip = '132.145.76.194')"
+    ).execute(&pool).await;
+
     // Auto-purge orphan applications and deployments whose server_id does not exist in servers table
     let _ = sqlx::query("DELETE FROM applications WHERE server_id NOT IN (SELECT id FROM servers)").execute(&pool).await;
     let _ = sqlx::query("DELETE FROM deployments WHERE application_id NOT IN (SELECT id FROM applications)").execute(&pool).await;
