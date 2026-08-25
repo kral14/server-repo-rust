@@ -2714,14 +2714,6 @@ async fn git_polling_loop(db: SqlitePool) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
 
-        // Hər dövrdə GitHub tokenini oxuyub daxildə GHCR login-in aktiv olmasını təmin edirik
-        if let Ok(Some((github_token,))) = sqlx::query_as::<_, (String,)>("SELECT value FROM settings WHERE key = 'github_token'")
-            .fetch_optional(&db)
-            .await 
-        {
-            perform_docker_login(&github_token).await;
-        }
-
         // 30 gündən köhnə deployment qeydlərini avtomatik silirik
         let _ = sqlx::query("DELETE FROM deployments WHERE created_at < datetime('now', '-30 days')")
             .execute(&db)
