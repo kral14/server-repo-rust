@@ -2826,69 +2826,98 @@ async fn git_polling_loop(db: SqlitePool) {
                 }
                 continue;
             }
-
             if app.repo_url.is_empty() || app.repo_url.starts_with("DOCKER_IMAGE:") {
                 continue;
             }
 
             add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni Git commit yoxlanılır (Budaq: {})...", app.name, app.branch), "info").await;
 
-            let output = tokio::time::timeout(
-                tokio::time::Duration::from_secs(15),
-                tokio::process::Command::new("git")
-                    .env("GIT_TERMINAL_PROMPT", "0")
-                    .args(["ls-remote", &app.repo_url, &app.branch])
-                    .output()
+            let mut cmd = tokio::process::Command::new("git");
+            cmd.env("GIT_TERMINAL_PROMPT", "0")
+               .args(["ls-remote", &app.repo_url, &app.branch])
+               .stdout(std::process::Stdio::piped())
+               .stderr(std::process::Stdio::piped());
+
+            let mut child = match cmd.spawn() {
+                Ok(c) => c,
+                Err(e) => {
+                    eprintln!("[AUTO-DEPLOY ERROR] Failed to spawn git command for {}: {}", app.name, e);
+                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git əmri başladıla bilmədi: {}", app.name, e), "error").await;
+                    continue;
+                }
+            };
+
+            // Stdout və stderr-i prosesdən ayırırıq ki, child-ı qismən hələ də idarə edə bilək
+            let mut stdout = child.stdout.take().unwrap();
+            let mut stderr = child.stderr.take().unwrap();
+
+            // Asinxron olaraq həm gözləyirik, həm də çıxışları oxuyuruq
+            let wait_fut = async {
+                use tokio::io::AsyncReadExt;
+                let status = child.wait().await;
+                let mut out_buf = Vec::new();
+                let mut err_buf = Vec::new();
+                let _ = stdout.read_to_end(&mut out_buf).await;
+                let _ = stderr.read_to_end(&mut err_buf).await;
+                (status, out_buf, err_buf)
+            };
+
+            let timeout_res = tokio::time::timeout(
+                tokio::time::Duration::from_secs(12),
+                wait_fut
             ).await;
 
-            match output {
-                Ok(Ok(out)) if out.status.success() => {
-                    let result_str = String::from_utf8_lossy(&out.stdout);
-                    if let Some(remote_sha) = result_str.split_whitespace().next() {
-                        let remote_sha = remote_sha.to_string();
-                        
-                        match app.last_commit_hash {
-                            None => {
-                                let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
-                                    .bind(&remote_sha)
-                                    .bind(&app.id)
-                                    .execute(&db)
-                                    .await;
-                                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin Git commit imzası qeyd edildi: {}", app.name, remote_sha), "info").await;
-                            }
-                            Some(ref local_sha) if local_sha != &remote_sha => {
-                                println!("[AUTO-DEPLOY] Yeni commit tapıldı ({} -> {}), layihə: {}", local_sha, remote_sha, app.name);
-                                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni commit tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_sha, remote_sha), "success").await;
-                                
-                                let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
-                                    .bind(&remote_sha)
-                                    .bind(&app.id)
-                                    .execute(&db)
-                                    .await;
+            match timeout_res {
+                Ok((Ok(status), out_bytes, err_bytes)) => {
+                    if status.success() {
+                        let result_str = String::from_utf8_lossy(&out_bytes);
+                        if let Some(remote_sha) = result_str.split_whitespace().next() {
+                            let remote_sha = remote_sha.to_string();
+                            
+                            match app.last_commit_hash {
+                                None => {
+                                    let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                        .bind(&remote_sha)
+                                        .bind(&app.id)
+                                        .execute(&db)
+                                        .await;
+                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin Git commit imzası qeyd edildi: {}", app.name, remote_sha), "info").await;
+                                }
+                                Some(ref local_sha) if local_sha != &remote_sha => {
+                                    println!("[AUTO-DEPLOY] Yeni commit tapıldı ({} -> {}), layihə: {}", local_sha, remote_sha, app.name);
+                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni commit tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_sha, remote_sha), "success").await;
+                                    
+                                    let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                        .bind(&remote_sha)
+                                        .bind(&app.id)
+                                        .execute(&db)
+                                        .await;
  
-                                if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
-                                    eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger deployment for {}: {}", app.name, e);
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error").await;
+                                    if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
+                                        eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger deployment for {}: {}", app.name, e);
+                                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error").await;
+                                    }
+                                }
+                                _ => {
+                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info").await;
                                 }
                             }
-                            _ => {
-                                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info").await;
-                            }
                         }
+                    } else {
+                        let err_str = String::from_utf8_lossy(&err_bytes);
+                        eprintln!("[AUTO-DEPLOY ERROR] git ls-remote failed for {}: {}", app.name, err_str.trim());
+                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün git ls-remote uğursuz oldu: {}", app.name, err_str.trim()), "error").await;
                     }
                 }
-                Ok(Ok(out)) => {
-                    let err_str = String::from_utf8_lossy(&out.stderr);
-                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote failed for {}: {}", app.name, err_str.trim());
-                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün git ls-remote uğursuz oldu: {}", app.name, err_str.trim()), "error").await;
-                }
-                Ok(Err(e)) => {
-                    eprintln!("[AUTO-DEPLOY ERROR] Failed to execute git command for {}: {}", app.name, e);
-                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git əmri icra edilə bilmədi: {}", app.name, e), "error").await;
+                Ok((Err(e), _, _)) => {
+                    eprintln!("[AUTO-DEPLOY ERROR] Failed to wait for git command for {}: {}", app.name, e);
+                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git yoxlanışı uğursuz oldu: {}", app.name, e), "error").await;
                 }
                 Err(_) => {
-                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out (15s limit) for {}", app.name);
-                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git sorğusu vaxt aşımına uğradı (15s).", app.name), "error").await;
+                    // Timeout olduqda, child hələ move olunmayıb, onu kill edirik!
+                    let _ = child.kill().await;
+                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out (12s limit) for {}. Process forcefully killed.", app.name);
+                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git sorğusu vaxt aşımına uğradı (12s). Proses dayandırıldı.", app.name), "error").await;
                 }
             }
         }
