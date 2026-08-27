@@ -7,6 +7,7 @@ pub struct Server {
     pub ip: String,
     pub ssh_user: String,
     pub ssh_key: String,
+    pub ssh_key_id: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -17,6 +18,7 @@ pub struct CreateServerInput {
     pub ip: String,
     pub ssh_user: String,
     pub ssh_key: String,
+    pub ssh_key_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -25,6 +27,23 @@ pub struct UpdateServerInput {
     pub ip: String,
     pub ssh_user: String,
     pub ssh_key: String,
+    pub ssh_key_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct SshKey {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub private_key: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateSshKeyInput {
+    pub name: String,
+    pub description: Option<String>,
+    pub private_key: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]

@@ -55,7 +55,7 @@ pub async fn start_cloudflare_tunnel(
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Local command execution failed: {}", e)))?;
     } else {
-        let temp_key_path = format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4());
+        let temp_key_path = std::env::temp_dir().join(format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
         let key_content = if server.ssh_key.contains("BEGIN ") {
             server.ssh_key.clone()
         } else {
@@ -67,9 +67,7 @@ pub async fn start_cloudflare_tunnel(
 
         #[cfg(target_os = "windows")]
         {
-            let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-            let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-            let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
             let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
             let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
         }
@@ -235,7 +233,7 @@ pub async fn get_cloudflare_tunnel_logs(
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Local command execution failed: {}", e)))?;
         format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
     } else {
-        let temp_key_path = format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4());
+        let temp_key_path = std::env::temp_dir().join(format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
         let key_content = if server.ssh_key.contains("BEGIN ") {
             server.ssh_key.clone()
         } else {
@@ -247,9 +245,7 @@ pub async fn get_cloudflare_tunnel_logs(
 
         #[cfg(target_os = "windows")]
         {
-            let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-            let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-            let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
             let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
             let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
         }
@@ -356,7 +352,7 @@ pub async fn stop_cloudflare_tunnel(
             .await
             .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Local command execution failed: {}", e)))?;
     } else {
-        let temp_key_path = format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4());
+        let temp_key_path = std::env::temp_dir().join(format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
         let key_content = if server.ssh_key.contains("BEGIN ") {
             server.ssh_key.clone()
         } else {
@@ -368,9 +364,7 @@ pub async fn stop_cloudflare_tunnel(
 
         #[cfg(target_os = "windows")]
         {
-            let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-            let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-            let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
             let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
             let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
         }

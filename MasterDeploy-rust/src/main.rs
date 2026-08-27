@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path as AxumPath, State, Query},
     http::StatusCode,
-    routing::{get, post},
+    routing::{get, post, delete},
     Json, Router,
 };
 use sqlx::SqlitePool;
@@ -14,7 +14,7 @@ mod db;
 mod models;
 mod plugins;
 
-use models::{Application, CreateApplicationInput, CreateServerInput, UpdateServerInput, Deployment, Server, ActivityLog, CreateActivityLogInput};
+use models::{Application, CreateApplicationInput, CreateServerInput, UpdateServerInput, Deployment, Server, ActivityLog, CreateActivityLogInput, SshKey, CreateSshKeyInput};
 
 async fn perform_docker_login(token: &str) {
     if token.is_empty() {
@@ -81,6 +81,9 @@ async fn main() {
         .nest_service("/", ServeDir::new("static"))
         .route("/api/servers", get(list_servers).post(create_server))
         .route("/api/servers/:server_id", get(get_server).put(update_server).delete(delete_server))
+        .route("/api/ssh-keys", get(list_ssh_keys).post(create_ssh_key))
+        .route("/api/ssh-keys/:key_id", delete(delete_ssh_key))
+        .route("/api/ssh-keys/generate-rsa", post(generate_rsa_keypair))
         .route("/api/servers/:server_id/stats", get(get_server_stats))
         .route("/api/servers/:server_id/setup", post(setup_server))
         .route("/api/servers/:server_id/check", get(check_server_connection))
@@ -110,6 +113,7 @@ async fn main() {
         .route("/api/system/changelog", get(get_changelog))
         .route("/api/system/docs", get(get_docs))
         .route("/api/system/update", post(trigger_system_update))
+        .route("/api/system/local-ssh-key", get(get_local_ssh_key))
         .route("/api/settings/github-token", get(get_github_token).post(save_github_token))
         .route("/api/activity-logs", get(list_activity_logs).post(create_activity_log).delete(clear_activity_logs))
         .layer(tower_http::set_header::SetResponseHeaderLayer::overriding(
@@ -154,9 +158,16 @@ async fn create_server(State(state): State<AppState>, Json(input): Json<CreateSe
     }
 
     let id = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO servers (id, name, ip, ssh_user, ssh_key) VALUES (?, ?, ?, ?, ?)")
-        .bind(&id).bind(&input.name).bind(&input.ip).bind(&input.ssh_user).bind(&input.ssh_key)
-        .execute(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    sqlx::query("INSERT INTO servers (id, name, ip, ssh_user, ssh_key, ssh_key_id) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(&id)
+        .bind(&input.name)
+        .bind(&input.ip)
+        .bind(&input.ssh_user)
+        .bind(&input.ssh_key)
+        .bind(&input.ssh_key_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     
     let server = Server {
         id,
@@ -164,6 +175,7 @@ async fn create_server(State(state): State<AppState>, Json(input): Json<CreateSe
         ip: input.ip,
         ssh_user: input.ssh_user,
         ssh_key: input.ssh_key,
+        ssh_key_id: input.ssh_key_id,
         created_at: String::new(),
         updated_at: String::new(),
     };
@@ -196,15 +208,93 @@ async fn update_server(
         return Err((StatusCode::BAD_REQUEST, "Bu IP ünvanına malik server artıq mövcuddur!".to_string()));
     }
 
-    sqlx::query("UPDATE servers SET name = ?, ip = ?, ssh_user = ?, ssh_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    sqlx::query("UPDATE servers SET name = ?, ip = ?, ssh_user = ?, ssh_key = ?, ssh_key_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(&input.name)
         .bind(&input.ip)
         .bind(&input.ssh_user)
         .bind(&input.ssh_key)
+        .bind(&input.ssh_key_id)
         .bind(&server_id)
         .execute(&state.db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(true))
+}
+
+// SSH Keys CRUD Handlers
+async fn list_ssh_keys(State(state): State<AppState>) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    // Burada həm açarları, həm də həmin açarın istifadə olunduğu serverlərin siyahısını birlikdə çəkirik
+    #[derive(serde::Serialize, sqlx::FromRow)]
+    struct SshKeyWithServers {
+        id: String,
+        name: String,
+        description: Option<String>,
+        created_at: String,
+        // SQL GROUP_CONCAT ilə server adlarını birləşdirəcəyik
+        used_servers: Option<String>,
+    }
+
+    let keys = sqlx::query_as::<_, SshKeyWithServers>(
+        "SELECT k.id, k.name, k.description, CAST(k.created_at AS TEXT) as created_at, \
+         (SELECT GROUP_CONCAT(s.name, ', ') FROM servers s WHERE s.ssh_key_id = k.id) as used_servers \
+         FROM ssh_keys k ORDER BY k.created_at DESC"
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    Ok(Json(serde_json::to_value(keys).unwrap()))
+}
+
+async fn create_ssh_key(
+    State(state): State<AppState>,
+    Json(input): Json<CreateSshKeyInput>,
+) -> Result<(StatusCode, Json<SshKey>), (StatusCode, String)> {
+    let id = Uuid::new_v4().to_string();
+    sqlx::query("INSERT INTO ssh_keys (id, name, description, private_key) VALUES (?, ?, ?, ?)")
+        .bind(&id)
+        .bind(&input.name)
+        .bind(&input.description)
+        .bind(&input.private_key)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let key = SshKey {
+        id,
+        name: input.name,
+        description: input.description,
+        private_key: String::new(), // Təhlükəsizlik üçün private_key-i geri qaytarmırıq
+        created_at: String::new(),
+    };
+
+    Ok((StatusCode::CREATED, Json(key)))
+}
+
+async fn delete_ssh_key(
+    State(state): State<AppState>,
+    AxumPath(key_id): AxumPath<String>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    // Əvvəlcə yoxlayırıq ki, bu açar hər hansı bir serverdə istifadə olunurmu
+    let in_use: Option<(String,)> = sqlx::query_as("SELECT name FROM servers WHERE ssh_key_id = ? LIMIT 1")
+        .bind(&key_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if let Some((server_name,)) = in_use {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("Bu açar silinə bilməz, çünki '{}' serveri tərəfindən istifadə olunur!", server_name)
+        ));
+    }
+
+    sqlx::query("DELETE FROM ssh_keys WHERE id = ?")
+        .bind(&key_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
     Ok(Json(true))
 }
 
@@ -258,22 +348,21 @@ async fn get_server_stats(
         }
     };
 
-    let temp_key_path = format!("temp_stats_key_{}.key", uuid::Uuid::new_v4());
+    let temp_key_path = std::env::temp_dir().join(format!("temp_stats_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
     let key_content = if server.ssh_key.contains("BEGIN ") {
         server.ssh_key.clone()
     } else {
         std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
     };
 
-    if let Err(e) = std::fs::write(&temp_key_path, &key_content) {
+    let normalized_key = key_content.replace("\r\n", "\n").trim().to_string() + "\n";
+    if let Err(e) = std::fs::write(&temp_key_path, &normalized_key) {
         return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to write key: {}", e)));
     }
 
     #[cfg(target_os = "windows")]
     {
-        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
     }
@@ -536,7 +625,7 @@ async fn sync_remote_applications(db: &sqlx::SqlitePool, server: &Server, temp_k
 
         if let Some((c_name, c_ip, c_ssh_user, c_ssh_key)) = central_row {
             println!("[SYNC] Mərkəzi MasterDeploy serveri aşkar edildi: '{}' (IP: {}). Sorğu göndərilir...", c_name, c_ip);
-            let c_temp_key_path = format!("temp_central_key_{}.key", uuid::Uuid::new_v4());
+            let c_temp_key_path = std::env::temp_dir().join(format!("temp_central_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
             let c_key_content = if c_ssh_key.contains("BEGIN ") {
                 c_ssh_key.clone()
             } else {
@@ -546,9 +635,7 @@ async fn sync_remote_applications(db: &sqlx::SqlitePool, server: &Server, temp_k
             if std::fs::write(&c_temp_key_path, &c_key_content).is_ok() {
                 #[cfg(target_os = "windows")]
                 {
-                    let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-                    let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-                    let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
                     let _ = std::process::Command::new("icacls").args(&[&c_temp_key_path, "/inheritance:r"]).output();
                     let _ = std::process::Command::new("icacls").args(&[&c_temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
                 }
@@ -819,14 +906,15 @@ async fn check_server_connection(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
 
-    let temp_key_path = format!("temp_check_key_{}.key", uuid::Uuid::new_v4());
+    let temp_key_path = std::env::temp_dir().join(format!("temp_check_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
     let key_content = if server.ssh_key.contains("BEGIN ") {
         server.ssh_key.clone()
     } else {
         std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
     };
 
-    if let Err(e) = std::fs::write(&temp_key_path, &key_content) {
+    let normalized_key = key_content.replace("\r\n", "\n").trim().to_string() + "\n";
+    if let Err(e) = std::fs::write(&temp_key_path, &normalized_key) {
         return Ok(Json(serde_json::json!({
             "success": false,
             "error": format!("Key write error: {}", e)
@@ -835,9 +923,7 @@ async fn check_server_connection(
 
     #[cfg(target_os = "windows")]
     {
-        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
     }
@@ -928,7 +1014,7 @@ async fn list_server_volumes(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
 
-    let temp_key_path = format!("temp_vols_key_{}.key", uuid::Uuid::new_v4());
+    let temp_key_path = std::env::temp_dir().join(format!("temp_vols_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
     let key_content = if server.ssh_key.contains("BEGIN ") {
         server.ssh_key.clone()
     } else {
@@ -941,9 +1027,7 @@ async fn list_server_volumes(
 
     #[cfg(target_os = "windows")]
     {
-        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
     }
@@ -1108,7 +1192,7 @@ async fn delete_server_volume(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
 
-    let temp_key_path = format!("temp_delvol_key_{}.key", uuid::Uuid::new_v4());
+    let temp_key_path = std::env::temp_dir().join(format!("temp_delvol_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
     let key_content = if server.ssh_key.contains("BEGIN ") {
         server.ssh_key.clone()
     } else {
@@ -1121,9 +1205,7 @@ async fn delete_server_volume(
 
     #[cfg(target_os = "windows")]
     {
-        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
     }
@@ -1243,6 +1325,94 @@ async fn create_activity_log(
     Ok(Json(true))
 }
 
+async fn get_local_ssh_key() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let home = std::env::var("USERPROFILE")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".to_string());
+    
+    let ssh_dir = std::path::Path::new(&home).join(".ssh");
+    let key_path = ssh_dir.join("id_rsa");
+    let pub_path = ssh_dir.join("id_rsa.pub");
+
+    if !key_path.exists() {
+        let _ = std::fs::create_dir_all(&ssh_dir);
+        let output = if cfg!(target_os = "windows") {
+            // Windows-da default ssh-keygen istifadə edirik
+            std::process::Command::new("ssh-keygen")
+                .args(&["-t", "rsa", "-b", "3072", "-f", key_path.to_str().unwrap(), "-N", ""])
+                .output()
+        } else {
+            std::process::Command::new("ssh-keygen")
+                .args(&["-t", "rsa", "-b", "3072", "-f", key_path.to_str().unwrap(), "-N", "", "-q"])
+                .output()
+        };
+        if let Err(e) = output {
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Açar yaradıla bilmədi: {}", e)));
+        }
+    }
+
+    let pub_key = std::fs::read_to_string(pub_path)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Public key oxuna bilmədi: {}", e)))?;
+
+    Ok(Json(serde_json::json!({
+        "public_key": pub_key.trim()
+    })))
+}
+
+// RSA cüt açar yaratma endpoint-i
+async fn generate_rsa_keypair() -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    // Sistem temp qovluğunda müvəqqəti fayl adı
+    let tmp_dir = std::env::temp_dir();
+    let key_name = format!("masterdeploy_rsa_{}", ts);
+    let key_path = tmp_dir.join(&key_name);
+    let pub_path = tmp_dir.join(format!("{}.pub", &key_name));
+
+    // ssh-keygen: -N "" = passphrase yoxdur, -q = quiet
+    let output = if cfg!(target_os = "windows") {
+        std::process::Command::new("ssh-keygen")
+            .args(&["-t", "rsa", "-b", "4096", "-f", key_path.to_str().unwrap(), "-N", ""])
+            .output()
+    } else {
+        std::process::Command::new("ssh-keygen")
+            .args(&["-t", "rsa", "-b", "4096", "-f", key_path.to_str().unwrap(), "-N", "", "-q"])
+            .output()
+    };
+
+    match output {
+        Err(e) => {
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("ssh-keygen çalıştırıla bilmədi: {}", e)));
+        }
+        Ok(out) if !out.status.success() => {
+            let err_msg = String::from_utf8_lossy(&out.stderr).to_string();
+            let _ = std::fs::remove_file(&key_path);
+            let _ = std::fs::remove_file(&pub_path);
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("ssh-keygen xətası: {}", err_msg)));
+        }
+        _ => {}
+    }
+
+    let private_key = std::fs::read_to_string(&key_path)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Private key oxuna bilmədi: {}", e)))?;
+    let public_key = std::fs::read_to_string(&pub_path)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Public key oxuna bilmədi: {}", e)))?;
+
+    // Müvəqqəti faylları sil
+    let _ = std::fs::remove_file(&key_path);
+    let _ = std::fs::remove_file(&pub_path);
+
+    Ok(Json(serde_json::json!({
+        "private_key": private_key.trim(),
+        "public_key": public_key.trim()
+    })))
+}
+
 async fn clear_activity_logs(State(state): State<AppState>) -> Result<Json<bool>, (StatusCode, String)> {
     sqlx::query("DELETE FROM activity_logs")
         .execute(&state.db)
@@ -1269,11 +1439,24 @@ async fn get_runtime_logs(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
 
-    let temp_key_path = format!("temp_logs_key_{}.key", uuid::Uuid::new_v4());
-    let key_content = if server.ssh_key.contains("BEGIN ") {
-        server.ssh_key.clone()
+    let temp_key_path = std::env::temp_dir().join(format!("temp_logs_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+    
+    // Açarımızı qlobal bazadan id vasitəsilə oxuyuruq, tapılmasa köhnə ssh_key sütununa baxırıq
+    let key_content = if let Some(ref kid) = server.ssh_key_id {
+        let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+            .bind(kid)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or_default();
+        db_key.map(|r| r.0).unwrap_or_else(|| server.ssh_key.clone())
     } else {
-        std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        server.ssh_key.clone()
+    };
+
+    let key_content = if key_content.contains("BEGIN ") {
+        key_content
+    } else {
+        std::fs::read_to_string(key_content.trim()).unwrap_or_else(|_| server.ssh_key.clone())
     };
 
     if let Err(e) = std::fs::write(&temp_key_path, &key_content) {
@@ -1282,9 +1465,7 @@ async fn get_runtime_logs(
 
     #[cfg(target_os = "windows")]
     {
-        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
     }
@@ -1334,12 +1515,38 @@ async fn get_runtime_logs(
     Ok(Json(output))
 }
 
+// Legacy proxy for backward compatibility
 async fn run_ssh_command(server: &Server, cmd: &str) -> Result<String, String> {
-    let temp_key_path = format!("temp_cmd_key_{}.key", uuid::Uuid::new_v4());
-    let key_content = if server.ssh_key.contains("BEGIN ") {
-        server.ssh_key.clone()
+    let db_path = if std::path::Path::new("/.dockerenv").exists() || (cfg!(target_family = "unix") && std::path::Path::new("/app/data").exists()) {
+        "/app/data/masterdeploy.db".to_string()
     } else {
-        std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        "masterdeploy.db".to_string()
+    };
+    if let Ok(pool) = SqlitePool::connect(&format!("sqlite:{}", db_path)).await {
+        run_ssh_command_impl(&pool, server, cmd).await
+    } else {
+        Err("Failed to open database for SSH key retrieval".to_string())
+    }
+}
+
+async fn run_ssh_command_impl(db: &SqlitePool, server: &Server, cmd: &str) -> Result<String, String> {
+    let temp_key_path = std::env::temp_dir().join(format!("temp_cmd_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+    
+    let key_content = if let Some(ref kid) = server.ssh_key_id {
+        let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+            .bind(kid)
+            .fetch_optional(db)
+            .await
+            .unwrap_or_default();
+        db_key.map(|r| r.0).unwrap_or_else(|| server.ssh_key.clone())
+    } else {
+        server.ssh_key.clone()
+    };
+
+    let key_content = if key_content.contains("BEGIN ") {
+        key_content
+    } else {
+        std::fs::read_to_string(key_content.trim()).unwrap_or_else(|_| server.ssh_key.clone())
     };
 
     if let Err(e) = std::fs::write(&temp_key_path, &key_content) {
@@ -1348,9 +1555,7 @@ async fn run_ssh_command(server: &Server, cmd: &str) -> Result<String, String> {
 
     #[cfg(target_os = "windows")]
     {
-        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
     }
@@ -1472,11 +1677,23 @@ async fn setup_server(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
 
-    let temp_key_path = format!("temp_setup_key_{}.key", uuid::Uuid::new_v4());
-    let key_content = if server.ssh_key.contains("BEGIN ") {
-        server.ssh_key.clone()
+    let temp_key_path = std::env::temp_dir().join(format!("temp_setup_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+    
+    let key_content = if let Some(ref kid) = server.ssh_key_id {
+        let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+            .bind(kid)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or_default();
+        db_key.map(|r| r.0).unwrap_or_else(|| server.ssh_key.clone())
     } else {
-        std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        server.ssh_key.clone()
+    };
+
+    let key_content = if key_content.contains("BEGIN ") {
+        key_content
+    } else {
+        std::fs::read_to_string(key_content.trim()).unwrap_or_else(|_| server.ssh_key.clone())
     };
 
     if let Err(e) = std::fs::write(&temp_key_path, &key_content) {
@@ -1485,9 +1702,7 @@ async fn setup_server(
 
     #[cfg(target_os = "windows")]
     {
-        let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-        let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-        let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
         let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
     }
@@ -1911,6 +2126,7 @@ async fn run_ssh_cmd_stream_helper(
         let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
         tokio::process::Command::new(ssh_bin)
             .args(&[
+                "-v",
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "BatchMode=yes",
                 "-o", "ConnectTimeout=15",
@@ -2087,15 +2303,27 @@ async fn trigger_deployment_impl(
         }
 
         // Write the SSH private key temporarily to disk safely
-        let temp_key_path = format!("temp_key_{}.key", deploy_id);
+        let temp_key_path = std::env::temp_dir().join(format!("temp_key_{}.key", deploy_id)).to_string_lossy().into_owned();
         
-        let key_content = if server.ssh_key.contains("BEGIN ") {
-            server.ssh_key.clone()
+        let key_content = if let Some(ref kid) = server.ssh_key_id {
+            let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+                .bind(kid)
+                .fetch_optional(&db_clone)
+                .await
+                .unwrap_or_default();
+            db_key.map(|r| r.0).unwrap_or_else(|| server.ssh_key.clone())
         } else {
-            std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+            server.ssh_key.clone()
         };
 
-        if let Err(e) = std::fs::write(&temp_key_path, &key_content) {
+        let key_content = if key_content.contains("BEGIN ") {
+            key_content
+        } else {
+            std::fs::read_to_string(key_content.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        };
+
+        let normalized_key = key_content.replace("\r\n", "\n").replace('\r', "\n").trim().to_string() + "\n";
+        if let Err(e) = std::fs::write(&temp_key_path, &normalized_key) {
             let mut lock = logs.lock().await;
             lock.push_str(&format!("[FATAL ERROR] Failed to write temporary SSH key: {}\n", e));
             update_logs_helper(&db_clone, &deploy_id, &lock).await;
@@ -2105,9 +2333,7 @@ async fn trigger_deployment_impl(
 
         #[cfg(target_os = "windows")]
         {
-            let domain = std::env::var("USERDOMAIN").unwrap_or_default();
-            let user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
-            let identity = if domain.is_empty() { user } else { format!("{}\\{}", domain, user) };
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
             let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
             let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
         }

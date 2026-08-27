@@ -66,12 +66,10 @@
             <nav class="nav-menu">
                 <button class="nav-btn active" data-tab="dashboard">📊 Dashboard</button>
                 <button class="nav-btn" data-tab="servers">🖥️ Serverlər</button>
+                <button class="nav-btn" data-tab="keys-tokens">🔑 Açarlar və Tokenlər</button>
                 <button class="nav-btn" data-tab="applications">🚀 Layihələr</button>
-
-                <button class="nav-btn" onclick="showModal('github-modal')"
-                    style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">⚙️
-                    GitHub Ayarları</button>
-                <button class="nav-btn" onclick="showModal('plugins-modal')" style="margin-top: 0.5rem;">🧩 Modullar
+ 
+                <button class="nav-btn" onclick="showModal('plugins-modal')" style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">🧩 Modullar
                     (Plugins)</button>
                 <button class="nav-btn" onclick="showModal('activity-log-modal')" style="margin-top: 0.5rem;">📋
                     Fəaliyyət Jurnalı</button>
@@ -155,6 +153,19 @@
                 <div id="servers-list" class="items-list">
                     <!-- Servers will be listed here -->
                     <div class="no-data">Hələ heç bir server əlavə edilməyib.</div>
+                </div>
+            </section>
+
+            <!-- Keys & Tokens Tab (Modularized UI) -->
+            <section id="tab-keys-tokens" class="tab-section">
+                <header class="tab-header" style="margin-bottom: 1.5rem;">
+                    <h2>🔑 Açarlar və Tokenlər (Keys & Tokens)</h2>
+                    <p>Sisteminizin SSH açarları, tokenləri və təhlükəsizlik bağlantıları</p>
+                </header>
+
+                <!-- Modularized Container dynamically loaded from keys_tokens.html -->
+                <div id="keys-tokens-modular-root">
+                    <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Yüklənir...</div>
                 </div>
             </section>
 
@@ -699,8 +710,14 @@
                         <input type="text" id="srv-user" required placeholder="Məs: ubuntu">
                     </div>
                     <div class="form-group">
-                        <label>SSH Private Key</label>
-                        <textarea id="srv-key" required placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+                        <label>Qlobal SSH Açarını Seçin</label>
+                        <select id="srv-key-id" onchange="handleServerKeySelect('srv-key-id', 'srv-key-wrapper')">
+                            <!-- SSH keys list loaded dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group" id="srv-key-wrapper">
+                        <label>Mətn olaraq SSH Private Key (Köhnə üsul)</label>
+                        <textarea id="srv-key" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -732,9 +749,14 @@
                         <input type="text" id="edit-srv-user" required placeholder="Məs: ubuntu">
                     </div>
                     <div class="form-group">
-                        <label>SSH Private Key</label>
-                        <textarea id="edit-srv-key" required
-                            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+                        <label>Qlobal SSH Açarını Seçin</label>
+                        <select id="edit-srv-key-id" onchange="handleServerKeySelect('edit-srv-key-id', 'edit-srv-key-wrapper')">
+                            <!-- SSH keys list loaded dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group" id="edit-srv-key-wrapper">
+                        <label>Mətn olaraq SSH Private Key</label>
+                        <textarea id="edit-srv-key" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
                     </div>
                 </div>
                 <div class="modal-actions">
@@ -745,6 +767,7 @@
             </form>
         </div>
     </div>
+
 
     <!-- Application Add Modal -->
     <div id="app-modal" class="modal-backdrop">
@@ -1559,7 +1582,7 @@
 
     <!-- JavaScript Files -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=1.3"></script>
 </body>
 
 </html>
