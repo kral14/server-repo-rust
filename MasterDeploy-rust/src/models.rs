@@ -116,6 +116,10 @@ pub struct ActivityLog {
     pub id: String,
     pub message: String,
     pub log_type: String,
+    pub module: Option<String>,
+    pub operator_name: Option<String>,
+    pub target_id: Option<String>,
+    pub ip_address: Option<String>,
     pub created_at: String,
 }
 
@@ -123,4 +127,8 @@ pub struct ActivityLog {
 pub struct CreateActivityLogInput {
     pub message: String,
     pub log_type: String,
+    pub module: Option<String>,
+    pub operator_name: Option<String>,
+    pub target_id: Option<String>,
+    pub ip_address: Option<String>,
 }

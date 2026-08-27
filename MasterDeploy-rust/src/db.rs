@@ -85,11 +85,20 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
             id TEXT PRIMARY KEY,\n\
             message TEXT NOT NULL,\n\
             log_type TEXT NOT NULL,\n\
+            module TEXT,\n\
+            operator_name TEXT,\n\
+            target_id TEXT,\n\
+            ip_address TEXT,\n\
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n\
         );"
     ).execute(&pool).await?;
 
     // Auto-migrate: Add columns if they do not exist (for existing databases)
+    let _ = sqlx::query("ALTER TABLE activity_logs ADD COLUMN module TEXT;").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE activity_logs ADD COLUMN operator_name TEXT;").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE activity_logs ADD COLUMN target_id TEXT;").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE activity_logs ADD COLUMN ip_address TEXT;").execute(&pool).await;
+
     let _ = sqlx::query("ALTER TABLE servers ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN env_vars TEXT;").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN build_pack_type TEXT DEFAULT 'dockerfile';").execute(&pool).await;

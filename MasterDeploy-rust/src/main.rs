@@ -1213,11 +1213,14 @@ async fn save_github_token(
     // Token yadda saxlandıqda avtomatik olaraq konteyner daxilində GHCR login edirik
     perform_docker_login(&input.token).await;
 
+    // Fəaliyyət Jurnalı qeydi (Settings Modulu)
+    add_activity_log_pro(&state.db, "Qlobal GitHub Personal Access Token (PAT) yeniləndi.", "info", Some("Settings"), Some("admin"), None, None).await;
+
     Ok(Json(true))
 }
 
 async fn list_activity_logs(State(state): State<AppState>) -> Result<Json<Vec<ActivityLog>>, (StatusCode, String)> {
-    let logs = sqlx::query_as::<_, ActivityLog>("SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 30")
+    let logs = sqlx::query_as::<_, ActivityLog>("SELECT id, message, log_type, module, operator_name, target_id, ip_address, CAST(created_at AS TEXT) as created_at FROM activity_logs ORDER BY created_at DESC LIMIT 30")
         .fetch_all(&state.db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -1228,14 +1231,15 @@ async fn create_activity_log(
     State(state): State<AppState>,
     Json(input): Json<CreateActivityLogInput>,
 ) -> Result<Json<bool>, (StatusCode, String)> {
-    let id = Uuid::new_v4().to_string();
-    sqlx::query("INSERT INTO activity_logs (id, message, log_type) VALUES (?, ?, ?)")
-        .bind(&id)
-        .bind(&input.message)
-        .bind(&input.log_type)
-        .execute(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    add_activity_log_pro(
+        &state.db,
+        &input.message,
+        &input.log_type,
+        input.module.as_deref(),
+        input.operator_name.as_deref(),
+        input.target_id.as_deref(),
+        input.ip_address.as_deref()
+    ).await;
     Ok(Json(true))
 }
 
@@ -1619,7 +1623,7 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
     
     let app = Application {
         id: id.clone(),
-        name: input.name,
+        name: input.name.clone(),
         repo_url: input.repo_url,
         branch: input.branch,
         port: input.port,
@@ -1645,6 +1649,9 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
         created_at: String::new(),
         updated_at: String::new(),
     };
+
+    // Fəaliyyət Jurnalı Qeydi
+    add_activity_log_pro(&state.db, &format!("Yeni tətbiq əlavə edildi: '{}' (Port: {})", app.name, app.port), "success", Some("System"), Some("admin"), Some(&app.id), None).await;
     
     Ok((StatusCode::CREATED, Json(app)))
 }
@@ -1728,6 +1735,9 @@ async fn update_application(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Fəaliyyət Jurnalı Qeydi
+    add_activity_log_pro(&state.db, "Tətbiq sazlamaları yeniləndi.", "info", Some("System"), Some("admin"), Some(&app_id), None).await;
+
     Ok(Json(true))
 }
 
@@ -1770,6 +1780,10 @@ async fn delete_application(State(state): State<AppState>, AxumPath(app_id): Axu
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Fəaliyyət Jurnalı Qeydi
+    add_activity_log_pro(&state.db, &format!("Tətbiq silindi: '{}' (Konteyner təmizləndi)", app.name), "warning", Some("System"), Some("admin"), Some(&app_id), None).await;
+
     Ok(Json(true))
 }
 
@@ -2699,14 +2713,33 @@ async fn trigger_system_update(
     }
 }
 
-async fn add_activity_log_impl(db: &SqlitePool, message: &str, log_type: &str) {
+async fn add_activity_log_pro(
+    db: &SqlitePool,
+    message: &str,
+    log_type: &str,
+    module: Option<&str>,
+    operator_name: Option<&str>,
+    target_id: Option<&str>,
+    ip_address: Option<&str>
+) {
     let id = Uuid::new_v4().to_string();
-    let _ = sqlx::query("INSERT INTO activity_logs (id, message, log_type) VALUES (?, ?, ?)")
-        .bind(&id)
-        .bind(message)
-        .bind(log_type)
-        .execute(db)
-        .await;
+    let _ = sqlx::query(
+        "INSERT INTO activity_logs (id, message, log_type, module, operator_name, target_id, ip_address) \
+         VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(&id)
+    .bind(message)
+    .bind(log_type)
+    .bind(module)
+    .bind(operator_name)
+    .bind(target_id)
+    .bind(ip_address)
+    .execute(db)
+    .await;
+}
+
+async fn add_activity_log_impl(db: &SqlitePool, message: &str, log_type: &str) {
+    add_activity_log_pro(db, message, log_type, None, None, None, None).await;
 }
 
 async fn git_polling_loop(db: SqlitePool) {
@@ -2881,11 +2914,11 @@ async fn git_polling_loop(db: SqlitePool) {
                                         .bind(&app.id)
                                         .execute(&db)
                                         .await;
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin Git commit imzası qeyd edildi: {}", app.name, remote_sha), "info").await;
+                                    add_activity_log_pro(&db, &format!("'{}' layihəsinin ilkin Git commit imzası qeyd edildi: {}", app.name, remote_sha), "info", Some("Git"), Some("system"), Some(&app.id), None).await;
                                 }
                                 Some(ref local_sha) if local_sha != &remote_sha => {
                                     println!("[AUTO-DEPLOY] Yeni commit tapıldı ({} -> {}), layihə: {}", local_sha, remote_sha, app.name);
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni commit tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_sha, remote_sha), "success").await;
+                                    add_activity_log_pro(&db, &format!("'{}' layihəsi üçün yeni commit tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_sha, remote_sha), "success", Some("Git"), Some("system"), Some(&app.id), None).await;
                                     
                                     let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
                                         .bind(&remote_sha)
@@ -2895,29 +2928,30 @@ async fn git_polling_loop(db: SqlitePool) {
  
                                     if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
                                         eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger deployment for {}: {}", app.name, e);
-                                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error").await;
+                                        add_activity_log_pro(&db, &format!("'{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error", Some("Git"), Some("system"), Some(&app.id), None).await;
                                     }
                                 }
                                 _ => {
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info").await;
+                                    // Səs-küy yaratmamaq üçün yoxlanıldı loqunu yüngül info log edirik
+                                    add_activity_log_pro(&db, &format!("'{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info", Some("Git"), Some("system"), Some(&app.id), None).await;
                                 }
                             }
                         }
                     } else {
                         let err_str = String::from_utf8_lossy(&err_bytes);
                         eprintln!("[AUTO-DEPLOY ERROR] git ls-remote failed for {}: {}", app.name, err_str.trim());
-                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün git ls-remote uğursuz oldu: {}", app.name, err_str.trim()), "error").await;
+                        add_activity_log_pro(&db, &format!("'{}' üçün git ls-remote uğursuz oldu: {}", app.name, err_str.trim()), "error", Some("Git"), Some("system"), Some(&app.id), None).await;
                     }
                 }
                 Ok((Err(e), _, _)) => {
                     eprintln!("[AUTO-DEPLOY ERROR] Failed to wait for git command for {}: {}", app.name, e);
-                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git yoxlanışı uğursuz oldu: {}", app.name, e), "error").await;
+                    add_activity_log_pro(&db, &format!("'{}' üçün Git yoxlanışı uğursuz oldu: {}", app.name, e), "error", Some("Git"), Some("system"), Some(&app.id), None).await;
                 }
                 Err(_) => {
                     // Timeout olduqda, child hələ move olunmayıb, onu kill edirik!
                     let _ = child.kill().await;
                     eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out (12s limit) for {}. Process forcefully killed.", app.name);
-                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git sorğusu vaxt aşımına uğradı (12s). Proses dayandırıldı.", app.name), "error").await;
+                    add_activity_log_pro(&db, &format!("'{}' üçün Git sorğusu vaxt aşımına uğradı (12s). Proses məcburi dayandırıldı (Process killed).", app.name), "critical", Some("Git"), Some("system"), Some(&app.id), None).await;
                 }
             }
         }
