@@ -1,0 +1,172 @@
+<section id="tab-servers" class="tab-section">
+    <header class="tab-header-btn" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+        <div>
+            <h2>🖥️ Serverlər (Servers)</h2>
+            <p>Layihələrin yayına çıxarılacağı uzaqdakı serverlər</p>
+        </div>
+
+        <!-- Complete Unified Global Toolbar Container -->
+        <div id="global-server-toolbar" style="display: flex; align-items: center; gap: 0.4rem; background: rgba(10, 12, 20, 0.75); backdrop-filter: blur(10px); padding: 0.4rem 0.8rem; border-radius: 12px; border: 1px solid var(--card-border); box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
+            <button class="toolbar-btn" onclick="executeGlobalServerAction('edit')" title="Redaktə Et (Seçilmiş Server)" style="background: transparent; border: none; color: #00d2ff; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(0,210,255,0.15)'" onmouseout="this.style.background='transparent'">✏️</button>
+            
+            <button class="toolbar-btn" onclick="executeGlobalServerAction('console')" title="SSH Konsolu" style="background: transparent; border: none; color: #4ade80; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.15)'" onmouseout="this.style.background='transparent'">💻</button>
+            
+            <button class="toolbar-btn" onclick="executeGlobalServerAction('volumes')" title="Docker Volumları (Disk)" style="background: transparent; border: none; color: #38bdf8; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.15)'" onmouseout="this.style.background='transparent'">💾</button>
+            
+            <button class="toolbar-btn" onclick="openServerConnModal()" title="Bağlantı Və Avto-Bərpa Tənzimləmələri" style="background: transparent; border: none; color: #facc15; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(250,204,21,0.15)'" onmouseout="this.style.background='transparent'">🔌</button>
+            
+            <button class="toolbar-btn" onclick="executeGlobalServerAction('delete')" title="Serveri Sil" style="background: transparent; border: none; color: #f87171; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='transparent'">🗑️</button>
+
+            <div style="height: 20px; width: 1px; background: rgba(255,255,255,0.15); margin: 0 0.4rem;"></div>
+
+            <button class="btn btn-primary" onclick="showModal('server-modal')" style="padding: 0.35rem 0.8rem; font-size: 0.82rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; border-radius: 6px; font-weight: 600; display: flex; align-items: center; gap: 0.3rem; cursor: pointer;">➕ Yeni Server</button>
+        </div>
+    </header>
+
+    <div id="servers-list" class="items-list">
+        <!-- Servers will be listed here -->
+        <div class="no-data">Hələ heç bir server əlavə edilməyib.</div>
+    </div>
+</section>
+
+<!-- 1. ADD SERVER MODAL WINDOW -->
+<div id="server-modal" class="modal-backdrop">
+    <div class="modal-card">
+        <h2>🖥️ Yeni Server Əlavə Et</h2>
+        <form id="server-form" onsubmit="handleCreateServer(event)">
+            <div class="form-group">
+                <label>Server Adı <span style="color:var(--danger-color);">*</span></label>
+                <input type="text" id="srv-name" required placeholder="Məs: Oracle VM">
+            </div>
+            <div class="form-group">
+                <label>IP Ünvanı <span style="color:var(--danger-color);">*</span></label>
+                <input type="text" id="srv-ip" required placeholder="Məs: 132.145.76.194">
+            </div>
+            <div class="form-group">
+                <label>SSH İstifadəçi Adı <span style="color:var(--danger-color);">*</span></label>
+                <input type="text" id="srv-ssh-user" required placeholder="Məs: ubuntu">
+            </div>
+            <div class="form-group">
+                <label>SSH Açarı (SSH Key) <span style="color:var(--danger-color);">*</span></label>
+                <select id="srv-key-id" onchange="handleServerKeySelect('srv-key-id', 'srv-key-wrapper')" required>
+                    <!-- Dinamik dolacaq -->
+                </select>
+            </div>
+            
+            <div id="srv-key-wrapper" class="form-group" style="display:none;">
+                <label>SSH Private Key (Əllə Yazılma)</label>
+                <textarea id="srv-key" rows="5" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('server-modal')">Ləğv Et</button>
+                <button type="submit" class="btn btn-primary">Serveri Saxla</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 2. EDIT SERVER MODAL WINDOW -->
+<div id="server-edit-modal" class="modal-backdrop">
+    <div class="modal-card">
+        <h2>✏️ Serveri Redaktə Et</h2>
+        <form id="server-edit-form" onsubmit="handleUpdateServer(event)">
+            <input type="hidden" id="edit-srv-id">
+            <div class="form-group">
+                <label>Server Adı <span style="color:var(--danger-color);">*</span></label>
+                <input type="text" id="edit-srv-name" required>
+            </div>
+            <div class="form-group">
+                <label>IP Ünvanı <span style="color:var(--danger-color);">*</span></label>
+                <input type="text" id="edit-srv-ip" required>
+            </div>
+            <div class="form-group">
+                <label>SSH İstifadəçi Adı <span style="color:var(--danger-color);">*</span></label>
+                <input type="text" id="edit-srv-ssh-user" required>
+            </div>
+            <div class="form-group">
+                <label>SSH Açarı (SSH Key) <span style="color:var(--danger-color);">*</span></label>
+                <select id="edit-srv-key-id" onchange="handleServerKeySelect('edit-srv-key-id', 'edit-srv-key-wrapper')" required>
+                    <!-- Dinamik dolacaq -->
+                </select>
+            </div>
+            
+            <div id="edit-srv-key-wrapper" class="form-group" style="display:none;">
+                <label>SSH Private Key (Yeni əllə yazılma)</label>
+                <textarea id="edit-srv-key" rows="5" placeholder="Dəyişmək istəmirsinizsə boş buraxın"></textarea>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('server-edit-modal')">Ləğv Et</button>
+                <button type="submit" class="btn btn-primary">Yenilə Və Saxla</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 3. CONNECTION SETTINGS MODAL WINDOW -->
+<div id="server-conn-modal" class="modal-backdrop">
+    <div class="modal-card">
+        <h2>🔌 Bağlantı & Avto-Bərpa Tənzimləmələri</h2>
+        <form id="server-conn-form" onsubmit="saveServerConnSettings(event)">
+            <input type="hidden" id="conn-server-id">
+            
+            <div class="form-group">
+                <label>Seçilmiş Server</label>
+                <input type="text" id="conn-server-name" readonly style="color:var(--accent-color); font-weight:600;">
+            </div>
+            
+            <div class="form-group">
+                <label>Cəhd İntervalı (Saniyə) <span style="color:var(--danger-color);">*</span></label>
+                <input type="number" id="conn-retry-sec" min="3" max="300" required>
+                <small style="display:block;margin-top:0.25rem;color:var(--text-secondary);font-size:0.75rem;">Qoşulma qırıldıqda neçə saniyədən bir təkrar cəhd edilsin.</small>
+            </div>
+            
+            <div class="form-group">
+                <label>Maksimum Cəhd Sayı <span style="color:var(--danger-color);">*</span></label>
+                <input type="number" id="conn-max-retries" min="1" max="10" required>
+                <small style="display:block;margin-top:0.25rem;color:var(--text-secondary);font-size:0.75rem;">Fasiləyə keçməzdən əvvəl neçə cəhd edilsin.</small>
+            </div>
+            
+            <div class="form-group">
+                <label>Fasilə Müddəti (Dəqiqə) <span style="color:var(--danger-color);">*</span></label>
+                <input type="number" id="conn-pause-min" min="1" max="60" required>
+                <small style="display:block;margin-top:0.25rem;color:var(--text-secondary);font-size:0.75rem;">Bütün cəhdlər uğursuz olduqdan sonra neçə dəqiqə gözlənilsin.</small>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('server-conn-modal')">Ləğv Et</button>
+                <button type="submit" class="btn btn-primary">Yadda Saxla</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- 4. SSH CONSOLE MODAL WINDOW -->
+<div id="server-console-modal" class="modal-backdrop">
+    <div class="modal-card" style="max-width: 800px; width: 90%; height: 500px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+            <h2 style="margin:0;">💻 SSH Konsolu (<span id="modal-console-server-name" style="color:var(--accent-color);">--</span>)</h2>
+            <div style="display: flex; gap: 0.5rem;">
+                <button type="button" class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="copyServerConsoleModal(this)">📋 Kopyala</button>
+                <button type="button" class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="clearServerConsoleModal()">🗑️ Təmizlə</button>
+            </div>
+        </div>
+        <div id="modal-console-container" style="flex: 1; padding: 1rem; background: #07080d; border-radius: 8px; font-family: monospace; color: #4ade80; font-size: 0.88rem; overflow: auto; white-space: pre-wrap; border: 1px solid rgba(255,255,255,0.06); box-sizing: border-box;">
+            [Sistem] Konsol bağlantısı qurulur...
+        </div>
+    </div>
+</div>
+
+<!-- 5. DOCKER VOLUMES MODAL WINDOW -->
+<div id="server-volumes-modal" class="modal-backdrop">
+    <div class="modal-card" style="max-width: 850px; width: 90%; max-height: 80vh;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem;">
+            <h2 style="margin:0;">💾 Docker Volumları & Disk (<span id="modal-volumes-server-name" style="color:var(--accent-color);">--</span>)</h2>
+            <button type="button" class="btn btn-secondary" style="padding: 0.3rem 0.6rem; font-size: 0.8rem;" onclick="reloadModalVolumes()">🔄 Yenilə</button>
+        </div>
+        <div id="modal-volumes-container" style="flex: 1; overflow-y: auto; font-size: 0.85rem; color: var(--text-primary); box-sizing: border-box;">
+            Yüklənir...
+        </div>
+    </div>
+</div>
