@@ -78,9 +78,14 @@ async function loadSshKeys() {
             const fp = k.private_key && k.private_key.length > 20 ? k.private_key.substring(0,8) + '...' + k.private_key.slice(-8) : '-';
             const ek = (k.private_key||'').replace(/\\/g,'\\\\').replace(/`/g,'\\`').replace(/\$/g,'\\$');
             const dq = (k.private_key||'').replace(/"/g,'&quot;');
+            
+            const usedInfo = k.used_servers 
+                ? `<span style="font-size:0.68rem;color:#38bdf8;background:rgba(56,189,248,0.1);padding:2px 6px;border-radius:4px;font-weight:600;margin-top:0.25rem;display:inline-block;">🔗 İstifadə olunur: ${k.used_servers}</span>` 
+                : `<span style="font-size:0.68rem;color:#64748b;background:rgba(255,255,255,0.04);padding:2px 6px;border-radius:4px;font-weight:500;margin-top:0.25rem;display:inline-block;">Status: İstifadə olunmur</span>`;
+
             return `<div class="item-card" style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;overflow:hidden;border-left:3px solid #818cf8;">
                 <div onclick="toggleCardDetail(this)" style="padding:0.9rem 1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:1rem;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
-                    <div style="display:flex;align-items:center;gap:0.85rem;min-width:0;flex:1;">
+                     <div style="display:flex;align-items:center;gap:0.85rem;min-width:0;flex:1;">
                         <div style="width:36px;height:36px;border-radius:8px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#818cf8;">
                             <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M12 11.586l8-8"/><path d="M20 3l1 1-1 1"/><path d="M17 6l1 1"/></svg>
                         </div>
@@ -90,6 +95,7 @@ async function loadSshKeys() {
                                 <span style="font-size:0.65rem;padding:2px 7px;border-radius:4px;background:rgba(0,210,255,0.1);color:var(--accent-color);font-weight:600;">Qlobal</span>
                             </div>
                             <p style="margin:0.18rem 0 0 0;font-size:0.76rem;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${k.description||'Təsvir daxil edilməyib.'}</p>
+                            ${usedInfo}
                         </div>
                     </div>
                     <div class="chevron-icon" style="transition:transform 0.2s;color:var(--text-secondary);"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
@@ -109,6 +115,10 @@ async function loadSshKeys() {
                         <button onclick="event.stopPropagation();ktCopyRawKey(this)" style="padding:0.35rem 0.75rem;font-size:0.72rem;font-weight:600;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.05);color:#f1f5f9;cursor:pointer;display:flex;align-items:center;gap:0.3rem;">
                             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
                             Kopyala
+                        </button>
+                        <button onclick="event.stopPropagation();ktOpenEditSshModal('${k.id}', '${k.name.replace(/'/g, "\\'")}', '${(k.description||'').replace(/'/g, "\\'")}')" style="padding:0.35rem 0.75rem;font-size:0.72rem;font-weight:600;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:rgba(255,255,255,0.05);color:#f1f5f9;cursor:pointer;display:flex;align-items:center;gap:0.3rem;">
+                            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Redaktə
                         </button>
                         <button onclick="event.stopPropagation();ktDeleteSshKey('${k.id}')" style="padding:0.35rem 0.75rem;font-size:0.72rem;font-weight:600;border-radius:6px;border:1px solid rgba(255,68,68,0.25);background:rgba(255,68,68,0.06);color:#ff6b6b;cursor:pointer;display:flex;align-items:center;gap:0.3rem;">
                             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2-2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
@@ -158,16 +168,28 @@ function ktCopyText(text, label) {
 }
 
 async function ktDeleteSshKey(id) {
-    if (!confirm('Bu SSH açarını silmək istədiyinizdən əminsiniz?')) return;
-    try {
-        const res = await fetch('/api/ssh-keys/' + id, { method: 'DELETE' });
-        if (res.ok) {
-            ktToast('SSH açarı silindi.', 'success');
-            loadSshKeys();
-        } else {
-            ktToast('Silmə xətası.', 'error');
+    showConfirmCard({
+        icon: '🔑',
+        title: 'SSH Açarını Sil',
+        subtitle: 'Bu SSH açarını silmək istədiyinizdən əminsiniz?',
+        body: 'Diqqət: Açar silindikdən sonra geri qaytarıla bilməz.',
+        confirmText: '🗑️ Sil',
+        confirmStyle: 'background: #ff1744; color: white;',
+        onConfirm: async () => {
+            try {
+                const res = await fetch('/api/ssh-keys/' + id, { method: 'DELETE' });
+                if (res.ok) {
+                    ktToast('SSH açarı silindi.', 'success');
+                    loadSshKeys();
+                } else {
+                    const errText = await res.text();
+                    showInfoCard('Açar Silinmədi!', 'Silinmə xətası baş verdi', errText || 'Bu açar hazırda aktiv server tərəfindən istifadə olunur.');
+                }
+            } catch(e) { 
+                showInfoCard('Xəta!', 'Bağlantı xətası', 'Şəbəkə xətası baş verdi. Açar silinə bilmədi.'); 
+            }
         }
-    } catch(e) { ktToast('Şəbəkə xətası.', 'error'); }
+    });
 }
 
 async function loadLocalSshKey() {
@@ -342,6 +364,38 @@ function ktToast(msg, type) {
     t.textContent = msg;
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 3000);
+}
+
+function ktOpenEditSshModal(id, name, desc) {
+    const idEl = document.getElementById('kt-edit-key-id');
+    const nameEl = document.getElementById('kt-edit-key-name');
+    const descEl = document.getElementById('kt-edit-key-desc');
+    if (idEl) idEl.value = id;
+    if (nameEl) nameEl.value = name;
+    if (descEl) descEl.value = desc;
+    ktShowOverlay('kt-edit-ssh-overlay');
+}
+
+async function ktHandleUpdateSshKey(e) {
+    e.preventDefault();
+    const id = document.getElementById('kt-edit-key-id').value;
+    const name = document.getElementById('kt-edit-key-name').value.trim();
+    const desc = document.getElementById('kt-edit-key-desc').value.trim();
+    if (!name) { ktToast('Ad mütləqdir.', 'error'); return; }
+    try {
+        const res = await fetch('/api/ssh-keys/' + id, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description: desc })
+        });
+        if (res.ok) {
+            ktToast('SSH açarı yeniləndi.', 'success');
+            ktHideOverlay('kt-edit-ssh-overlay');
+            loadSshKeys();
+        } else {
+            ktToast('Xəta: ' + await res.text(), 'error');
+        }
+    } catch(e) { ktToast('Şəbəkə xətası.', 'error'); }
 }
 
 async function initKeysTokens() {

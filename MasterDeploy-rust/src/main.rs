@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path as AxumPath, State, Query},
     http::StatusCode,
-    routing::{get, post, delete},
+    routing::{get, post, put, delete},
     Json, Router,
 };
 use sqlx::SqlitePool;
@@ -82,7 +82,7 @@ async fn main() {
         .route("/api/servers", get(list_servers).post(create_server))
         .route("/api/servers/:server_id", get(get_server).put(update_server).delete(delete_server))
         .route("/api/ssh-keys", get(list_ssh_keys).post(create_ssh_key))
-        .route("/api/ssh-keys/:key_id", delete(delete_ssh_key))
+        .route("/api/ssh-keys/:key_id", put(update_ssh_key).delete(delete_ssh_key))
         .route("/api/ssh-keys/generate-rsa", post(generate_rsa_keypair))
         .route("/api/servers/:server_id/stats", get(get_server_stats))
         .route("/api/servers/:server_id/setup", post(setup_server))
@@ -158,12 +158,27 @@ async fn create_server(State(state): State<AppState>, Json(input): Json<CreateSe
     }
 
     let id = Uuid::new_v4().to_string();
+    let ssh_key_content = if let Some(ref key_id) = input.ssh_key_id {
+        if key_id.trim().is_empty() {
+            input.ssh_key.clone()
+        } else {
+            let key_row: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+                .bind(key_id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            key_row.map(|(k,)| k).unwrap_or(input.ssh_key.clone())
+        }
+    } else {
+        input.ssh_key.clone()
+    };
+
     sqlx::query("INSERT INTO servers (id, name, ip, ssh_user, ssh_key, ssh_key_id) VALUES (?, ?, ?, ?, ?, ?)")
         .bind(&id)
         .bind(&input.name)
         .bind(&input.ip)
         .bind(&input.ssh_user)
-        .bind(&input.ssh_key)
+        .bind(&ssh_key_content)
         .bind(&input.ssh_key_id)
         .execute(&state.db)
         .await
@@ -208,13 +223,49 @@ async fn update_server(
         return Err((StatusCode::BAD_REQUEST, "Bu IP ünvanına malik server artıq mövcuddur!".to_string()));
     }
 
+    let ssh_key_content = if let Some(ref key_id) = input.ssh_key_id {
+        if key_id.trim().is_empty() {
+            input.ssh_key.clone()
+        } else {
+            let key_row: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+                .bind(key_id)
+                .fetch_optional(&state.db)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            key_row.map(|(k,)| k).unwrap_or(input.ssh_key.clone())
+        }
+    } else {
+        input.ssh_key.clone()
+    };
+
     sqlx::query("UPDATE servers SET name = ?, ip = ?, ssh_user = ?, ssh_key = ?, ssh_key_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .bind(&input.name)
         .bind(&input.ip)
         .bind(&input.ssh_user)
-        .bind(&input.ssh_key)
+        .bind(&ssh_key_content)
         .bind(&input.ssh_key_id)
         .bind(&server_id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok(Json(true))
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct UpdateSshKeyInput {
+    name: String,
+    description: Option<String>,
+}
+
+async fn update_ssh_key(
+    State(state): State<AppState>,
+    AxumPath(key_id): AxumPath<String>,
+    Json(input): Json<UpdateSshKeyInput>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    sqlx::query("UPDATE ssh_keys SET name = ?, description = ? WHERE id = ?")
+        .bind(&input.name)
+        .bind(&input.description)
+        .bind(&key_id)
         .execute(&state.db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -229,14 +280,15 @@ async fn list_ssh_keys(State(state): State<AppState>) -> Result<Json<serde_json:
         id: String,
         name: String,
         description: Option<String>,
+        private_key: String,
         created_at: String,
         // SQL GROUP_CONCAT ilə server adlarını birləşdirəcəyik
         used_servers: Option<String>,
     }
 
     let keys = sqlx::query_as::<_, SshKeyWithServers>(
-        "SELECT k.id, k.name, k.description, CAST(k.created_at AS TEXT) as created_at, \
-         (SELECT GROUP_CONCAT(s.name, ', ') FROM servers s WHERE s.ssh_key_id = k.id) as used_servers \
+        "SELECT k.id, k.name, k.description, k.private_key, CAST(k.created_at AS TEXT) as created_at, \
+         (SELECT GROUP_CONCAT(s.name || ' (' || s.ip || ')', ', ') FROM servers s WHERE s.ssh_key_id = k.id) as used_servers \
          FROM ssh_keys k ORDER BY k.created_at DESC"
     )
     .fetch_all(&state.db)
@@ -276,16 +328,16 @@ async fn delete_ssh_key(
     AxumPath(key_id): AxumPath<String>,
 ) -> Result<Json<bool>, (StatusCode, String)> {
     // Əvvəlcə yoxlayırıq ki, bu açar hər hansı bir serverdə istifadə olunurmu
-    let in_use: Option<(String,)> = sqlx::query_as("SELECT name FROM servers WHERE ssh_key_id = ? LIMIT 1")
+    let in_use: Option<(String, String)> = sqlx::query_as("SELECT name, ip FROM servers WHERE ssh_key_id = ? LIMIT 1")
         .bind(&key_id)
         .fetch_optional(&state.db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    if let Some((server_name,)) = in_use {
+    if let Some((server_name, server_ip)) = in_use {
         return Err((
             StatusCode::BAD_REQUEST,
-            format!("Bu açar silinə bilməz, çünki '{}' serveri tərəfindən istifadə olunur!", server_name)
+            format!("Bu açar silinə bilməz, çünki '{}' ({}) serveri tərəfindən istifadə olunur!", server_name, server_ip)
         ));
     }
 
@@ -1465,6 +1517,9 @@ async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec<App
 }
 
 async fn create_application(State(state): State<AppState>, Json(input): Json<CreateApplicationInput>) -> Result<(StatusCode, Json<Application>), (StatusCode, String)> {
+    if input.name.trim().is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "Layihə adı (Service Name) boş ola bilməz!".to_string()));
+    }
     let id = Uuid::new_v4().to_string();
     let bp_type = input.build_pack_type.clone().unwrap_or_else(|| "dockerfile".to_string());
     let dep_type = input.deploy_type.clone().unwrap_or_else(|| "git".to_string());
@@ -1630,28 +1685,36 @@ async fn delete_application(State(state): State<AppState>, AxumPath(app_id): Axu
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
 
-    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
-        .bind(&app.server_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
-
-    // 1. Docker konteynerini serverdən silirik (asinxron arxa planda)
-    let cleanup_cmd = format!("sudo docker rm -f {} || true", app.name);
-    let server_clone = server.clone();
-    tokio::spawn(async move {
-        let _ = run_ssh_command(&server_clone, &cleanup_cmd).await;
-    });
+    // 1. Konteyneri təmizləyirik (Lokal və ya Uzaq SSH Server)
+    let app_name_clean = app.name.trim().to_string();
+    if !app_name_clean.is_empty() {
+        if app.server_id == "local-server-id" || app.server_id == "local" || app.server_id.is_empty() {
+            let container_name = app_name_clean.clone();
+            tokio::spawn(async move {
+                let _ = tokio::process::Command::new("docker")
+                    .args(&["rm", "-f", &container_name])
+                    .output()
+                    .await;
+            });
+        } else if let Ok(Some(server)) = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+            .bind(&app.server_id)
+            .fetch_optional(&state.db)
+            .await
+        {
+            let cleanup_cmd = format!("sudo docker rm -f {} || true", app_name_clean);
+            tokio::spawn(async move {
+                let _ = run_ssh_command(&server, &cleanup_cmd).await;
+            });
+        }
+    }
 
     let mut tx = state.db.begin().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // 2. Delete all deployments of this application
-    sqlx::query("DELETE FROM deployments WHERE application_id = ?")
+    let _ = sqlx::query("DELETE FROM deployments WHERE application_id = ?")
         .bind(&app_id)
         .execute(&mut *tx)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .await;
 
     // 3. Delete the application itself
     sqlx::query("DELETE FROM applications WHERE id = ?")
@@ -1663,7 +1726,8 @@ async fn delete_application(State(state): State<AppState>, AxumPath(app_id): Axu
     tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // Fəaliyyət Jurnalı Qeydi
-    add_activity_log_pro(&state.db, &format!("Tətbiq silindi: '{}' (Konteyner təmizləndi)", app.name), "warning", Some("System"), Some("admin"), Some(&app_id), None).await;
+    let display_name = if app.name.trim().is_empty() { "Adsız Layihə" } else { &app.name };
+    add_activity_log_pro(&state.db, &format!("Tətbiq silindi: '{}'", display_name), "warning", Some("System"), Some("admin"), Some(&app_id), None).await;
 
     Ok(Json(true))
 }
@@ -1792,7 +1856,6 @@ async fn run_ssh_cmd_stream_helper(
         let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
         tokio::process::Command::new(ssh_bin)
             .args(&[
-                "-v",
                 "-o", "StrictHostKeyChecking=no",
                 "-o", "BatchMode=yes",
                 "-o", "ConnectTimeout=15",
@@ -1837,7 +1900,9 @@ async fn run_ssh_cmd_stream_helper(
                     Ok(Some(l)) => {
                         let mut lock = logs_clone.lock().await;
                         lock.push_str(&format!("{}\n", l));
-                        update_logs_helper(&db_clone, &deploy_id_clone, &lock).await;
+                        if !deploy_id_clone.is_empty() {
+                            update_logs_helper(&db_clone, &deploy_id_clone, &lock).await;
+                        }
                     }
                     Ok(None) => break, // axın bitti
                     Err(_) => break,
@@ -1848,7 +1913,9 @@ async fn run_ssh_cmd_stream_helper(
                     Ok(Some(l)) => {
                         let mut lock = logs_clone.lock().await;
                         lock.push_str(&format!("{}\n", l));
-                        update_logs_helper(&db_clone, &deploy_id_clone, &lock).await;
+                        if !deploy_id_clone.is_empty() {
+                            update_logs_helper(&db_clone, &deploy_id_clone, &lock).await;
+                        }
                     }
                     Ok(None) => break, // axın bitti
                     Err(_) => break,
@@ -1860,12 +1927,16 @@ async fn run_ssh_cmd_stream_helper(
                 while let Ok(Some(l)) = stdout_reader.next_line().await {
                     let mut lock = logs_clone.lock().await;
                     lock.push_str(&format!("{}\n", l));
-                    update_logs_helper(&db_clone, &deploy_id_clone, &lock).await;
+                    if !deploy_id_clone.is_empty() {
+                        update_logs_helper(&db_clone, &deploy_id_clone, &lock).await;
+                    }
                 }
                 while let Ok(Some(l)) = stderr_reader.next_line().await {
                     let mut lock = logs_clone.lock().await;
                     lock.push_str(&format!("{}\n", l));
-                    update_logs_helper(&db_clone, &deploy_id_clone, &lock).await;
+                    if !deploy_id_clone.is_empty() {
+                        update_logs_helper(&db_clone, &deploy_id_clone, &lock).await;
+                    }
                 }
                 return Ok(exit_status.success());
             }
@@ -1937,7 +2008,7 @@ async fn trigger_deployment_impl(
     };
 
     if let Err(e) = sqlx::query(
-        "INSERT INTO deployments (id, application_id, status, logs) VALUES (?, ?, ?, ?)"
+        "INSERT INTO deployments (id, application_id, status, logs, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)"
     )
     .bind(&deployment.id)
     .bind(&deployment.application_id)
@@ -2033,22 +2104,28 @@ async fn trigger_deployment_impl(
                 app.port, app.name, app.name, app.name, app.port, app.port
             )
         } else {
+            // Uzaq server üçün daha etibarlı və sadə yoxlama:
+            // 1. Portu tutan konteyner varsa və adı bizim tətbiqdirsə -> PORT_OK (redeploy)
+            // 2. Portu tutan başqa konteyner varsa -> PORT_CONFLICT
+            // 3. Portu docker yox, başqa sistem xidməti tutubsa -> PORT_CONFLICT
             format!(
-                "if sudo ss -tuln | grep -q \":{} \"; then \
-                    # Əgər portu istifadə edən elə bu tətbiqdirsə (update/redeploy), toqquşma saymırıq \
-                    if sudo docker ps --filter \"name={}\" --format \"{{{{.Ports}}}}\" | grep -q \"{}\"; then \
-                        echo \"===PORT_OK===\"; \
-                    else \
-                        echo \"===PORT_CONFLICT===\"; \
-                    fi; \
-                 elif sudo ufw status | grep -q \"Status: active\" && ! sudo ufw status | grep -q \"{}/tcp\"; then \
-                    echo \"===FIREWALL_BLOCKED===\"; \
+                "conflict_container=$(sudo docker ps --filter \"publish={}\" --format \"{{{{.Names}}}}\" | grep -v \"^{}$\"); \
+                 if [ ! -z \"$conflict_container\" ]; then \
+                     echo \"===PORT_CONFLICT===\"; \
+                 elif sudo docker ps --filter \"name={}\" --format \"{{{{.Names}}}}\" | grep -q \"^{}$\"; then \
+                     echo \"===PORT_OK===\"; \
+                 elif sudo ss -tulpn | grep -q \":{} \"; then \
+                     echo \"===PORT_CONFLICT===\"; \
+                 elif sudo ufw status 2>/dev/null | grep -q \"Status: active\" && ! sudo ufw status | grep -q \"{}/tcp\"; then \
+                     echo \"===FIREWALL_BLOCKED===\"; \
                  else \
-                    echo \"===PORT_OK===\"; \
+                     echo \"===PORT_OK===\"; \
                  fi",
-                app.port, app.name, app.port, app.port
+                app.port, app.name, app.name, app.name, app.port, app.port
             )
         };
+
+
 
         let mut port_ok = false;
         let mut err_msg = String::new();
@@ -2290,7 +2367,7 @@ async fn trigger_deployment_impl(
             app.name
         );
         let old_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
-        let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_old_cmd, db_clone.clone(), deploy_id.clone(), old_image_logs.clone()).await;
+        let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_old_cmd, db_clone.clone(), String::new(), old_image_logs.clone()).await;
         let old_image_info = old_image_logs.lock().await.trim().to_string();
         if !old_image_info.is_empty() && old_image_info != "Tapılmadı" {
             if old_image_info.contains("SHA: ") {
@@ -2359,7 +2436,7 @@ async fn trigger_deployment_impl(
                     app.name
                 );
                 let new_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
-                let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_new_cmd, db_clone.clone(), deploy_id.clone(), new_image_logs.clone()).await;
+                let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_new_cmd, db_clone.clone(), String::new(), new_image_logs.clone()).await;
                 let new_image_info = new_image_logs.lock().await.trim().to_string();
                 
                 {
@@ -2679,8 +2756,6 @@ async fn git_polling_loop(db: SqlitePool) {
                     Ok(Some(s)) => s,
                     _ => continue,
                 };
-
-                add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün registry imici yoxlanılır (İmic: {})...", app.name, reg_image), "info").await;
 
                 let inspect_output = tokio::time::timeout(
                     tokio::time::Duration::from_secs(8),

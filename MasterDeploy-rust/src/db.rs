@@ -1,6 +1,11 @@
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
+    SqlitePool,
+};
 use std::fs::File;
 use std::path::Path;
+use std::str::FromStr;
+use std::time::Duration;
 use uuid::Uuid;
 
 pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
@@ -10,16 +15,23 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
         format!("{}/masterdeploy.db", db_dir)
     } else {
         "masterdeploy.db".to_string()
-    } ;
+    };
 
     // Create db file if it does not exist
     if !Path::new(&db_path).exists() {
         File::create(&db_path).ok();
     }
 
+    let connect_options = SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path))?
+        .create_if_missing(true)
+        .journal_mode(SqliteJournalMode::Wal)
+        .synchronous(SqliteSynchronous::Normal)
+        .busy_timeout(Duration::from_secs(15));
+
     let pool = SqlitePoolOptions::new()
-        .max_connections(5)
-        .connect(&format!("sqlite:{}", db_path))
+        .max_connections(20)
+        .acquire_timeout(Duration::from_secs(10))
+        .connect_with(connect_options)
         .await?;
 
     // 1. Run sqlx migrations automatically
@@ -78,6 +90,15 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
          WHERE (name = 'yeni-test' OR name = 'mezuniyyet-newapi') \
          AND server_id = 'local-server-id' \
          AND EXISTS (SELECT 1 FROM servers WHERE ip = '132.145.76.194')"
+    )
+    .execute(&pool)
+    .await;
+
+    // Restore empty ssh_key values using ssh_key_id from ssh_keys table
+    let _ = sqlx::query(
+        "UPDATE servers SET ssh_key = (SELECT private_key FROM ssh_keys WHERE ssh_keys.id = servers.ssh_key_id) \
+         WHERE (ssh_key IS NULL OR ssh_key = '' OR ssh_key = '-' OR LENGTH(ssh_key) < 20) \
+         AND ssh_key_id IS NOT NULL"
     )
     .execute(&pool)
     .await;

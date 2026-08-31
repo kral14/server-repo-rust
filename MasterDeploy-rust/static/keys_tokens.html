@@ -232,6 +232,46 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════
+     SSH KEY EDIT OVERLAY (pəncərə yöneticisindən azad)
+════════════════════════════════════════════════════ -->
+<div id="kt-edit-ssh-overlay" class="kt-overlay">
+    <div class="kt-overlay-card">
+        <div class="kt-overlay-header">
+            <div class="kt-overlay-title">
+                <div class="kt-overlay-icon" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.25);color:#818cf8;">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </div>
+                <div>
+                    <h3>SSH Açarını Redaktə Et</h3>
+                    <p>Qlobal SSH açarı məlumatları</p>
+                </div>
+            </div>
+            <button class="kt-close-btn" onclick="ktHideOverlay('kt-edit-ssh-overlay')">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+        </div>
+        <form onsubmit="ktHandleUpdateSshKey(event)">
+            <input type="hidden" id="kt-edit-key-id">
+            <div class="kt-field">
+                <label>Açar Adı <span style="color:#ef4444;">*</span></label>
+                <input type="text" id="kt-edit-key-name" required placeholder="Məs: Oracle-Always-Free-Key">
+            </div>
+            <div class="kt-field">
+                <label>Təsvir (İxtiyari)</label>
+                <input type="text" id="kt-edit-key-desc" placeholder="Açar haqqında qısa məlumat">
+            </div>
+            <div class="kt-overlay-actions">
+                <button type="button" class="kt-btn-cancel" onclick="ktHideOverlay('kt-edit-ssh-overlay')">Ləğv Et</button>
+                <button type="submit" class="kt-btn-save">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
+                    Dəyişiklikləri Saxla
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
      ANA PANEL
 ════════════════════════════════════════════════════ -->
 <div style="width:100%;display:flex;flex-direction:column;gap:1.2rem;animation:fadeIn 0.3s ease-out;">
