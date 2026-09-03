@@ -25,7 +25,7 @@ function toggleDeployTypeFields(prefix) {
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     loadServers();
-    loadKeysTokensModularUI();
+    if (typeof initKeysTokens === 'function') initKeysTokens();
     loadApplications();
     loadGithubToken();
     resetEnvVarsContainer();
@@ -73,6 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         switchTab(activeTab);
     }
+
+    // Səhifə yenilənəndə əvvəl açıq olan bütün pəncərələri avtomatik bərpa edirik
+    setTimeout(restoreDesktopWindowsState, 150);
 
     // Fetch server stats periodically
     fetchServerStats();
@@ -198,7 +201,10 @@ const windowNames = {
     'create-service-modal': '🚀 Yeni Layihə',
     'delete-terminal-modal': '🗑️ Layihə Silinməsi',
     'ssh-key-modal': '🔑 SSH Açar Əlavə Et',
-    'rsa-result-modal': '🔑 RSA Açar Cütü'
+    'rsa-result-modal': '🔑 RSA Açar Cütü',
+    'kt-rsa-overlay': '🔐 RSA 4096-bit Açar',
+    'kt-ssh-overlay': '🔑 Yeni SSH Açarı',
+    'kt-edit-ssh-overlay': '✏️ SSH Açarı Redaktə'
 };
 
 function saveWindowPosition(id, card) {
@@ -224,6 +230,49 @@ function applySavedPosition(id, card) {
         } catch (e) {
             console.error("Error parsing saved position", e);
         }
+    }
+}
+
+// Səhifə yenilənəndə bütün açıq və kiçildilmiş pəncərələrin statusunu yadda saxla
+function saveActiveWindowsState() {
+    try {
+        const state = {
+            active: Object.keys(activeWindows),
+            minimized: Object.keys(minimizedWindows),
+            maximized: Object.keys(activeWindows).filter(id => {
+                const b = document.getElementById(id);
+                const c = b ? b.querySelector('.modal-card') : null;
+                return c && c.classList.contains('maximized');
+            })
+        };
+        localStorage.setItem('desktop_windows_state', JSON.stringify(state));
+    } catch (e) {
+        console.error("Failed to save windows state", e);
+    }
+}
+
+// Səhifə yeniləndikdə əvvəl açıq olan bütün pəncərələri avtomatik aç və bərpa et
+function restoreDesktopWindowsState() {
+    try {
+        const raw = localStorage.getItem('desktop_windows_state');
+        if (!raw) return;
+        const state = JSON.parse(raw);
+        if (!state || !Array.isArray(state.active) || state.active.length === 0) return;
+
+        state.active.forEach(winId => {
+            const backdrop = document.getElementById(winId);
+            if (backdrop) {
+                showModal(winId);
+                if (state.maximized && state.maximized.includes(winId)) {
+                    maximizeWindow(winId);
+                }
+                if (state.minimized && state.minimized.includes(winId)) {
+                    minimizeWindow(winId);
+                }
+            }
+        });
+    } catch (e) {
+        console.error("Failed to restore desktop windows", e);
     }
 }
 
@@ -463,11 +512,10 @@ function setupWindowResize(card) {
 function bringToFront(windowId) {
     const backdrop = document.getElementById(windowId);
     if (!backdrop) return;
-    const card = backdrop.querySelector('.modal-card');
-    if (!card) return;
+    const card = backdrop.querySelector('.modal-card, .kt-overlay-card');
 
     maxZIndex++;
-    card.style.zIndex = maxZIndex;
+    if (card) card.style.zIndex = maxZIndex;
     backdrop.style.zIndex = maxZIndex;
 }
 
@@ -476,6 +524,7 @@ function minimizeWindow(windowId) {
     if (!backdrop) return;
     backdrop.classList.add('minimized');
     minimizedWindows[windowId] = true;
+    saveActiveWindowsState();
     updateTaskbar();
 }
 
@@ -483,8 +532,12 @@ function restoreWindow(windowId) {
     const backdrop = document.getElementById(windowId);
     if (!backdrop) return;
     backdrop.classList.remove('minimized');
+    if (windowId.startsWith('kt-')) {
+        backdrop.style.display = 'flex';
+    }
     bringToFront(windowId);
     delete minimizedWindows[windowId];
+    saveActiveWindowsState();
     updateTaskbar();
 }
 
@@ -518,6 +571,7 @@ function maximizeWindow(windowId) {
         card.style.maxHeight = 'none';
         card.style.borderRadius = '0';
     }
+    saveActiveWindowsState();
 }
 
 function snapWindow(windowId, direction) {
@@ -559,6 +613,7 @@ function snapWindow(windowId, direction) {
         const cardWidth = card.offsetWidth || 530;
         card.style.left = `calc(50vw - ${cardWidth / 2}px)`;
     }
+    saveActiveWindowsState();
 }
 
 function updateTaskbar() {
@@ -693,6 +748,13 @@ function showModal(id) {
 
     activeWindows[id] = true;
     delete minimizedWindows[id];
+    saveActiveWindowsState();
+
+    if (id === 'activity-log-modal') {
+        if (typeof startLiveActivityMonitor === 'function') {
+            startLiveActivityMonitor();
+        }
+    }
 
     bringToFront(id);
     updateTaskbar();
@@ -708,9 +770,15 @@ function closeModal(id) {
 
     delete activeWindows[id];
     delete minimizedWindows[id];
+    saveActiveWindowsState();
 
     if (id === 'logs-modal') {
         stopLogPolling();
+    }
+    if (id === 'activity-log-modal') {
+        if (typeof stopLiveActivityMonitor === 'function') {
+            stopLiveActivityMonitor();
+        }
     }
 
     updateTaskbar();
@@ -3260,7 +3328,12 @@ function switchTab(tabId) {
     localStorage.setItem('active_tab', tabId);
 
     if (tabId === 'keys-tokens') {
-        loadKeysTokensModularUI();
+        const searchInput = document.getElementById('coolify-search-keys');
+        if (searchInput) searchInput.value = '';
+        if (typeof loadSshKeys === 'function') loadSshKeys();
+        if (typeof loadLocalSshKey === 'function') loadLocalSshKey();
+        if (typeof loadGithubTokenStatus === 'function') loadGithubTokenStatus();
+        if (typeof filterCoolifyKeys === 'function') filterCoolifyKeys();
     }
 
     if (tabId !== 'deployment-logs') {
@@ -3708,6 +3781,7 @@ async function handleWizardDeploy(event) {
 
         if (res.ok) {
             const app = await res.json();
+            addActivityLog(`Yeni tətbiq yaradıldı (Wizard): '${payload.name}' (Port: ${payload.port})`, 'app');
             closeModal('create-service-modal');
             await loadApplications();
             if (submitBtn) {
@@ -3720,6 +3794,7 @@ async function handleWizardDeploy(event) {
             }
         } else {
             const errText = await res.text();
+            addActivityLog(`Tətbiq yaradılarkən xəta (Wizard): '${payload.name}' - ${errText}`, 'error');
             if (submitBtn) {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = 'Qur və Yayına Al (Deploy)';
@@ -3728,6 +3803,7 @@ async function handleWizardDeploy(event) {
         }
     } catch (e) {
         console.error("Wizard deploy failed", e);
+        addActivityLog(`Tətbiq yaratma xətası (Wizard): ${e.message}`, 'error');
         const submitBtn = document.getElementById('btn-wiz-submit-deploy');
         if (submitBtn) {
             submitBtn.disabled = false;
@@ -4563,49 +4639,342 @@ function showInfoCard(title, subtitle, body) {
     setTimeout(() => document.getElementById('confirm-card-no').style.display = '', 100);
 }
 
-// ─── Fəaliyyət Jurnalı ─────────────────────────────────────────────────────
+// ─── Fəaliyyət Jurnalı & Canlı Debug Monitoru ──────────────────────────────
 const LOG_ICONS = {
-    deploy: { icon: '🚀', color: '#00d2ff' },
-    update: { icon: '🔄', color: '#7c3aed' },
-    server: { icon: '🖥️', color: '#00e676' },
-    app: { icon: '📦', color: '#ff9800' },
-    error: { icon: '❌', color: '#ff1744' },
-    info: { icon: '📋', color: '#9aa0a6' },
-    delete: { icon: '🗑️', color: '#ff1744' },
-    setup: { icon: '⚙️', color: '#00e676' },
+    deploy: { icon: '🚀', color: '#00d2ff', tagClass: 'term-tag-deploy', label: 'Deploy' },
+    update: { icon: '🔄', color: '#7c3aed', tagClass: 'term-tag-info', label: 'Yenilənmə' },
+    server: { icon: '🖥️', color: '#00e676', tagClass: 'term-tag-info', label: 'Server' },
+    app: { icon: '📦', color: '#ff9800', tagClass: 'term-tag-info', label: 'Layihə' },
+    error: { icon: '❌', color: '#ff1744', tagClass: 'term-tag-error', label: 'Xəta' },
+    warning: { icon: '⚠️', color: '#ffb86c', tagClass: 'term-tag-warning', label: 'Xəbərdarlıq' },
+    success: { icon: '✅', color: '#00e676', tagClass: 'term-tag-success', label: 'Uğurlu' },
+    info: { icon: 'ℹ️', color: '#9aa0a6', tagClass: 'term-tag-info', label: 'Məlumat' },
+    delete: { icon: '🗑️', color: '#ff1744', tagClass: 'term-tag-error', label: 'Silinmə' },
+    setup: { icon: '⚙️', color: '#00e676', tagClass: 'term-tag-success', label: 'Qurulum' },
 };
 
-async function addActivityLog(message, type = 'info') {
+let activityLogsState = {
+    allLogs: [],
+    filteredLogs: [],
+    levelFilter: 'all',
+    moduleFilter: 'all',
+    searchQuery: '',
+    isStreaming: true,
+    viewMode: 'cards', // 'cards' | 'terminal'
+    autoScroll: true,
+    pollInterval: null,
+    lastHash: '',
+    isFetching: false
+};
+
+async function addActivityLog(message, type = 'info', module = null) {
     try {
         await fetch('/api/activity-logs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, log_type: type })
+            body: JSON.stringify({ message, log_type: type, module: module })
         });
-        renderActivityLogs();
+        if (activityLogsState.isStreaming) {
+            fetchAndRenderActivityLogs();
+        }
     } catch (e) {
         console.error("Failed to add activity log", e);
     }
 }
 
-let currentActivityFilter = 'all';
+function resolveLogLevel(log) {
+    const t = (log.log_type || '').toLowerCase();
+    const m = (log.message || '').toLowerCase();
+    if (t === 'error' || t === 'delete' || m.includes('xəta') || m.includes('uğursuz') || m.includes('fail')) return 'error';
+    if (t === 'warning' || m.includes('dayandırıldı') || m.includes('ləğv') || m.includes('warning')) return 'warning';
+    if (t === 'success' || t === 'setup' || m.includes('uğurla') || m.includes('hazırlandı') || m.includes('yaradıldı')) return 'success';
+    if (t === 'deploy' || m.includes('deploy') || m.includes('yayım')) return 'deploy';
+    return 'info';
+}
 
-function filterActivityLogs(filterType) {
-    currentActivityFilter = filterType;
-    const buttons = document.querySelectorAll('.activity-tab-btn');
-    buttons.forEach(btn => {
-        const onclickAttr = btn.getAttribute('onclick');
-        if (onclickAttr && onclickAttr.includes(`'${filterType}'`)) {
-            btn.classList.add('active');
-            btn.style.color = 'var(--text-primary)';
-            btn.style.borderColor = 'var(--primary-color)';
+function resolveLogModule(log) {
+    if (log.module) {
+        const mod = log.module.toLowerCase();
+        if (mod.includes('app') || mod.includes('layihə')) return 'apps';
+        if (mod.includes('server')) return 'servers';
+        if (mod.includes('deploy')) return 'deploy';
+        if (mod.includes('system') || mod.includes('sistem')) return 'system';
+    }
+    const m = (log.message || '').toLowerCase();
+    if (m.includes('server') || m.includes('ssh') || m.includes('host')) return 'servers';
+    if (m.includes('deploy') || m.includes('yayım') || m.includes('build') || m.includes('qurulum')) return 'deploy';
+    if (m.includes('masterdeploy') || m.includes('sistem') || m.includes('update') || m.includes('token')) return 'system';
+    return 'apps';
+}
+
+function startLiveActivityMonitor() {
+    activityLogsState.isStreaming = true;
+    updateStreamBadgeUI();
+    fetchAndRenderActivityLogs();
+    if (activityLogsState.pollInterval) clearInterval(activityLogsState.pollInterval);
+    activityLogsState.pollInterval = setInterval(() => {
+        if (activityLogsState.isStreaming) {
+            fetchAndRenderActivityLogs();
+        }
+    }, 1500);
+}
+
+function stopLiveActivityMonitor() {
+    if (activityLogsState.pollInterval) {
+        clearInterval(activityLogsState.pollInterval);
+        activityLogsState.pollInterval = null;
+    }
+}
+
+function toggleActivityStream() {
+    activityLogsState.isStreaming = !activityLogsState.isStreaming;
+    updateStreamBadgeUI();
+    if (activityLogsState.isStreaming) {
+        fetchAndRenderActivityLogs();
+    }
+}
+
+function updateStreamBadgeUI() {
+    const badge = document.getElementById('activity-live-badge');
+    const toggleBtn = document.getElementById('btn-activity-stream-toggle');
+    const toggleIcon = document.getElementById('stream-toggle-icon');
+    const toggleText = document.getElementById('stream-toggle-text');
+
+    if (activityLogsState.isStreaming) {
+        if (badge) {
+            badge.classList.remove('paused');
+            badge.innerHTML = '<span class="pulse-dot"></span> CANLI YAYIM';
+        }
+        if (toggleIcon) toggleIcon.textContent = '⏸️';
+        if (toggleText) toggleText.textContent = 'Dondur';
+    } else {
+        if (badge) {
+            badge.classList.add('paused');
+            badge.innerHTML = '<span class="pulse-dot"></span> DAYANDIRILDI';
+        }
+        if (toggleIcon) toggleIcon.textContent = '▶️';
+        if (toggleText) toggleText.textContent = 'Davam Et';
+    }
+}
+
+function setActivityViewMode(mode) {
+    activityLogsState.viewMode = mode;
+    const cardsView = document.getElementById('activity-cards-view');
+    const termView = document.getElementById('activity-terminal-view');
+    const btnCards = document.getElementById('btn-view-cards');
+    const btnTerm = document.getElementById('btn-view-terminal');
+
+    if (mode === 'terminal') {
+        if (cardsView) cardsView.style.display = 'none';
+        if (termView) termView.style.display = 'flex';
+        if (btnCards) btnCards.classList.remove('active');
+        if (btnTerm) btnTerm.classList.add('active');
+    } else {
+        if (cardsView) cardsView.style.display = 'flex';
+        if (termView) termView.style.display = 'none';
+        if (btnCards) btnCards.classList.add('active');
+        if (btnTerm) btnTerm.classList.remove('active');
+    }
+    renderActivityLogsDOM();
+}
+
+function setActivityFilter(type, val) {
+    if (type === 'level') {
+        activityLogsState.levelFilter = val;
+    } else if (type === 'module') {
+        activityLogsState.moduleFilter = val;
+    }
+    // Update active pill classes
+    document.querySelectorAll(`.activity-filter-pill[data-filter-type="${type}"]`).forEach(el => {
+        if (el.getAttribute('data-filter-val') === val) {
+            el.classList.add('active');
         } else {
-            btn.classList.remove('active');
-            btn.style.color = 'var(--text-secondary)';
-            btn.style.borderColor = 'var(--card-border)';
+            el.classList.remove('active');
         }
     });
-    renderActivityLogs();
+    filterAndRenderActivityLogs();
+}
+
+function handleActivitySearch() {
+    const input = document.getElementById('activity-search-input');
+    activityLogsState.searchQuery = input ? input.value.trim().toLowerCase() : '';
+    filterAndRenderActivityLogs();
+}
+
+function toggleActivityAutoScroll() {
+    activityLogsState.autoScroll = !activityLogsState.autoScroll;
+    const txt = document.getElementById('autoscroll-text');
+    if (txt) {
+        txt.textContent = activityLogsState.autoScroll ? 'Avto-Scroll: Açıq' : 'Avto-Scroll: Bağlı';
+    }
+}
+
+async function fetchAndRenderActivityLogs() {
+    if (activityLogsState.isFetching) return;
+    activityLogsState.isFetching = true;
+    try {
+        const res = await fetch('/api/activity-logs');
+        if (res.ok) {
+            const logs = await res.json();
+            const hash = JSON.stringify(logs.slice(0, 5));
+            activityLogsState.allLogs = logs;
+
+            // Update KPI badges
+            updateActivityKPIs(logs);
+
+            // Update timestamp
+            const now = new Date();
+            const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            const timeEl = document.getElementById('activity-last-update-time');
+            if (timeEl) timeEl.textContent = `Yeniləndi: ${timeStr}`;
+
+            if (hash !== activityLogsState.lastHash) {
+                activityLogsState.lastHash = hash;
+                filterAndRenderActivityLogs();
+            }
+        }
+    } catch (e) {
+        console.error("Fəaliyyət loqları çəkilərkən xəta", e);
+    } finally {
+        activityLogsState.isFetching = false;
+    }
+}
+
+function updateActivityKPIs(logs) {
+    const totalEl = document.getElementById('stat-total-logs');
+    const errEl = document.getElementById('stat-error-logs');
+    const warnEl = document.getElementById('stat-warn-logs');
+    const succEl = document.getElementById('stat-success-logs');
+
+    if (!totalEl) return;
+
+    let total = logs.length;
+    let errors = 0;
+    let warnings = 0;
+    let successes = 0;
+
+    logs.forEach(l => {
+        const lvl = resolveLogLevel(l);
+        if (lvl === 'error') errors++;
+        else if (lvl === 'warning') warnings++;
+        else if (lvl === 'success' || lvl === 'deploy') successes++;
+    });
+
+    totalEl.textContent = total;
+    if (errEl) errEl.textContent = errors;
+    if (warnEl) warnEl.textContent = warnings;
+    if (succEl) succEl.textContent = successes;
+}
+
+function filterAndRenderActivityLogs() {
+    const { allLogs, levelFilter, moduleFilter, searchQuery } = activityLogsState;
+
+    activityLogsState.filteredLogs = allLogs.filter(log => {
+        const lvl = resolveLogLevel(log);
+        const mod = resolveLogModule(log);
+
+        if (levelFilter !== 'all' && lvl !== levelFilter) return false;
+        if (moduleFilter !== 'all' && mod !== moduleFilter) return false;
+
+        if (searchQuery) {
+            const haystack = `${log.message} ${log.module || ''} ${log.operator_name || ''} ${lvl} ${mod}`.toLowerCase();
+            if (!haystack.includes(searchQuery)) return false;
+        }
+
+        return true;
+    });
+
+    renderActivityLogsDOM();
+}
+
+function renderActivityLogsDOM() {
+    const { filteredLogs, viewMode, autoScroll } = activityLogsState;
+
+    if (viewMode === 'terminal') {
+        const termView = document.getElementById('activity-terminal-view');
+        if (!termView) return;
+
+        if (filteredLogs.length === 0) {
+            termView.innerHTML = '<div style="color: #8b949e; padding: 20px; text-align: center;">// Seçilmiş filtrlərə uyğun heç bir fəaliyyət loqu tapılmadı.</div>';
+            return;
+        }
+
+        termView.innerHTML = filteredLogs.map((l, i) => {
+            const lvl = resolveLogLevel(l);
+            const mod = resolveLogModule(l).toUpperCase();
+            const tagClass = (LOG_ICONS[lvl] || LOG_ICONS.info).tagClass;
+            let timeStr = '--:--:--';
+            if (l.created_at) {
+                const parts = l.created_at.split(' ');
+                timeStr = parts[1] || parts[0];
+            }
+            return `<div class="activity-terminal-line" onclick="showLogDetailsByIndex(${i})" style="cursor: pointer;">
+                <span class="term-time">[${timeStr}]</span>
+                <span class="term-tag ${tagClass}">${lvl.toUpperCase()}</span>
+                <span style="color: #79c0ff; font-weight: 600; font-size: 0.72rem;">[${mod}]</span>
+                <span style="flex: 1; color: ${lvl === 'error' ? '#ff7b72' : (lvl === 'warning' ? '#d29922' : '#c9d1d9')};">${escapeHtml(l.message)}</span>
+            </div>`;
+        }).join('');
+
+        if (autoScroll) {
+            termView.scrollTop = termView.scrollHeight;
+        }
+    } else {
+        const cardsView = document.getElementById('activity-cards-view');
+        if (!cardsView) return;
+
+        if (filteredLogs.length === 0) {
+            cardsView.innerHTML = '<div style="font-size: 0.82rem; color: var(--text-secondary); text-align: center; padding: 30px; opacity: 0.6;">🔍 Seçilmiş meyarlara uyğun heç bir hadisə qeydə alınmayıb</div>';
+            return;
+        }
+
+        cardsView.innerHTML = filteredLogs.map((l, i) => {
+            const lvl = resolveLogLevel(l);
+            const mod = resolveLogModule(l);
+            const meta = LOG_ICONS[lvl] || LOG_ICONS.info;
+            let timeStr = '--:--';
+            if (l.created_at) {
+                try {
+                    const isoStr = l.created_at.trim().replace(" ", "T") + "Z";
+                    const localDate = new Date(isoStr);
+                    const h = String(localDate.getHours()).padStart(2, '0');
+                    const m = String(localDate.getMinutes()).padStart(2, '0');
+                    const s = String(localDate.getSeconds()).padStart(2, '0');
+                    timeStr = `${h}:${m}:${s}`;
+                } catch (e) {
+                    timeStr = l.created_at;
+                }
+            }
+            const escapedMessage = escapeHtml(l.message);
+            const borderAccent = lvl === 'error' ? 'border-left: 3px solid #ff5252;' : (lvl === 'warning' ? 'border-left: 3px solid #ffb86c;' : (lvl === 'success' ? 'border-left: 3px solid #69f0ae;' : ''));
+
+            return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:8px; background:rgba(255,255,255,0.02); border: 1px solid var(--card-border); ${borderAccent}; transition: all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.04)'" onmouseout="this.style.background='rgba(255,255,255,0.02)'">
+                <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1; cursor:pointer;" onclick="showLogDetailsByIndex(${i})">
+                    <span style="font-size:1.1rem; flex-shrink:0; display:flex; align-items:center; justify-content:center; width:30px; height:30px; background:rgba(255,255,255,0.04); border-radius:8px;">${meta.icon}</span>
+                    <div style="flex:1; min-width:0;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 2px;">
+                            <span style="font-size: 0.68rem; font-weight: 700; text-transform: uppercase; color: ${meta.color};">${meta.label || lvl}</span>
+                            <span style="font-size: 0.68rem; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 1px 5px; border-radius: 4px;">${mod.toUpperCase()}</span>
+                        </div>
+                        <div style="font-size:0.83rem; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapedMessage}">${escapedMessage}</div>
+                    </div>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+                    <button onclick="copySingleLog(event, '${escapedMessage}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:0.95rem; padding:4px 6px; border-radius:4px; transition:color 0.2s;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='var(--text-secondary)'" title="Kopyala">📋</button>
+                    <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace; opacity:0.85;">${timeStr}</span>
+                </div>
+            </div>`;
+        }).join('');
+
+        if (autoScroll) {
+            cardsView.scrollTop = 0; // top is newest in cards view
+        }
+    }
+}
+
+// Backward compatibility helper
+function renderActivityLogs() {
+    fetchAndRenderActivityLogs();
 }
 
 function copyToClipboard(text) {
@@ -4628,19 +4997,6 @@ function copyToClipboard(text) {
     }
 }
 
-function toggleGithubTokenVisibility(event) {
-    if (event) event.stopPropagation();
-    const input = document.getElementById('gh-token');
-    const btn = event.currentTarget;
-    if (input.type === 'password') {
-        input.type = 'text';
-        btn.textContent = '🙈';
-    } else {
-        input.type = 'password';
-        btn.textContent = '👁️';
-    }
-}
-
 function escapeHtml(text) {
     if (!text) return '';
     return text
@@ -4654,36 +5010,27 @@ function escapeHtml(text) {
 function copySingleLog(event, text) {
     if (event) event.stopPropagation();
     copyToClipboard(text);
-    showInfoCard('Kopyalandı', '', 'Loq uğurla kopyalandı.');
+    showInfoCard('Kopyalandı', '', 'Loq uğurla buferə kopyalandı.');
 }
 
-let activeActivityLogs = [];
-
 async function copyCurrentSectionLogs() {
-    try {
-        const res = await fetch('/api/activity-logs');
-        if (res.ok) {
-            const logs = await res.json();
-            let filteredLogs = logs;
-            if (currentActivityFilter === 'masterdeploy') {
-                filteredLogs = logs.filter(l => l.message.includes('[Yenilənmə]') || l.message.includes('[Sistem]') || l.log_type === 'system');
-            } else if (currentActivityFilter === 'apps') {
-                filteredLogs = logs.filter(l => l.message.includes('[Auto-Deploy]') || l.message.includes('[Auto-Deploy Xətası]') || l.log_type === 'app' || l.log_type === 'delete' || l.log_type === 'setup' || l.message.toLowerCase().includes('layihə'));
-            } else if (currentActivityFilter === 'servers') {
-                filteredLogs = logs.filter(l => l.log_type === 'server' || l.message.toLowerCase().includes('server'));
-            }
-            
-            const textToCopy = filteredLogs.map(l => `[${l.created_at}] ${l.message}`).join('\n');
-            copyToClipboard(textToCopy);
-            showInfoCard('Kopyalandı', '', 'Bölmədəki bütün loqlar buferə kopyalandı.');
-        }
-    } catch (e) {
-        console.error("Failed to copy section logs", e);
+    const logsToCopy = activityLogsState.filteredLogs.length > 0 ? activityLogsState.filteredLogs : activityLogsState.allLogs;
+    if (logsToCopy.length === 0) {
+        showInfoCard('Boşdur', '', 'Kopyalanacaq loq tapılmadı.');
+        return;
     }
+    const textToCopy = logsToCopy.map(l => {
+        const lvl = resolveLogLevel(l).toUpperCase();
+        const mod = resolveLogModule(l).toUpperCase();
+        return `[${l.created_at}] [${lvl}] [${mod}] ${l.message}`;
+    }).join('\n');
+
+    copyToClipboard(textToCopy);
+    showInfoCard('Kopyalandı', '', `${logsToCopy.length} ədəd loq buferə kopyalandı.`);
 }
 
 function showLogDetailsByIndex(index) {
-    const l = activeActivityLogs[index];
+    const l = activityLogsState.filteredLogs[index] || activityLogsState.allLogs[index];
     if (!l) return;
     showLogDetails(l.message, l.log_type, l.created_at);
 }
@@ -4695,11 +5042,11 @@ function showLogDetails(message, logType, createdAt) {
     const extraTerminal = document.getElementById('log-detail-extra-terminal');
     const viewDeployBtn = document.getElementById('log-detail-view-deploy-btn');
     
-    meta.textContent = `${logType.toUpperCase()} | ${createdAt}`;
-    text.value = message;
+    if (meta) meta.textContent = `${(logType || 'INFO').toUpperCase()} | ${createdAt || ''}`;
+    if (text) text.value = message;
     
-    extraSection.style.display = 'none';
-    viewDeployBtn.style.display = 'none';
+    if (extraSection) extraSection.style.display = 'none';
+    if (viewDeployBtn) viewDeployBtn.style.display = 'none';
     
     const appMatch = message.match(/'([^']+)'/);
     let appName = null;
@@ -4711,13 +5058,13 @@ function showLogDetails(message, logType, createdAt) {
         }
     }
     
-    if (appName && deletionLogsCache[appName]) {
+    if (appName && deletionLogsCache[appName] && extraSection && extraTerminal) {
         extraSection.style.display = 'flex';
         document.getElementById('log-detail-extra-title').textContent = 'Silinmə Prosesi Loqları:';
         extraTerminal.textContent = deletionLogsCache[appName].join('\n');
     }
     
-    if (foundApp && (message.toLowerCase().includes('yenilənmə') || message.toLowerCase().includes('deploy') || message.toLowerCase().includes('manifest') || message.toLowerCase().includes('commit') || message.toLowerCase().includes('xətası'))) {
+    if (foundApp && viewDeployBtn && (message.toLowerCase().includes('yenilənmə') || message.toLowerCase().includes('deploy') || message.toLowerCase().includes('manifest') || message.toLowerCase().includes('commit') || message.toLowerCase().includes('xətası'))) {
         viewDeployBtn.style.display = 'inline-block';
         viewDeployBtn.onclick = () => {
             closeModal('log-detail-modal');
@@ -4735,69 +5082,15 @@ function copyLogDetailText() {
     showInfoCard('Kopyalandı', '', 'Uğurla buferə kopyalandı.');
 }
 
-async function renderActivityLogs() {
-    const container = document.getElementById('activity-log-list');
-    if (!container) return;
-    try {
-        const res = await fetch('/api/activity-logs');
-        if (res.ok) {
-            const logs = await res.json();
-            
-            // Filtrləmə məntiqi
-            let filteredLogs = logs;
-            if (currentActivityFilter === 'masterdeploy') {
-                filteredLogs = logs.filter(l => l.message.includes('[Yenilənmə]') || l.message.includes('[Sistem]') || l.log_type === 'system');
-            } else if (currentActivityFilter === 'apps') {
-                filteredLogs = logs.filter(l => l.message.includes('[Auto-Deploy]') || l.message.includes('[Auto-Deploy Xətası]') || l.log_type === 'app' || l.log_type === 'delete' || l.log_type === 'setup' || l.message.toLowerCase().includes('layihə'));
-            } else if (currentActivityFilter === 'servers') {
-                filteredLogs = logs.filter(l => l.log_type === 'server' || l.message.toLowerCase().includes('server'));
-            }
-
-            activeActivityLogs = filteredLogs;
-
-            if (filteredLogs.length === 0) {
-                container.innerHTML = '<div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>';
-                return;
-            }
-            container.innerHTML = filteredLogs.map((l, i) => {
-                const meta = LOG_ICONS[l.log_type] || LOG_ICONS.info;
-                let timeStr = '--:--';
-                if (l.created_at) {
-                    try {
-                        const isoStr = l.created_at.trim().replace(" ", "T") + "Z";
-                        const localDate = new Date(isoStr);
-                        const h = String(localDate.getHours()).padStart(2, '0');
-                        const m = String(localDate.getMinutes()).padStart(2, '0');
-                        timeStr = `${h}:${m}`;
-                    } catch (e) {
-                        timeStr = l.created_at;
-                    }
-                }
-                const escapedMessage = escapeHtml(l.message);
-                return `<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 14px; border-radius:10px; background:rgba(255,255,255,0.02); border: 1px solid var(--card-border); margin-bottom: 2px;">
-                    <div style="display:flex; align-items:center; gap:10px; min-width:0; flex:1; cursor:pointer;" onclick="showLogDetailsByIndex(${i})">
-                        <span style="font-size:1.1rem; flex-shrink:0; display:flex; align-items:center; justify-content:center; width:28px; height:28px; background:rgba(255,255,255,0.03); border-radius:8px;">${meta.icon}</span>
-                        <div style="flex:1; min-width:0;">
-                            <div style="font-size:0.82rem; color:var(--text-primary); font-weight:500; overflow:hidden; text-overflow:ellipsis;" title="Detalları görmək üçün klikləyin">${l.message}</div>
-                        </div>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-                        <button onclick="copySingleLog(event, '${escapedMessage}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:0.95rem; padding:4px 6px; border-radius:4px; transition:color 0.2s;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='var(--text-secondary)'" title="Kopyala">📋</button>
-                        <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace; opacity:0.8;">${timeStr}</span>
-                    </div>
-                </div>`;
-            }).join('');
-        }
-    } catch (e) {
-        console.error("Failed to render activity logs", e);
-    }
-}
-
 async function clearActivityLogs() {
     try {
         const res = await fetch('/api/activity-logs', { method: 'DELETE' });
         if (res.ok) {
-            renderActivityLogs();
+            activityLogsState.allLogs = [];
+            activityLogsState.filteredLogs = [];
+            activityLogsState.lastHash = '';
+            fetchAndRenderActivityLogs();
+            showInfoCard('Təmizləndi', '', 'Fəaliyyət jurnalı uğurla təmizləndi.');
         }
     } catch (e) {
         console.error("Failed to clear activity logs", e);
@@ -5837,41 +6130,9 @@ function copyTextToClipboard(text, label) {
     });
 }
 
-// --- Keys & Tokens Modular UI Async Loader ---
-let isKeysTokensUILoaded = false;
+// --- Keys & Tokens Modular UI ---
 async function loadKeysTokensModularUI() {
-    const root = document.getElementById('keys-tokens-modular-root');
-    if (!root) return;
-    
-    if (isKeysTokensUILoaded && root.querySelector('.keys-tokens-container')) return;
-    
-    try {
-        // Cache busting əlavə edirik (?t=...)
-        const res = await fetch('keys_tokens.html?t=' + Date.now());
-        if (res.ok) {
-            const html = await res.text();
-            root.innerHTML = html;
-            isKeysTokensUILoaded = true;
-
-            // keys_tokens.js skriptini zəmanətli və cache busting ilə yükləyirik
-            if (!document.getElementById('keys-tokens-script')) {
-                const script = document.createElement('script');
-                script.id = 'keys-tokens-script';
-                script.src = '/keys_tokens.js?t=' + Date.now();
-                script.onload = () => {
-                    if (typeof initKeysTokens === 'function') {
-                        initKeysTokens();
-                    }
-                };
-                document.body.appendChild(script);
-            } else {
-                if (typeof initKeysTokens === 'function') {
-                    initKeysTokens();
-                }
-            }
-        }
-    } catch (e) {
-        console.error("Keys & Tokens modulunu yükləmək mümkün olmadı", e);
-        root.innerHTML = `<div style="color:var(--danger-color); padding: 1rem;">Modul yüklənməsində xəta baş verdi.</div>`;
+    if (typeof initKeysTokens === 'function') {
+        initKeysTokens();
     }
 }

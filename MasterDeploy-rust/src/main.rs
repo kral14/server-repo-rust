@@ -369,6 +369,13 @@ async fn delete_server(State(state): State<AppState>, AxumPath(server_id): AxumP
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     // 3. Delete the server itself
+    let server_name = sqlx::query_scalar::<_, String>("SELECT name FROM servers WHERE id = ?")
+        .bind(&server_id)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or_default()
+        .unwrap_or_else(|| "Naməlum".to_string());
+
     sqlx::query("DELETE FROM servers WHERE id = ?")
         .bind(&server_id)
         .execute(&mut *tx)
@@ -376,6 +383,8 @@ async fn delete_server(State(state): State<AppState>, AxumPath(server_id): AxumP
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     tx.commit().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    add_activity_log_pro(&state.db, &format!("Server silindi: '{}'", server_name), "warning", Some("Servers"), Some("admin"), Some(&server_id), None).await;
     Ok(Json(true))
 }
 
@@ -1017,7 +1026,7 @@ async fn save_github_token(
 }
 
 async fn list_activity_logs(State(state): State<AppState>) -> Result<Json<Vec<ActivityLog>>, (StatusCode, String)> {
-    let logs = sqlx::query_as::<_, ActivityLog>("SELECT id, message, log_type, module, operator_name, target_id, ip_address, CAST(created_at AS TEXT) as created_at FROM activity_logs ORDER BY created_at DESC LIMIT 30")
+    let logs = sqlx::query_as::<_, ActivityLog>("SELECT id, message, log_type, module, operator_name, target_id, ip_address, CAST(created_at AS TEXT) as created_at FROM activity_logs ORDER BY created_at DESC LIMIT 250")
         .fetch_all(&state.db)
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -1325,15 +1334,26 @@ async fn stop_application(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
 
-    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
-        .bind(&app.server_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
+    let is_local = app.server_id == "local-server-id" || app.server_id == "local" || app.server_id.is_empty();
+    let res = if is_local {
+        let app_name = app.name.clone();
+        tokio::process::Command::new("docker")
+            .args(&["stop", &app_name])
+            .output()
+            .await
+            .map(|out| out.status.success())
+            .map_err(|e| e.to_string())
+    } else {
+        let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+            .bind(&app.server_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
 
-    let cmd = format!("sudo docker stop {}", app.name);
-    let ssh_res = run_ssh_command(&server, &cmd).await;
+        let cmd = format!("sudo docker stop {}", app.name);
+        run_ssh_command(&server, &cmd).await.map(|_| true)
+    };
 
     // Həmişə statusu bazada yeniləyirik ki, UI blokda qalmasın
     let _ = sqlx::query("UPDATE applications SET status = 'stopped' WHERE id = ?")
@@ -1341,9 +1361,15 @@ async fn stop_application(
         .execute(&state.db)
         .await;
 
-    match ssh_res {
-        Ok(_) => Ok(Json(true)),
-        Err(err) => Err((StatusCode::BAD_REQUEST, format!("SSH xətası (amma status stopped edildi): {}", err))),
+    match res {
+        Ok(_) => {
+            add_activity_log_pro(&state.db, &format!("Tətbiq dayandırıldı: '{}'", app.name), "warning", Some("Apps"), Some("admin"), Some(&app_id), None).await;
+            Ok(Json(true))
+        },
+        Err(err) => {
+            add_activity_log_pro(&state.db, &format!("Tətbiq dayandırılarkən xəta: '{}' ({})", app.name, err), "error", Some("Apps"), Some("admin"), Some(&app_id), None).await;
+            Err((StatusCode::BAD_REQUEST, format!("Dayandırma xətası: {}", err)))
+        },
     }
 }
 
@@ -1358,27 +1384,43 @@ async fn restart_application(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
 
-    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
-        .bind(&app.server_id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-        .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
+    let is_local = app.server_id == "local-server-id" || app.server_id == "local" || app.server_id.is_empty();
+    let res = if is_local {
+        let app_name = app.name.clone();
+        tokio::process::Command::new("docker")
+            .args(&["restart", &app_name])
+            .output()
+            .await
+            .map(|out| out.status.success())
+            .map_err(|e| e.to_string())
+    } else {
+        let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+            .bind(&app.server_id)
+            .fetch_optional(&state.db)
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+            .ok_or((StatusCode::NOT_FOUND, "Server not found".to_string()))?;
 
-    let cmd = format!("sudo docker restart {}", app.name);
-    let ssh_res = run_ssh_command(&server, &cmd).await;
+        let cmd = format!("sudo docker restart {}", app.name);
+        run_ssh_command(&server, &cmd).await.map(|_| true)
+    };
 
-    // Restart uğurludursa running, yoxsa yenə stopped saxlayaq
-    let new_status = if ssh_res.is_ok() { "running" } else { "stopped" };
+    let new_status = if res.is_ok() { "running" } else { "stopped" };
     let _ = sqlx::query("UPDATE applications SET status = ? WHERE id = ?")
         .bind(new_status)
         .bind(&app_id)
         .execute(&state.db)
         .await;
 
-    match ssh_res {
-        Ok(_) => Ok(Json(true)),
-        Err(err) => Err((StatusCode::BAD_REQUEST, format!("SSH xətası: {}", err))),
+    match res {
+        Ok(_) => {
+            add_activity_log_pro(&state.db, &format!("Tətbiq yenidən başladıldı: '{}'", app.name), "success", Some("Apps"), Some("admin"), Some(&app_id), None).await;
+            Ok(Json(true))
+        },
+        Err(err) => {
+            add_activity_log_pro(&state.db, &format!("Tətbiq restart xətası: '{}' ({})", app.name, err), "error", Some("Apps"), Some("admin"), Some(&app_id), None).await;
+            Err((StatusCode::BAD_REQUEST, format!("Restart xətası: {}", err)))
+        },
     }
 }
 
@@ -1503,7 +1545,9 @@ async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec<App
          privileged, memory_limit, cpu_limit, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
          last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image \
-         FROM applications ORDER BY created_at DESC"
+         FROM applications \
+         WHERE name NOT LIKE 'cf-tunnel-%' AND name NOT LIKE 'masterdeploy-%' AND TRIM(name) != '' \
+         ORDER BY created_at DESC"
     )
     .fetch_all(&state.db)
     .await {
@@ -1746,11 +1790,13 @@ async fn cancel_deployment(State(state): State<AppState>, AxumPath(deploy_id): A
         .await
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    sqlx::query("UPDATE applications SET status = 'stopped' WHERE id = ?")
+    let app_name = sqlx::query_scalar::<_, String>("SELECT name FROM applications WHERE id = ?")
         .bind(&deployment.application_id)
-        .execute(&state.db)
+        .fetch_optional(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+        .unwrap_or_default()
+        .unwrap_or_else(|| "Naməlum".to_string());
+    add_activity_log_pro(&state.db, &format!("Yayım dayandırıldı (ləğv edildi): '{}'", app_name), "warning", Some("Deploy"), Some("admin"), Some(&deployment.application_id), None).await;
 
     Ok(Json(true))
 }
@@ -1811,9 +1857,11 @@ async fn finalize_deploy(db: &SqlitePool, deploy_id: &str, app_id: &str, status:
         .execute(db)
         .await;
 
-    // Uğurlu deploy olduqda ən son commit SHA-nı alıb yadda saxlayırıq
-    if status == "success" {
-        if let Ok(Some(app)) = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?").bind(app_id).fetch_optional(db).await {
+    // Uğurlu və ya uğursuz deploy nəticəsini Fəaliyyət Jurnalına qeyd edirik
+    if let Ok(Some(app)) = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?").bind(app_id).fetch_optional(db).await {
+        if status == "success" {
+            add_activity_log_pro(db, &format!("Deploy uğurla tamamlandı: '{}' (Port: {})", app.name, app.port), "success", Some("Deploy"), Some("System"), Some(app_id), None).await;
+            
             // git ls-remote ilə son commit-i öyrənirik
             let output = std::process::Command::new("git")
                 .args(["ls-remote", &app.repo_url, &app.branch])
@@ -1830,6 +1878,8 @@ async fn finalize_deploy(db: &SqlitePool, deploy_id: &str, app_id: &str, status:
                     }
                 }
             }
+        } else if status == "failed" {
+            add_activity_log_pro(db, &format!("Deploy xətası: '{}' qurulumu uğursuz oldu", app.name), "error", Some("Deploy"), Some("System"), Some(app_id), None).await;
         }
     }
 }
@@ -2026,6 +2076,8 @@ async fn trigger_deployment_impl(
         .await {
             return Err(e.to_string());
         }
+
+    add_activity_log_pro(&db, &format!("Deploy başladıldı: '{}' (Server: {})", app.name, server.name), "info", Some("Deploy"), Some("admin"), Some(&app_id), None).await;
 
     // Spawn background task to perform actual SSH commands
     let db_clone = db.clone();

@@ -1,5 +1,17 @@
 [
   {
+    "version": "v1.0.147",
+    "changes": [
+      "Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."
+    ]
+  },
+  {
+    "version": "v1.0.146",
+    "changes": [
+      "Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."
+    ]
+  },
+  {
     "version": "v1.0.145",
     "changes": [
       "Lokal suretli build ve tehlukesizlik tekmillesdirmeleri."

@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=12">
+    <link rel="stylesheet" href="/style.css?v=13">
     <link rel="icon" type="image/png" href="/favicon.png">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -334,7 +334,527 @@
 
                 <!-- Modularized Container dynamically loaded from keys_tokens.html -->
                 <div id="keys-tokens-modular-root">
-                    <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">Yüklənir...</div>
+<style>
+/* Keys & Tokens — Overlay Modals (pencere yoneticisinden asili deyil) */
+.kt-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(4px);
+    z-index: 9000;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+.kt-overlay-card {
+    background: #111827;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.8);
+    animation: ktSlideIn 0.18s ease-out;
+}
+.kt-overlay-card.wide { max-width: 600px; }
+@keyframes ktSlideIn {
+    from { opacity: 0; transform: translateY(-16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.kt-overlay-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.3rem;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.kt-overlay-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.kt-overlay-icon {
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+}
+.kt-overlay-title h3 { margin: 0; font-size: 0.92rem; font-weight: 700; color: #f1f5f9; }
+.kt-overlay-title p  { margin: 0; font-size: 0.7rem; color: #64748b; }
+.kt-close-btn {
+    background: transparent; border: none; color: #64748b;
+    cursor: pointer; padding: 0.3rem; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s;
+}
+.kt-close-btn:hover { background: rgba(255,255,255,0.06); color: #f1f5f9; }
+.kt-field { margin-bottom: 0.95rem; }
+.kt-field label {
+    display: block;
+    font-size: 0.67rem; font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-bottom: 0.38rem;
+}
+.kt-field input, .kt-field textarea {
+    width: 100%; font-size: 0.84rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 7px;
+    background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.07);
+    color: #f1f5f9;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+.kt-field input:focus, .kt-field textarea:focus {
+    outline: none;
+    border-color: rgba(99,102,241,0.5);
+}
+.kt-field textarea { font-family: monospace; resize: vertical; line-height: 1.5; }
+.kt-field-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.38rem;
+}
+.kt-field-row label { margin: 0; }
+.kt-pub-textarea { background: rgba(46,204,113,0.04) !important; border-color: rgba(46,204,113,0.15) !important; color: #86efac !important; }
+.kt-overlay-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.65rem;
+    margin-top: 1.1rem;
+}
+.kt-btn-cancel {
+    padding: 0.48rem 1rem; font-size: 0.84rem; font-weight: 600;
+    border-radius: 7px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05);
+    color: #94a3b8; cursor: pointer; transition: all 0.15s;
+}
+.kt-btn-cancel:hover { background: rgba(255,255,255,0.09); color: #f1f5f9; }
+.kt-btn-save {
+    padding: 0.48rem 1.2rem; font-size: 0.84rem; font-weight: 700;
+    border-radius: 7px; border: none;
+    background: linear-gradient(135deg, #6366f1, #00d2ff);
+    color: #fff; cursor: pointer; transition: opacity 0.15s;
+    display: flex; align-items: center; gap: 0.4rem;
+}
+.kt-btn-save:hover { opacity: 0.88; }
+.kt-copy-btn {
+    font-size: 0.69rem; padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.05);
+    color: #94a3b8; cursor: pointer;
+    display: flex; align-items: center; gap: 0.25rem; transition: all 0.15s;
+}
+.kt-copy-btn:hover { background: rgba(255,255,255,0.1); color: #f1f5f9; }
+.kt-warn-box {
+    display: flex; align-items: flex-start; gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 7px;
+    background: rgba(245,158,11,0.06);
+    border: 1px solid rgba(245,158,11,0.18);
+    margin-bottom: 1rem;
+}
+.kt-warn-box span { font-size: 0.71rem; color: #fbbf24; line-height: 1.5; }
+
+/* 3 Sütunlu Grid Düzülüşü (Yan-yana 3 açar) */
+#coolify-ssh-keys-container {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 1rem !important;
+    width: 100% !important;
+    align-items: start !important;
+}
+@media (max-width: 1200px) {
+    #coolify-ssh-keys-container {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+@media (max-width: 768px) {
+    #coolify-ssh-keys-container {
+        grid-template-columns: 1fr !important;
+    }
+}
+.kt-card-compact {
+    background: rgba(15, 23, 42, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 3px solid #818cf8 !important;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.kt-card-compact:hover {
+    border-color: rgba(129, 140, 248, 0.35);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+</style>
+
+<!-- ═══════════════════════════════════════════════════
+     SSH KEY ADD OVERLAY (pəncərə yöneticisindən azad)
+════════════════════════════════════════════════════ -->
+<div id="kt-ssh-overlay" class="kt-overlay">
+    <div class="kt-overlay-card">
+        <div class="kt-overlay-header">
+            <div class="kt-overlay-title">
+                <div class="kt-overlay-icon" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.25);color:#818cf8;">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M12 11.586l8-8"/><path d="M20 3l1 1-1 1"/><path d="M17 6l1 1"/></svg>
+                </div>
+                <div>
+                    <h3>Yeni SSH Açarı Əlavə Et</h3>
+                    <p>Qlobal SSH Private Key</p>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+                <button type="button" class="kt-close-btn" onclick="minimizeWindow('kt-ssh-overlay')" title="Kiçilt" style="font-size:1.1rem;line-height:1;padding:0.2rem 0.45rem;">—</button>
+                <button type="button" class="kt-close-btn" onclick="ktHideOverlay('kt-ssh-overlay')" title="Bağla">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+        <form onsubmit="ktHandleCreateSshKey(event)">
+            <div class="kt-field">
+                <label>Açar Adı <span style="color:#ef4444;">*</span></label>
+                <input type="text" id="kt-key-name" required placeholder="Məs: Oracle-Always-Free-Key">
+            </div>
+            <div class="kt-field">
+                <label>Təsvir (İxtiyari)</label>
+                <input type="text" id="kt-key-desc" placeholder="Açar haqqında qısa məlumat">
+            </div>
+            <div class="kt-field">
+                <label>SSH Private Key <span style="color:#ef4444;">*</span></label>
+                <textarea id="kt-key-private" required rows="6" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----"></textarea>
+            </div>
+            <div class="kt-overlay-actions">
+                <button type="button" class="kt-btn-cancel" onclick="ktHideOverlay('kt-ssh-overlay')">Ləğv Et</button>
+                <button type="submit" class="kt-btn-save">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
+                    Açarı Yadda Saxla
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     RSA RESULT OVERLAY (pəncərə yöneticisindən azad)
+════════════════════════════════════════════════════ -->
+<div id="kt-rsa-overlay" class="kt-overlay">
+    <div class="kt-overlay-card wide">
+        <div class="kt-overlay-header">
+            <div class="kt-overlay-title">
+                <div class="kt-overlay-icon" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.25);color:#818cf8;">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M12 11.586l8-8"/><path d="M20 3l1 1-1 1"/><path d="M17 6l1 1"/></svg>
+                </div>
+                <div>
+                    <h3>RSA 4096-bit Açar Cütü Hazırdır</h3>
+                    <p>Private key gizli, Public key serverlərə əlavə edilməli</p>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+                <button type="button" class="kt-close-btn" onclick="minimizeWindow('kt-rsa-overlay')" title="Kiçilt" style="font-size:1.1rem;line-height:1;padding:0.2rem 0.45rem;">—</button>
+                <button type="button" class="kt-close-btn" onclick="ktHideOverlay('kt-rsa-overlay')" title="Bağla">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="kt-field">
+            <label>Açar Adı <span style="color:#ef4444;">*</span></label>
+            <input type="text" id="rsa-key-name" placeholder="Məs: My-Server-RSA-Key">
+        </div>
+
+        <div class="kt-field">
+            <div class="kt-field-row">
+                <label>Public Key</label>
+                <button class="kt-copy-btn" onclick="ktCopyField('rsa-pub-display','Public Key')">
+                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    Kopyala
+                </button>
+            </div>
+            <textarea id="rsa-pub-display" readonly rows="3" class="kt-pub-textarea"></textarea>
+        </div>
+
+        <div class="kt-field">
+            <div class="kt-field-row">
+                <label>Private Key <span style="color:#f59e0b;font-size:0.62rem;font-weight:500;text-transform:none;">— Heç kimlə paylaşmayın</span></label>
+                <button class="kt-copy-btn" onclick="ktCopyField('rsa-priv-display','Private Key')">
+                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    Kopyala
+                </button>
+            </div>
+            <textarea id="rsa-priv-display" readonly rows="5" style="color:#94a3b8;"></textarea>
+        </div>
+
+        <div class="kt-warn-box">
+            <svg width="13" height="13" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <span>Bu açar yalnız bir dəfə göstərilir. İndi kopyalayıb təhlükəsiz bir yerdə saxlayın.</span>
+        </div>
+
+        <div class="kt-overlay-actions">
+            <button class="kt-btn-cancel" onclick="ktHideOverlay('kt-rsa-overlay')">Ləğv Et</button>
+            <button class="kt-btn-save" onclick="saveRsaGeneratedKey()">
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
+                Açarı Yadda Saxla
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     SSH KEY EDIT OVERLAY (pəncərə yöneticisindən azad)
+════════════════════════════════════════════════════ -->
+<div id="kt-edit-ssh-overlay" class="kt-overlay">
+    <div class="kt-overlay-card">
+        <div class="kt-overlay-header">
+            <div class="kt-overlay-title">
+                <div class="kt-overlay-icon" style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.25);color:#818cf8;">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </div>
+                <div>
+                    <h3>SSH Açarını Redaktə Et</h3>
+                    <p>Qlobal SSH açarı məlumatları</p>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+                <button type="button" class="kt-close-btn" onclick="minimizeWindow('kt-edit-ssh-overlay')" title="Kiçilt" style="font-size:1.1rem;line-height:1;padding:0.2rem 0.45rem;">—</button>
+                <button type="button" class="kt-close-btn" onclick="ktHideOverlay('kt-edit-ssh-overlay')" title="Bağla">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+        <form onsubmit="ktHandleUpdateSshKey(event)">
+            <input type="hidden" id="kt-edit-key-id">
+            <div class="kt-field">
+                <label>Açar Adı <span style="color:#ef4444;">*</span></label>
+                <input type="text" id="kt-edit-key-name" required placeholder="Məs: Oracle-Always-Free-Key">
+            </div>
+            <div class="kt-field">
+                <label>Təsvir (İxtiyari)</label>
+                <input type="text" id="kt-edit-key-desc" placeholder="Açar haqqında qısa məlumat">
+            </div>
+            <div class="kt-overlay-actions">
+                <button type="button" class="kt-btn-cancel" onclick="ktHideOverlay('kt-edit-ssh-overlay')">Ləğv Et</button>
+                <button type="submit" class="kt-btn-save">
+                    <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13"/><polyline points="7 3 7 8 15 8"/></svg>
+                    Dəyişiklikləri Saxla
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ANA PANEL
+════════════════════════════════════════════════════ -->
+<div style="width:100%;display:flex;flex-direction:column;gap:1.2rem;animation:fadeIn 0.3s ease-out;">
+
+    <!-- Controls: Search & Tabs Navigation -->
+    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:0.8rem;padding-bottom:0.9rem;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <!-- Tab Switchers -->
+        <div style="display:flex;align-items:center;gap:5px;padding:4px;background:rgba(15,23,42,0.5);border:1px solid rgba(255,255,255,0.05);border-radius:10px;flex-wrap:wrap;">
+            <button onclick="switchCoolifySubTab('ssh')" id="subtab-btn-ssh" style="padding:0.36rem 0.85rem;border-radius:6px;border:none;font-size:0.77rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:0.32rem;background:var(--accent-color);color:#000;transition:all 0.2s;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M12 11.586l8-8"/><path d="M20 3l1 1-1 1"/><path d="M17 6l1 1"/></svg>
+                SSH Keys
+                <span id="subtab-badge-ssh" style="padding:1px 6px;font-size:0.64rem;background:rgba(0,0,0,0.2);color:#000;border-radius:20px;font-weight:700;">--</span>
+            </button>
+            <button onclick="switchCoolifySubTab('system-key')" id="subtab-btn-system-key" style="padding:0.36rem 0.85rem;border-radius:6px;border:none;font-size:0.77rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:0.32rem;background:transparent;color:var(--text-secondary);transition:all 0.2s;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Sistem Açarı (Lokal)
+                <span id="subtab-badge-system-key" style="padding:1px 6px;font-size:0.64rem;background:rgba(46,204,113,0.12);color:#2ecc71;border-radius:20px;font-weight:700;">Aktiv</span>
+            </button>
+            <button onclick="switchCoolifySubTab('api')" id="subtab-btn-api" style="padding:0.36rem 0.85rem;border-radius:6px;border:none;font-size:0.77rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:0.32rem;background:transparent;color:var(--text-secondary);transition:all 0.2s;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                API Tokens
+                <span id="subtab-badge-api" style="padding:1px 6px;font-size:0.64rem;background:rgba(255,255,255,0.08);color:var(--text-secondary);border-radius:20px;font-weight:700;">--</span>
+            </button>
+            <button onclick="switchCoolifySubTab('cloud')" id="subtab-btn-cloud" style="padding:0.36rem 0.85rem;border-radius:6px;border:none;font-size:0.77rem;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:0.32rem;background:transparent;color:var(--text-secondary);transition:all 0.2s;">
+                <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 109 20h9a5 5 0 000-10z"/></svg>
+                Cloud
+                <span id="subtab-badge-cloud" style="padding:1px 6px;font-size:0.64rem;background:rgba(255,255,255,0.08);color:var(--text-secondary);border-radius:20px;font-weight:700;">0</span>
+            </button>
+        </div>
+
+        <!-- Search + Add -->
+        <div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+            <!-- Chrome Autofill Decoy -->
+            <div style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0; overflow: hidden;" tabindex="-1">
+                <input type="text" name="fake_user" tabindex="-1" autocomplete="username">
+                <input type="password" name="fake_pass" tabindex="-1" autocomplete="current-password">
+            </div>
+
+            <div style="position:relative;display:flex;align-items:center;">
+                <svg style="position:absolute;left:8px;width:13px;height:13px;color:var(--text-secondary);pointer-events:none;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="search" id="coolify-search-keys" 
+                       readonly 
+                       onfocus="this.removeAttribute('readonly')" 
+                       onblur="this.setAttribute('readonly', 'readonly')" 
+                       oninput="filterCoolifyKeys()" 
+                       autocomplete="off" 
+                       name="coolify_search_keys_secure" 
+                       autocorrect="off" 
+                       autocapitalize="off" 
+                       spellcheck="false" 
+                       data-lpignore="true" 
+                       data-form-type="other" 
+                       placeholder="Axtar..." 
+                       style="font-size:0.77rem;padding:0.38rem 1.8rem 0.38rem 1.9rem;border-radius:8px;width:190px;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.07);color:#f1f5f9;outline:none;cursor:text;">
+                <button type="button" id="coolify-search-clear-btn" onclick="clearCoolifyKeysSearch()" style="display:none;position:absolute;right:6px;background:transparent;border:none;color:#94a3b8;cursor:pointer;font-size:0.8rem;padding:2px;" title="Axtarışı təmizlə">✕</button>
+            </div>
+            <!-- Dropdown Add Menu -->
+            <div style="position:relative;display:inline-block;" id="keys-add-wrapper">
+                <button type="button" onclick="ktToggleAddMenu(event)" style="padding:0.4rem 0.85rem;font-size:0.77rem;font-weight:600;border:none;border-radius:8px;background:linear-gradient(135deg,#6366f1,#00d2ff);color:#fff;cursor:pointer;display:flex;align-items:center;gap:0.35rem;transition:opacity 0.15s;" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">
+                    <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span>Əlavə Et</span>
+                    <svg width="10" height="10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24" style="margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div id="keys-add-dropdown-menu" style="display:none;position:absolute;right:0;top:calc(100% + 6px);width:260px;background:#182234;border:1px solid rgba(255,255,255,0.12);border-radius:10px;box-shadow:0 12px 35px rgba(0,0,0,0.65);z-index:9999;padding:6px;backdrop-filter:blur(10px);">
+                    <!-- 1. Mövcud SSH Açarı -->
+                    <div onclick="ktSelectAddOption('ssh')" style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:7px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                        <div style="width:30px;height:30px;border-radius:6px;background:rgba(99,102,241,0.15);color:#818cf8;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M12 11.586l8-8"/><path d="M20 3l1 1-1 1"/><path d="M17 6l1 1"/></svg>
+                        </div>
+                        <div>
+                            <div style="font-size:0.82rem;font-weight:600;color:#f1f5f9;">Mövcud SSH Açarı</div>
+                            <div style="font-size:0.68rem;color:#94a3b8;">Öz SSH Private Key-inizi daxil edin</div>
+                        </div>
+                    </div>
+                    <!-- 2. Yeni RSA Açar Yarat -->
+                    <div onclick="ktSelectAddOption('rsa')" style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:7px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                        <div style="width:30px;height:30px;border-radius:6px;background:rgba(46,204,113,0.15);color:#2ecc71;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                        </div>
+                        <div>
+                            <div style="font-size:0.82rem;font-weight:600;color:#f1f5f9;">Yeni RSA Açar Yarat</div>
+                            <div style="font-size:0.68rem;color:#94a3b8;">Avtomatik 4096-bit RSA cüt açar</div>
+                        </div>
+                    </div>
+                    <!-- 3. GitHub PAT Tokeni -->
+                    <div onclick="ktSelectAddOption('api')" style="display:flex;align-items:center;gap:0.75rem;padding:0.6rem 0.75rem;border-radius:7px;cursor:pointer;transition:background 0.15s;" onmouseover="this.style.background='rgba(255,255,255,0.06)'" onmouseout="this.style.background='transparent'">
+                        <div style="width:30px;height:30px;border-radius:6px;background:rgba(124,58,237,0.15);color:#a78bfa;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                            <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        </div>
+                        <div>
+                            <div style="font-size:0.82rem;font-weight:600;color:#f1f5f9;">GitHub PAT Token</div>
+                            <div style="font-size:0.68rem;color:#94a3b8;">Özəl repozitoriyalara giriş</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SSH KEYS TAB -->
+    <div id="coolify-content-ssh" style="display:flex;flex-direction:column;gap:0.65rem;width:100%;">
+        <!-- Dinamik İstifadəçi SSH açarları (Silinə və redaktə oluna bilən) -->
+        <div id="coolify-ssh-keys-container" style="display:flex;flex-direction:column;gap:0.65rem;width:100%;"></div>
+    </div>
+
+    <!-- SİSTEM LOKAL SSH AÇARI TAB (AYRICA BÖLMƏ) -->
+    <div id="coolify-content-system-key" style="display:none;flex-direction:column;gap:0.85rem;width:100%;">
+        <!-- İzah Kartı -->
+        <div style="display:flex;align-items:flex-start;gap:0.85rem;padding:1rem 1.2rem;border:1px solid rgba(46,204,113,0.25);border-radius:10px;background:rgba(46,204,113,0.04);">
+            <div style="width:34px;height:34px;border-radius:8px;background:rgba(46,204,113,0.12);display:flex;align-items:center;justify-content:center;color:#2ecc71;flex-shrink:0;">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+            <div style="flex:1;">
+                <h4 style="margin:0 0 0.25rem 0;font-size:0.9rem;font-weight:600;color:#f1f5f9;">MasterDeploy Host Sistem Açarı (Default)</h4>
+                <p style="margin:0 0 0.5rem 0;font-size:0.78rem;color:#94a3b8;line-height:1.45;">
+                    Bu açar panelin daxili sabit açarıdır. Xarici serverlərinizə (məs: Oracle Cloud, VPS və s.) birbaşa şifrəsiz daxil olub layihələri idarə etmək üçün istifadə olunur.
+                </p>
+                <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.74rem;color:#64748b;">
+                    <span>🛡️ <strong>Məlumat:</strong> Bu açar sistemin əsas dayağı olduğu üçün silinməyə qapalı saxlanılır.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Açar Məlumat Kartı -->
+        <div class="item-card" style="border:1px solid rgba(255,255,255,0.08);border-radius:10px;overflow:hidden;border-left:3px solid #2ecc71;background:rgba(15,23,42,0.4);">
+            <div style="padding:1.1rem;display:flex;flex-direction:column;gap:0.9rem;">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+                    <div>
+                        <span style="display:block;font-size:0.68rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.25rem;">İctimai Açar (Public Key)</span>
+                        <span style="font-size:0.75rem;color:var(--text-secondary);">Serverinizdəki <code>~/.ssh/authorized_keys</code> faylına əlavə edilməli olan mətn</span>
+                    </div>
+                    <span style="font-size:0.7rem;padding:2px 8px;border-radius:4px;background:rgba(46,204,113,0.12);color:#2ecc71;font-weight:600;display:flex;align-items:center;gap:0.3rem;">
+                        <svg width="7" height="7" viewBox="0 0 8 8" fill="#2ecc71"><circle cx="4" cy="4" r="4"/></svg>Aktiv & Hazır
+                    </span>
+                </div>
+
+                <div style="position:relative;display:flex;align-items:center;">
+                    <span class="kt-key-span" id="coolify-local-key-mask" style="flex:1;font-family:monospace;font-size:0.74rem;padding:0.6rem 3.5rem 0.6rem 0.8rem;border-radius:7px;border:1px solid rgba(255,255,255,0.07);background:rgba(0,0,0,0.4);color:#86efac;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                        Yüklənir...
+                    </span>
+                    <button onclick="event.stopPropagation();ktToggleKey(this)" data-masked="true" style="position:absolute;right:10px;background:transparent;border:none;color:var(--accent-color);cursor:pointer;font-size:0.74rem;font-weight:600;">Tam Göstər</button>
+                </div>
+                <input type="hidden" id="local-ssh-public-key-value" value="">
+
+                <div style="display:flex;justify-content:space-between;align-items:center;padding-top:0.4rem;border-top:1px solid rgba(255,255,255,0.05);flex-wrap:wrap;gap:0.5rem;">
+                    <span style="font-size:0.72rem;color:#64748b;">Server terminalında: <code>echo "..." &gt;&gt; ~/.ssh/authorized_keys</code></span>
+                    <button onclick="event.stopPropagation();ktCopyField('local-ssh-public-key-value','MasterDeploy Sistem Public Açarı')" style="padding:0.45rem 1.1rem;font-size:0.78rem;font-weight:600;border-radius:6px;border:1px solid rgba(46,204,113,0.3);background:rgba(46,204,113,0.12);color:#86efac;cursor:pointer;display:flex;align-items:center;gap:0.4rem;transition:background 0.15s;" onmouseover="this.style.background='rgba(46,204,113,0.22)'" onmouseout="this.style.background='rgba(46,204,113,0.12)'">
+                        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        📋 Açarı Kopyala
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API TOKENS TAB -->
+    <div id="coolify-content-api" style="display:none;flex-direction:column;gap:0.65rem;width:100%;">
+        <div class="item-card" style="border:1px solid rgba(255,255,255,0.06);border-radius:10px;overflow:hidden;border-left:3px solid #7c3aed;">
+            <div onclick="toggleCardDetail(this)" style="padding:0.88rem 1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:1rem;" onmouseover="this.style.background='rgba(255,255,255,0.02)'" onmouseout="this.style.background='transparent'">
+                <div style="display:flex;align-items:center;gap:0.85rem;min-width:0;flex:1;">
+                    <div style="width:36px;height:36px;border-radius:8px;background:rgba(124,58,237,0.12);border:1px solid rgba(124,58,237,0.22);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#a78bfa;">
+                        <svg width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                    </div>
+                    <div style="min-width:0;flex:1;">
+                        <div style="display:flex;align-items:center;gap:0.45rem;">
+                            <h4 style="margin:0;font-weight:600;font-size:0.88rem;color:#f1f5f9;">GitHub Personal Access Token (PAT)</h4>
+                            <span id="coolify-github-token-status-badge" style="font-size:0.64rem;padding:2px 7px;border-radius:4px;background:rgba(255,255,255,0.07);color:var(--text-secondary);font-weight:600;">Yoxlanılır...</span>
+                        </div>
+                        <p style="margin:0.16rem 0 0 0;font-size:0.74rem;color:var(--text-secondary);">Özəl repozitoriyalara giriş üçün GitHub PAT tokeni.</p>
+                    </div>
+                </div>
+                <div class="chevron-icon" style="transition:transform 0.2s;color:var(--text-secondary);"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></div>
+            </div>
+            <div class="card-details" style="display:none;flex-direction:column;gap:0.75rem;padding:1rem 1.1rem;border-top:1px solid rgba(255,255,255,0.05);background:rgba(0,0,0,0.15);">
+                <div>
+                    <label style="display:block;font-size:0.66rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.38rem;">GitHub PAT Token</label>
+                    <div style="display:flex;align-items:center;gap:0.4rem;">
+                        <form autocomplete="off" onsubmit="return false;" style="margin:0;padding:0;display:contents;">
+                            <input type="text" name="fake_user_pane" style="display:none;" tabindex="-1" autocomplete="username">
+                            <input type="password" name="fake_pass_pane" style="display:none;" tabindex="-1" autocomplete="current-password">
+                            <div style="position:relative;flex:1;display:flex;align-items:center;">
+                                <input type="password" id="pane-gh-token" autocomplete="new-password" name="gh_pat_token_field" placeholder="ghp_..." style="font-family:monospace;font-size:0.82rem;padding:0.46rem 2.4rem 0.46rem 0.6rem;width:100%;background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.05);border-radius:6px;color:#f1f5f9;box-sizing:border-box;">
+                                <button type="button" onclick="togglePaneGithubTokenVisibility(event)" style="position:absolute;right:8px;background:transparent;border:none;color:var(--text-secondary);cursor:pointer;display:flex;align-items:center;">
+                                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </div>
+                        </form>
+                        <button onclick="savePaneGithubToken()" style="padding:0.46rem 0.9rem;font-size:0.82rem;font-weight:700;border:none;border-radius:6px;background:linear-gradient(135deg,#7c3aed,#00d2ff);color:#fff;cursor:pointer;white-space:nowrap;">Saxla</button>
+                    </div>
+                </div>
+                <div style="background:rgba(255,255,255,0.02);padding:0.5rem 0.75rem;border-radius:6px;border:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;justify-content:space-between;">
+                    <span style="font-size:0.74rem;color:var(--text-secondary);">Bağlantı Statusu</span>
+                    <strong id="pane-gh-status" style="color:#94a3b8;font-size:0.74rem;">Yoxlanılır...</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CLOUD TAB -->
+    <div id="coolify-content-cloud" style="display:none;flex-direction:column;gap:0.65rem;width:100%;">
+        <div style="padding:2.5rem;text-align:center;color:#475569;font-size:0.82rem;border:1px dashed rgba(255,255,255,0.07);border-radius:10px;">
+            Hələ heç bir bulud xidməti əlavə edilməyib.
+        </div>
+    </div>
+</div>
                 </div>
             </section>
 
@@ -1279,33 +1799,106 @@
         </div>
     </div>
 
-    <!-- Fəaliyyət Jurnalı Modal -->
+    <!-- Fəaliyyət Jurnalı və Canlı Debug Monitoru Modal -->
     <div id="activity-log-modal" class="modal-backdrop">
-        <div class="modal-card" style="max-width: 800px; width: 95%; height: 75vh; display: flex; flex-direction: column;">
-            <div style="padding: 1.5rem 1.5rem 10px 1.5rem; display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <div>
-                        <div style="margin: 0; font-size: 1.3rem; font-weight: bold; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">📋 Fəaliyyət Jurnalı <span onclick="renderActivityLogs()" style="cursor: pointer; font-size: 1.05rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'" title="Loqları Yenilə">🔄</span></div>
-                        <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Panel daxilində icra edilmiş hərəkətlər</p>
+        <div class="modal-card" style="max-width: 950px; width: 95%; height: 85vh; display: flex; flex-direction: column;">
+            <div style="padding: 1.25rem 1.5rem 10px 1.5rem; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <!-- Başlıq və Canlı Status Çubuğu -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                            📋 Fəaliyyət Jurnalı & Live Debug
+                        </div>
+                        <span id="activity-live-badge" class="live-stream-badge" title="Canlı izləmə aktivdir">
+                            <span class="pulse-dot"></span> CANLI YAYIM
+                        </span>
+                        <span id="activity-last-update-time" style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">--:--</span>
+                    </div>
+
+                    <!-- İdarəetmə Düymələri (Sağ tərəf) -->
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button id="btn-activity-stream-toggle" class="btn btn-secondary" onclick="toggleActivityStream()" style="padding: 5px 10px; font-size: 0.78rem; display: flex; align-items: center; gap: 5px;" title="Canlı axını dondur və ya davam etdir">
+                            <span id="stream-toggle-icon">⏸️</span> <span id="stream-toggle-text">Dondur</span>
+                        </button>
+                        <div style="display: flex; background: var(--bg-card); border: 1px solid var(--card-border); border-radius: 6px; padding: 2px; gap: 2px;">
+                            <button id="btn-view-cards" class="activity-filter-pill active" onclick="setActivityViewMode('cards')" style="border: none; padding: 4px 8px; font-size: 0.75rem;">🗂️ Kartlar</button>
+                            <button id="btn-view-terminal" class="activity-filter-pill" onclick="setActivityViewMode('terminal')" style="border: none; padding: 4px 8px; font-size: 0.75rem;">💻 Terminal</button>
+                        </div>
+                        <button class="btn btn-secondary" onclick="renderActivityLogs()" style="padding: 5px 9px; font-size: 0.85rem;" title="Loqları dərhal yenilə">🔄</button>
                     </div>
                 </div>
-                <div class="activity-tabs" style="display: flex; gap: 8px; margin-bottom: 12px;">
-                    <button class="activity-tab-btn active" onclick="filterActivityLogs('all')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--primary-color); background: var(--bg-card); color: var(--text-primary); transition: all 0.2s;">Hamısı</button>
-                    <button class="activity-tab-btn" onclick="filterActivityLogs('masterdeploy')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">MasterDeploy</button>
-                    <button class="activity-tab-btn" onclick="filterActivityLogs('apps')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">Layihələr</button>
-                    <button class="activity-tab-btn" onclick="filterActivityLogs('servers')" style="flex: 1; padding: 6px; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-secondary); transition: all 0.2s;">Serverlər</button>
+
+                <!-- KPI İcmal Paneli -->
+                <div class="activity-kpi-container">
+                    <div class="activity-kpi-card">
+                        <span class="activity-kpi-label">Ümumi Hadisələr</span>
+                        <span id="stat-total-logs" class="activity-kpi-val">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #ff5252;">
+                        <span class="activity-kpi-label" style="color: #ff5252;">❌ Xətalar</span>
+                        <span id="stat-error-logs" class="activity-kpi-val" style="color: #ff5252;">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #ffb86c;">
+                        <span class="activity-kpi-label" style="color: #ffb86c;">⚠️ Xəbərdarlıq</span>
+                        <span id="stat-warn-logs" class="activity-kpi-val" style="color: #ffb86c;">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #69f0ae;">
+                        <span class="activity-kpi-label" style="color: #69f0ae;">✅ Uğurlu / Deploy</span>
+                        <span id="stat-success-logs" class="activity-kpi-val" style="color: #69f0ae;">0</span>
+                    </div>
                 </div>
-                <div id="activity-log-list"
-                    style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; padding-bottom: 10px; min-height: 0;">
-                    <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 20px; opacity: 0.5;">Hərəkət qeydə alınmayıb</div>
+
+                <!-- Canlı Axtarış və Filtrlər -->
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="position: relative; flex: 1;">
+                            <input type="text" id="activity-search-input" placeholder="🔍 Layihə adı, port, server və ya xəta axtar..." oninput="handleActivitySearch()"
+                                style="width: 100%; padding: 7px 12px 7px 32px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-primary); outline: none;" />
+                            <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0.5; font-size: 0.85rem;">🔍</span>
+                        </div>
+                        <button id="btn-autoscroll-toggle" class="btn btn-secondary" onclick="toggleActivityAutoScroll()" style="padding: 7px 11px; font-size: 0.78rem; white-space: nowrap;" title="Son loqa avto-sürüşdürmə">
+                            ⬇️ <span id="autoscroll-text">Avto-Scroll: Açıq</span>
+                        </button>
+                    </div>
+
+                    <!-- Kateqoriya və Səviyyə Filtrləri -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <!-- Səviyyələr (Severity) -->
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="activity-filter-pill active" data-filter-type="level" data-filter-val="all" onclick="setActivityFilter('level', 'all')">Hamısı</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="error" onclick="setActivityFilter('level', 'error')" style="color: #ff5252;">❌ Xətalar</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="warning" onclick="setActivityFilter('level', 'warning')" style="color: #ffb86c;">⚠️ Xəbərdarlıq</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="success" onclick="setActivityFilter('level', 'success')" style="color: #69f0ae;">✅ Uğurlu</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="info" onclick="setActivityFilter('level', 'info')" style="color: #40c4ff;">ℹ️ Məlumat</span>
+                        </div>
+                        <!-- Modullar (Modules) -->
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="activity-filter-pill active" data-filter-type="module" data-filter-val="all" onclick="setActivityFilter('module', 'all')">Bütün Sahələr</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="apps" onclick="setActivityFilter('module', 'apps')">📦 Layihələr</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="servers" onclick="setActivityFilter('module', 'servers')">🖥️ Serverlər</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="deploy" onclick="setActivityFilter('module', 'deploy')">🚀 Deploy</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="system" onclick="setActivityFilter('module', 'system')">⚙️ Sistem</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="modal-actions"
-                    style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--card-border); margin-bottom: 0px;">
+
+                <!-- 1. Vizuallaşdırılmış Kart Görünüşü -->
+                <div id="activity-cards-view" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; padding-bottom: 6px; min-height: 0;">
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 25px; opacity: 0.5;">Yüklənir...</div>
+                </div>
+
+                <!-- 2. Terminal / Live Debug Console Görünüşü -->
+                <div id="activity-terminal-view" class="activity-terminal-box" style="display: none;">
+                    <div style="color: #8b949e; margin-bottom: 8px;">// MasterDeploy Canlı Debug Konsolu aktivdir...</div>
+                </div>
+
+                <!-- Modal Alt Paneli -->
+                <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); margin-bottom: 0px;">
                     <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important;">🧹 Jurnalı Təmizlə</button>
-                        <button class="btn btn-secondary" onclick="copyCurrentSectionLogs()">📋 Bölməni Kopyala</button>
+                        <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important; font-size: 0.8rem;">🧹 Jurnalı Təmizlə</button>
+                        <button class="btn btn-secondary" onclick="copyCurrentSectionLogs()" style="font-size: 0.8rem;">📋 Loqları Kopyala</button>
                     </div>
-                    <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')">Bağla</button>
+                    <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')" style="font-size: 0.8rem;">Bağla</button>
                 </div>
             </div>
         </div>
@@ -1886,7 +2479,8 @@
 
     <!-- JavaScript Files -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="app.js?v=4.0"></script>
+    <script src="keys_tokens.js?v=2.7"></script>
+    <script src="app.js?v=4.9"></script>
 </body>
 
 </html>
