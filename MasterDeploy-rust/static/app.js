@@ -2823,6 +2823,20 @@ async function openAppSettings(appId, showModalBool = true) {
         const regImgEl = document.getElementById('settings-registry-image');
         if (regImgEl) regImgEl.value = regImg;
 
+        // Auto-Deploy Fields
+        const autoEnabledEl = document.getElementById('settings-autodeploy-enabled');
+        if (autoEnabledEl) {
+            autoEnabledEl.checked = app.auto_deploy_enabled === 1;
+        }
+        const autoIntervalEl = document.getElementById('settings-autodeploy-interval');
+        if (autoIntervalEl) {
+            autoIntervalEl.value = app.auto_deploy_interval != null ? String(app.auto_deploy_interval) : '15';
+        }
+        const autoTimeoutEl = document.getElementById('settings-autodeploy-timeout');
+        if (autoTimeoutEl) {
+            autoTimeoutEl.value = app.auto_deploy_timeout != null ? String(app.auto_deploy_timeout) : '10';
+        }
+
         const bpt = app.build_pack_type || 'dockerfile';
         settingsSelectBuild(bpt);
 
@@ -2881,6 +2895,9 @@ function buildSettingsPayload() {
         cf_worker_url: document.getElementById('settings-cf-worker-url').value.trim() || null,
         deploy_type: document.getElementById('settings-deploy-type').value,
         registry_image: document.getElementById('settings-registry-image').value.trim() || null,
+        auto_deploy_enabled: document.getElementById('settings-autodeploy-enabled')?.checked ? 1 : 0,
+        auto_deploy_interval: parseInt(document.getElementById('settings-autodeploy-interval')?.value) || 15,
+        auto_deploy_timeout: parseInt(document.getElementById('settings-autodeploy-timeout')?.value) || 10,
     };
 }
 
@@ -2936,6 +2953,94 @@ async function cacheDeployApp() {
     localStorage.removeItem(`pending_redeploy_${appId}`);
     markRedeployPending(false);
     deployApp(appId, false); // no_cache=false → Docker keşini istifadə edir (sürətli)
+}
+
+// ============================================================
+// Auto-Deploy: Manual Check Trigger (⚡ İndi Yoxla)
+// ============================================================
+let isManualDeployChecking = false;
+
+async function triggerManualDeployCheck(appId) {
+    if (!appId) {
+        appId = currentSettingsAppId || currentAppId || currentAppDetailsId;
+    }
+    if (!appId) {
+        showToast('Zəhmət olmasa yoxlamaq üçün layihə seçin.', 'warning');
+        return;
+    }
+    if (isManualDeployChecking) {
+        showToast('Yoxlanış artıq aparılır, zəhmət olmasa gözləyin...', 'info');
+        return;
+    }
+
+    isManualDeployChecking = true;
+
+    // UI Düyməsinin vəziyyətini dəyişirik
+    const checkBtns = [document.getElementById('btn-app-check-deploy')];
+    const originalTexts = [];
+
+    checkBtns.forEach(btn => {
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+            btn.style.cursor = 'not-allowed';
+            const txtEl = btn.querySelector('#btn-app-check-deploy-text') || btn;
+            originalTexts.push({ btn, html: btn.innerHTML });
+            btn.innerHTML = `<svg class="spin-icon" style="width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round;animation:spin 1s linear infinite;" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> <span>Yoxlanılır...</span>`;
+        }
+    });
+
+    showToast('🔎 Auto-Deploy yoxlanışı başladı... Cavab gözlənilir.', 'info');
+
+    try {
+        const res = await fetch(`/api/applications/${appId}/check-deploy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            if (data.status === 'new_version') {
+                showToast(`🚀 ${data.message}`, 'success');
+            } else if (data.status === 'up_to_date') {
+                showToast(`✅ ${data.message}`, 'success');
+            } else if (data.status === 'timeout') {
+                showToast(`⏳ ${data.message}`, 'warning');
+            } else {
+                showToast(`⚠️ ${data.message || 'Yoxlanış başa çatdı.'}`, 'warning');
+            }
+        } else {
+            const errText = await res.text();
+            showToast(`❌ Yoxlama xətası: ${errText}`, 'error');
+        }
+
+        // Fəaliyyət jurnalını və Overview detallarını yeniləyirik
+        if (typeof renderActivityLogs === 'function') {
+            renderActivityLogs();
+        }
+        // Əgər app details açıqdırsa məlumatları yenidən yükləyirik
+        if (typeof openAppDetails === 'function' && currentAppDetailsId === appId) {
+            openAppDetails(appId, false);
+        }
+
+    } catch (e) {
+        console.error('triggerManualDeployCheck error', e);
+        showToast(`❌ Şəbəkə xətası: ${e.message}`, 'error');
+    } finally {
+        // Təhlükəsizlik üçün ən azı 3 saniyə düyməni blokda saxlayırıq
+        setTimeout(() => {
+            isManualDeployChecking = false;
+            originalTexts.forEach(item => {
+                if (item.btn) {
+                    item.btn.disabled = false;
+                    item.btn.style.opacity = '1';
+                    item.btn.style.cursor = 'pointer';
+                    item.btn.innerHTML = item.html;
+                }
+            });
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }, 3000);
+    }
 }
 
 // Redeploy düyməsinə pending sinifini əlavə et / sil
@@ -4260,6 +4365,29 @@ async function openAppDetails(appId, autoSwitchToOverview = true) {
         document.getElementById('detail-overview-repo').innerText = app.repo_url || '-';
         document.getElementById('detail-overview-branch').innerText = app.branch || '-';
         document.getElementById('detail-overview-port').innerText = app.port || '-';
+
+        // Populate Auto-Deploy Overview
+        const adStatusEl = document.getElementById('detail-overview-autodeploy-status');
+        if (adStatusEl) {
+            if (app.auto_deploy_enabled === 1) {
+                adStatusEl.innerHTML = '<span style="color: #00e676; display: inline-flex; align-items: center; gap: 4px;"><span style="width:7px;height:7px;border-radius:50%;background:#00e676;display:inline-block;"></span> Aktivdir</span>';
+            } else {
+                adStatusEl.innerHTML = '<span style="color: #94a3b8; display: inline-flex; align-items: center; gap: 4px;"><span style="width:7px;height:7px;border-radius:50%;background:#64748b;display:inline-block;"></span> Sönülüdür ⚪</span>';
+            }
+        }
+        const adIntervalEl = document.getElementById('detail-overview-autodeploy-interval');
+        if (adIntervalEl) {
+            const intVal = app.auto_deploy_interval || 15;
+            adIntervalEl.innerText = intVal >= 60 ? `${Math.round(intVal / 60)} saat` : `${intVal} dəqiqə`;
+        }
+        const adTimeoutEl = document.getElementById('detail-overview-autodeploy-timeout');
+        if (adTimeoutEl) {
+            adTimeoutEl.innerText = `${app.auto_deploy_timeout || 10} saniyə`;
+        }
+        const adLastEl = document.getElementById('detail-overview-autodeploy-last');
+        if (adLastEl) {
+            adLastEl.innerText = app.last_auto_deploy_check ? app.last_auto_deploy_check : 'Hələ yoxlanılmayıb';
+        }
 
         // Populate Settings inputs using existing function but bypassing modal
         console.time("[CALL] openAppSettings");

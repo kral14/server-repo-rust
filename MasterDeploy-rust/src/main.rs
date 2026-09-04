@@ -93,6 +93,7 @@ async fn main() {
         .route("/api/applications/:app_id", get(get_application).put(update_application).delete(delete_application))
         .route("/api/applications/:app_id/stop", post(stop_application))
         .route("/api/applications/:app_id/restart", post(restart_application))
+        .route("/api/applications/:app_id/check-deploy", post(check_application_deploy))
         .route("/api/deploy/:app_id", post(trigger_deployment))
         .nest("/api/plugins/cloudflare", Router::new()
             .route("/start/:app_id", post(plugins::cloudflare::start_cloudflare_tunnel))
@@ -1544,7 +1545,9 @@ async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec<App
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image \
+         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
+         CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
          FROM applications \
          WHERE name NOT LIKE 'cf-tunnel-%' AND name NOT LIKE 'masterdeploy-%' AND TRIM(name) != '' \
          ORDER BY created_at DESC"
@@ -1567,14 +1570,18 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
     let id = Uuid::new_v4().to_string();
     let bp_type = input.build_pack_type.clone().unwrap_or_else(|| "dockerfile".to_string());
     let dep_type = input.deploy_type.clone().unwrap_or_else(|| "git".to_string());
+    let auto_enabled = input.auto_deploy_enabled.unwrap_or(0);
+    let auto_interval = input.auto_deploy_interval.unwrap_or(15);
+    let auto_timeout = input.auto_deploy_timeout.unwrap_or(10);
     
     sqlx::query(
         "INSERT INTO applications (
             id, name, repo_url, branch, port, server_id, status, env_vars,
             build_pack_type, build_command, run_command, dockerfile_path,
             entrypoint, command, target, work_dir, privileged, memory_limit, cpu_limit,
-            deploy_type, registry_image
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            deploy_type, registry_image,
+            auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(&id)
     .bind(&input.name)
@@ -1597,6 +1604,9 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
     .bind(input.cpu_limit)
     .bind(&dep_type)
     .bind(&input.registry_image)
+    .bind(auto_enabled)
+    .bind(auto_interval)
+    .bind(auto_timeout)
     .execute(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
@@ -1626,6 +1636,10 @@ async fn create_application(State(state): State<AppState>, Json(input): Json<Cre
         cf_worker_url: None,
         deploy_type: Some(dep_type),
         registry_image: input.registry_image,
+        auto_deploy_enabled: Some(auto_enabled),
+        auto_deploy_interval: Some(auto_interval),
+        auto_deploy_timeout: Some(auto_timeout),
+        last_auto_deploy_check: None,
         created_at: String::new(),
         updated_at: String::new(),
     };
@@ -1642,7 +1656,9 @@ async fn get_application(State(state): State<AppState>, AxumPath(app_id): AxumPa
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image \
+         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
+         CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
          FROM applications WHERE id = ?"
     )
     .bind(&app_id)
@@ -1689,6 +1705,9 @@ async fn update_application(
             build_command = ?, run_command = ?, dockerfile_path = ?, entrypoint = ?, 
             command = ?, target = ?, work_dir = ?, privileged = ?, memory_limit = ?, cpu_limit = ?,
             cf_worker_url = ?, deploy_type = ?, registry_image = ?,
+            auto_deploy_enabled = COALESCE(?, auto_deploy_enabled),
+            auto_deploy_interval = COALESCE(?, auto_deploy_interval),
+            auto_deploy_timeout = COALESCE(?, auto_deploy_timeout),
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?"
     )
@@ -1710,6 +1729,9 @@ async fn update_application(
     .bind(&input.cf_worker_url)
     .bind(&input.deploy_type)
     .bind(&input.registry_image)
+    .bind(input.auto_deploy_enabled)
+    .bind(input.auto_deploy_interval)
+    .bind(input.auto_deploy_timeout)
     .bind(&app_id)
     .execute(&state.db)
     .await
@@ -1719,6 +1741,265 @@ async fn update_application(
     add_activity_log_pro(&state.db, "Tətbiq sazlamaları yeniləndi.", "info", Some("System"), Some("admin"), Some(&app_id), None).await;
 
     Ok(Json(true))
+}
+
+// Əl ilə (Manual) Dərhal Yenilik Yoxlanışı (Check Now Endpoint)
+async fn check_application_deploy(
+    State(state): State<AppState>,
+    AxumPath(app_id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let app = sqlx::query_as::<_, Application>(
+        "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
+         build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
+         privileged, memory_limit, cpu_limit, \
+         CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
+         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
+         CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
+         FROM applications WHERE id = ?"
+    )
+    .bind(&app_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+    .ok_or((StatusCode::NOT_FOUND, "Application not found".to_string()))?;
+
+    // Son yoxlanış vaxtını yeniləyirik
+    let _ = sqlx::query("UPDATE applications SET last_auto_deploy_check = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(&app_id)
+        .execute(&state.db)
+        .await;
+
+    let timeout_secs = app.auto_deploy_timeout.unwrap_or(10).max(3).min(60) as u64;
+    let deploy_type = app.deploy_type.clone().unwrap_or_else(|| "git".to_string());
+
+    if deploy_type == "image" {
+        let reg_image = app.registry_image.clone().unwrap_or_default();
+        if reg_image.trim().is_empty() {
+            add_activity_log_pro(&state.db, &format!("'{}' üçün registry imic ünvanı təyin edilməyib.", app.name), "warning", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+            return Ok(Json(serde_json::json!({
+                "status": "error",
+                "message": "Registry imic ünvanı boşdur!"
+            })));
+        }
+
+        if !reg_image.contains('/') {
+            add_activity_log_pro(&state.db, &format!("'{}' üçün təyin edilmiş imic ({}) lokal servisdir, registry yoxlanışı keçildi.", app.name, reg_image), "info", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+            return Ok(Json(serde_json::json!({
+                "status": "up_to_date",
+                "message": format!("'{}' lokal imicdir ({}), registry yoxlanışına ehtiyac yoxdur.", app.name, reg_image)
+            })));
+        }
+
+        add_activity_log_pro(&state.db, &format!("'{}' layihəsi üçün registry imici dərhal yoxlanılır (İmic: {}, Timeout: {}s)...", app.name, reg_image, timeout_secs), "info", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+
+        let inspect_output = tokio::time::timeout(
+            tokio::time::Duration::from_secs(timeout_secs),
+            tokio::process::Command::new("docker")
+                .args(["manifest", "inspect", &reg_image])
+                .output()
+        ).await;
+
+        match inspect_output {
+            Ok(Ok(out)) if out.status.success() => {
+                let inspect_json = String::from_utf8_lossy(&out.stdout);
+                let mut remote_digest = String::new();
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&inspect_json) {
+                    if let Some(digest) = parsed.pointer("/config/digest").and_then(|v| v.as_str()) {
+                        remote_digest = digest.to_string();
+                    } else if let Some(manifests) = parsed.pointer("/manifests").and_then(|v| v.as_array()) {
+                        if let Some(first) = manifests.first() {
+                            if let Some(digest) = first.pointer("/digest").and_then(|v| v.as_str()) {
+                                remote_digest = digest.to_string();
+                            }
+                        }
+                    }
+                }
+
+                if !remote_digest.is_empty() {
+                    match app.last_commit_hash {
+                        None => {
+                            let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                .bind(&remote_digest)
+                                .bind(&app.id)
+                                .execute(&state.db)
+                                .await;
+                            add_activity_log_pro(&state.db, &format!("'{}' layihəsinin ilkin imic imzası qeyd edildi: {}", app.name, remote_digest), "info", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                            Ok(Json(serde_json::json!({
+                                "status": "up_to_date",
+                                "message": format!("İlkin imic imzası qeyd edildi: {}", remote_digest)
+                            })))
+                        }
+                        Some(ref local_digest) if local_digest != &remote_digest => {
+                            let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                .bind(&remote_digest)
+                                .bind(&app.id)
+                                .execute(&state.db)
+                                .await;
+                            add_activity_log_pro(&state.db, &format!("'{}' layihəsi üçün yeni registry imici tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_digest, remote_digest), "success", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+
+                            let _ = trigger_deployment_impl(state.db.clone(), app.id.clone(), false).await;
+                            Ok(Json(serde_json::json!({
+                                "status": "new_version",
+                                "message": format!("Yeni imic aşkarlandı ({} -> {}). Yenilənmə başladıldı!", local_digest, remote_digest)
+                            })))
+                        }
+                        _ => {
+                            add_activity_log_pro(&state.db, &format!("'{}' yoxlanıldı. Yenilik yoxdur (İmic: {}).", app.name, remote_digest), "info", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                            Ok(Json(serde_json::json!({
+                                "status": "up_to_date",
+                                "message": "Layihə ən son versiyadadır. Yenilik yoxdur."
+                            })))
+                        }
+                    }
+                } else {
+                    add_activity_log_pro(&state.db, &format!("'{}' üçün imic manifestindən digest oxuna bilmədi.", app.name), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                    Ok(Json(serde_json::json!({
+                        "status": "error",
+                        "message": "İmic manifestindən digest oxuna bilmədi."
+                    })))
+                }
+            }
+            Ok(Ok(out)) => {
+                let err_str = String::from_utf8_lossy(&out.stderr);
+                add_activity_log_pro(&state.db, &format!("'{}' üçün manifest yoxlanışı xəta verdi: {}", app.name, err_str.trim()), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                Ok(Json(serde_json::json!({
+                    "status": "error",
+                    "message": format!("Manifest yoxlanışı xəta verdi: {}", err_str.trim())
+                })))
+            }
+            Ok(Err(e)) => {
+                add_activity_log_pro(&state.db, &format!("'{}' üçün yoxlanış əmri icra edilə bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                Ok(Json(serde_json::json!({
+                    "status": "error",
+                    "message": format!("Docker əmri icra edilə bilmədi: {}", e)
+                })))
+            }
+            Err(_) => {
+                add_activity_log_pro(&state.db, &format!("'{}' üçün manifest yoxlanışı vaxt aşımına uğradı ({}s limit).", app.name, timeout_secs), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                Ok(Json(serde_json::json!({
+                    "status": "timeout",
+                    "message": format!("Yoxlanış vaxt aşımına uğradı ({}s limit).", timeout_secs)
+                })))
+            }
+        }
+    } else {
+        // Git layihəsi yoxlanışı
+        if app.repo_url.is_empty() || app.repo_url.starts_with("DOCKER_IMAGE:") {
+            return Ok(Json(serde_json::json!({
+                "status": "error",
+                "message": "Git repo linki təyin edilməyib!"
+            })));
+        }
+
+        add_activity_log_pro(&state.db, &format!("'{}' layihəsi üçün dərhal Git commit yoxlanılır (Budaq: {}, Timeout: {}s)...", app.name, app.branch, timeout_secs), "info", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+
+        let mut cmd = tokio::process::Command::new("git");
+        cmd.env("GIT_TERMINAL_PROMPT", "0")
+           .args(["ls-remote", &app.repo_url, &app.branch])
+           .stdout(std::process::Stdio::piped())
+           .stderr(std::process::Stdio::piped());
+
+        let mut child = match cmd.spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                add_activity_log_pro(&state.db, &format!("'{}' üçün Git əmri başladıla bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                return Ok(Json(serde_json::json!({
+                    "status": "error",
+                    "message": format!("Git əmri başladıla bilmədi: {}", e)
+                })));
+            }
+        };
+
+        let mut stdout = child.stdout.take().unwrap();
+        let mut stderr = child.stderr.take().unwrap();
+
+        let wait_fut = async {
+            use tokio::io::AsyncReadExt;
+            let status = child.wait().await;
+            let mut out_buf = Vec::new();
+            let mut err_buf = Vec::new();
+            let _ = stdout.read_to_end(&mut out_buf).await;
+            let _ = stderr.read_to_end(&mut err_buf).await;
+            (status, out_buf, err_buf)
+        };
+
+        let timeout_res = tokio::time::timeout(tokio::time::Duration::from_secs(timeout_secs), wait_fut).await;
+
+        match timeout_res {
+            Ok((Ok(status), out_bytes, err_bytes)) => {
+                if status.success() {
+                    let result_str = String::from_utf8_lossy(&out_bytes);
+                    if let Some(remote_sha) = result_str.split_whitespace().next() {
+                        let remote_sha = remote_sha.to_string();
+                        match app.last_commit_hash {
+                            None => {
+                                let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                    .bind(&remote_sha)
+                                    .bind(&app.id)
+                                    .execute(&state.db)
+                                    .await;
+                                add_activity_log_pro(&state.db, &format!("'{}' layihəsinin ilkin Git commit imzası qeyd edildi: {}", app.name, remote_sha), "info", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                                Ok(Json(serde_json::json!({
+                                    "status": "up_to_date",
+                                    "message": format!("İlkin commit qeyd edildi: {}", remote_sha)
+                                })))
+                            }
+                            Some(ref local_sha) if local_sha != &remote_sha => {
+                                let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
+                                    .bind(&remote_sha)
+                                    .bind(&app.id)
+                                    .execute(&state.db)
+                                    .await;
+                                add_activity_log_pro(&state.db, &format!("'{}' layihəsi üçün yeni commit tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_sha, remote_sha), "success", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+
+                                let _ = trigger_deployment_impl(state.db.clone(), app.id.clone(), false).await;
+                                Ok(Json(serde_json::json!({
+                                    "status": "new_version",
+                                    "message": format!("Yeni commit aşkarlandı ({} -> {}). Yayım başladıldı!", local_sha, remote_sha)
+                                })))
+                            }
+                            _ => {
+                                add_activity_log_pro(&state.db, &format!("'{}' yoxlanıldı. Yenilik yoxdur (Commit: {}).", app.name, remote_sha), "info", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                                Ok(Json(serde_json::json!({
+                                    "status": "up_to_date",
+                                    "message": "Layihə ən son commit-dədir. Yenilik yoxdur."
+                                })))
+                            }
+                        }
+                    } else {
+                        add_activity_log_pro(&state.db, &format!("'{}' üçün Git çıxışından commit oxuna bilmədi.", app.name), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                        Ok(Json(serde_json::json!({
+                            "status": "error",
+                            "message": "Git çıxışından commit oxuna bilmədi."
+                        })))
+                    }
+                } else {
+                    let err_str = String::from_utf8_lossy(&err_bytes);
+                    add_activity_log_pro(&state.db, &format!("'{}' üçün git ls-remote uğursuz oldu: {}", app.name, err_str.trim()), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                    Ok(Json(serde_json::json!({
+                        "status": "error",
+                        "message": format!("Git xətası: {}", err_str.trim())
+                    })))
+                }
+            }
+            Ok((Err(e), _, _)) => {
+                add_activity_log_pro(&state.db, &format!("'{}' üçün Git yoxlanışı uğursuz oldu: {}", app.name, e), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                Ok(Json(serde_json::json!({
+                    "status": "error",
+                    "message": format!("Git proses xətası: {}", e)
+                })))
+            }
+            Err(_) => {
+                let _ = child.kill().await;
+                add_activity_log_pro(&state.db, &format!("'{}' üçün Git sorğusu vaxt aşımına uğradı ({}s limit). Proses məcburi dayandırıldı.", app.name, timeout_secs), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
+                Ok(Json(serde_json::json!({
+                    "status": "timeout",
+                    "message": format!("Git sorğusu vaxt aşımına uğradı ({}s limit).", timeout_secs)
+                })))
+            }
+        }
+    }
 }
 
 async fn delete_application(State(state): State<AppState>, AxumPath(app_id): AxumPath<String>) -> Result<Json<bool>, (StatusCode, String)> {
@@ -2787,13 +3068,17 @@ async fn git_polling_loop(db: SqlitePool) {
         let _ = sqlx::query("DELETE FROM deployments WHERE created_at < datetime('now', '-30 days')")
             .execute(&db)
             .await;
+
         let apps = match sqlx::query_as::<_, Application>(
             "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
              build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
              privileged, memory_limit, cpu_limit, \
              CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-             last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image \
-             FROM applications"
+             last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+             auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
+             CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
+             FROM applications \
+             WHERE auto_deploy_enabled = 1"
         ).fetch_all(&db).await {
             Ok(list) => list,
             Err(e) => {
@@ -2807,6 +3092,30 @@ async fn git_polling_loop(db: SqlitePool) {
                 continue;
             }
 
+            // Vaxt intervalını yoxlayırıq: interval (dəqiqə) keçməyibsə növbəti yoxlamanı gözləyirik
+            let interval_mins = app.auto_deploy_interval.unwrap_or(15).max(1);
+            let should_check: bool = match sqlx::query_as::<_, (i32,)>(
+                "SELECT CASE WHEN last_auto_deploy_check IS NULL OR (julianday('now') - julianday(last_auto_deploy_check)) * 1440.0 >= ? THEN 1 ELSE 0 END FROM applications WHERE id = ?"
+            )
+            .bind(interval_mins)
+            .bind(&app.id)
+            .fetch_one(&db)
+            .await {
+                Ok((val,)) => val == 1,
+                Err(_) => true,
+            };
+
+            if !should_check {
+                continue;
+            }
+
+            // Yoxlanış vaxtını yeniləyirik
+            let _ = sqlx::query("UPDATE applications SET last_auto_deploy_check = CURRENT_TIMESTAMP WHERE id = ?")
+                .bind(&app.id)
+                .execute(&db)
+                .await;
+
+            let timeout_secs = app.auto_deploy_timeout.unwrap_or(10).max(3).min(60) as u64;
             let deploy_type = app.deploy_type.clone().unwrap_or_else(|| "git".to_string());
 
             if deploy_type == "image" {
@@ -2815,17 +3124,14 @@ async fn git_polling_loop(db: SqlitePool) {
                     _ => continue,
                 };
 
-                let server = match sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
-                    .bind(&app.server_id)
-                    .fetch_optional(&db)
-                    .await
-                {
-                    Ok(Some(s)) => s,
-                    _ => continue,
-                };
+                // Əgər imic adında '/' yoxdursa (məs. 'masterdeploy-watchdog' kimi yerli konteyner servisi),
+                // uzaq docker hub-a sorğu göndərmirik (xətanın qarşısını almaq üçün).
+                if !reg_image.contains('/') {
+                    continue;
+                }
 
                 let inspect_output = tokio::time::timeout(
-                    tokio::time::Duration::from_secs(8),
+                    tokio::time::Duration::from_secs(timeout_secs),
                     tokio::process::Command::new("docker")
                         .args(["manifest", "inspect", &reg_image])
                         .output()
@@ -2855,11 +3161,11 @@ async fn git_polling_loop(db: SqlitePool) {
                                         .bind(&app.id)
                                         .execute(&db)
                                         .await;
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin imic imzası qeyd edildi: {}", app.name, remote_digest), "info").await;
+                                    add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin imic imzası qeyd edildi: {}", app.name, remote_digest), "info", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                 }
                                 Some(ref local_digest) if local_digest != &remote_digest => {
                                     println!("[AUTO-DEPLOY] Yeni registry image versiyası tapıldı ({} -> {}), layihə: {}", local_digest, remote_digest, app.name);
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni registry imici tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_digest, remote_digest), "success").await;
+                                    add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni registry imici tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_digest, remote_digest), "success", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                     
                                     let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
                                         .bind(&remote_digest)
@@ -2869,26 +3175,26 @@ async fn git_polling_loop(db: SqlitePool) {
 
                                     if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
                                         eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger image deployment for {}: {}", app.name, e);
-                                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error").await;
+                                        add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                     }
                                 }
                                 _ => {
-                                    add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info").await;
+                                    add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                 }
                             }
                         } else {
-                            add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün imic manifestindən digest oxuna bilmədi.", app.name), "error").await;
+                            add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün imic manifestindən digest oxuna bilmədi.", app.name), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                         }
                     }
                     Ok(Ok(out)) => {
                         let err_str = String::from_utf8_lossy(&out.stderr);
-                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün manifest yoxlanışı xəta verdi: {}", app.name, err_str.trim()), "error").await;
+                        add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün manifest yoxlanışı xəta verdi: {}", app.name, err_str.trim()), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                     }
                     Ok(Err(e)) => {
-                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün yoxlanış əmri icra edilə bilmədi: {}", app.name, e), "error").await;
+                        add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün yoxlanış əmri icra edilə bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                     }
                     Err(_) => {
-                        add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün manifest yoxlanışı vaxt aşımına uğradı (8s).", app.name), "error").await;
+                        add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün manifest yoxlanışı vaxt aşımına uğradı ({}s).", app.name, timeout_secs), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                     }
                 }
                 continue;
@@ -2897,7 +3203,7 @@ async fn git_polling_loop(db: SqlitePool) {
                 continue;
             }
 
-            add_activity_log_impl(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni Git commit yoxlanılır (Budaq: {})...", app.name, app.branch), "info").await;
+            add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni Git commit yoxlanılır (Budaq: {})...", app.name, app.branch), "info", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
 
             let mut cmd = tokio::process::Command::new("git");
             cmd.env("GIT_TERMINAL_PROMPT", "0")
@@ -2909,7 +3215,7 @@ async fn git_polling_loop(db: SqlitePool) {
                 Ok(c) => c,
                 Err(e) => {
                     eprintln!("[AUTO-DEPLOY ERROR] Failed to spawn git command for {}: {}", app.name, e);
-                    add_activity_log_impl(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git əmri başladıla bilmədi: {}", app.name, e), "error").await;
+                    add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git əmri başladıla bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                     continue;
                 }
             };
@@ -2930,7 +3236,7 @@ async fn git_polling_loop(db: SqlitePool) {
             };
 
             let timeout_res = tokio::time::timeout(
-                tokio::time::Duration::from_secs(12),
+                tokio::time::Duration::from_secs(timeout_secs),
                 wait_fut
             ).await;
 
@@ -2948,11 +3254,11 @@ async fn git_polling_loop(db: SqlitePool) {
                                         .bind(&app.id)
                                         .execute(&db)
                                         .await;
-                                    add_activity_log_pro(&db, &format!("'{}' layihəsinin ilkin Git commit imzası qeyd edildi: {}", app.name, remote_sha), "info", Some("Git"), Some("system"), Some(&app.id), None).await;
+                                    add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' layihəsinin ilkin Git commit imzası qeyd edildi: {}", app.name, remote_sha), "info", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                 }
                                 Some(ref local_sha) if local_sha != &remote_sha => {
                                     println!("[AUTO-DEPLOY] Yeni commit tapıldı ({} -> {}), layihə: {}", local_sha, remote_sha, app.name);
-                                    add_activity_log_pro(&db, &format!("'{}' layihəsi üçün yeni commit tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_sha, remote_sha), "success", Some("Git"), Some("system"), Some(&app.id), None).await;
+                                    add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni commit tapıldı ({} -> {}). Avtomatik yenilənmə başladılır...", app.name, local_sha, remote_sha), "success", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                     
                                     let _ = sqlx::query("UPDATE applications SET last_commit_hash = ? WHERE id = ?")
                                         .bind(&remote_sha)
@@ -2962,30 +3268,28 @@ async fn git_polling_loop(db: SqlitePool) {
  
                                     if let Err(e) = trigger_deployment_impl(db.clone(), app.id.clone(), false).await {
                                         eprintln!("[AUTO-DEPLOY ERROR] Failed to trigger deployment for {}: {}", app.name, e);
-                                        add_activity_log_pro(&db, &format!("'{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error", Some("Git"), Some("system"), Some(&app.id), None).await;
+                                        add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                     }
                                 }
                                 _ => {
-                                    // Səs-küy yaratmamaq üçün yoxlanıldı loqunu yüngül info log edirik
-                                    add_activity_log_pro(&db, &format!("'{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info", Some("Git"), Some("system"), Some(&app.id), None).await;
+                                    add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                 }
                             }
                         }
                     } else {
                         let err_str = String::from_utf8_lossy(&err_bytes);
                         eprintln!("[AUTO-DEPLOY ERROR] git ls-remote failed for {}: {}", app.name, err_str.trim());
-                        add_activity_log_pro(&db, &format!("'{}' üçün git ls-remote uğursuz oldu: {}", app.name, err_str.trim()), "error", Some("Git"), Some("system"), Some(&app.id), None).await;
+                        add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün git ls-remote uğursuz oldu: {}", app.name, err_str.trim()), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                     }
                 }
                 Ok((Err(e), _, _)) => {
                     eprintln!("[AUTO-DEPLOY ERROR] Failed to wait for git command for {}: {}", app.name, e);
-                    add_activity_log_pro(&db, &format!("'{}' üçün Git yoxlanışı uğursuz oldu: {}", app.name, e), "error", Some("Git"), Some("system"), Some(&app.id), None).await;
+                    add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git yoxlanışı uğursuz oldu: {}", app.name, e), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                 }
                 Err(_) => {
-                    // Timeout olduqda, child hələ move olunmayıb, onu kill edirik!
                     let _ = child.kill().await;
-                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out (12s limit) for {}. Process forcefully killed.", app.name);
-                    add_activity_log_pro(&db, &format!("'{}' üçün Git sorğusu vaxt aşımına uğradı (12s). Proses məcburi dayandırıldı (Process killed).", app.name), "critical", Some("Git"), Some("system"), Some(&app.id), None).await;
+                    eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out ({}s limit) for {}. Process forcefully killed.", timeout_secs, app.name);
+                    add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git sorğusu vaxt aşımına uğradı ({}s). Proses məcburi dayandırıldı.", app.name, timeout_secs), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                 }
             }
         }

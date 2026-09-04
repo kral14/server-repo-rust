@@ -74,6 +74,10 @@ pub struct Application {
     pub cf_worker_url: Option<String>,
     pub deploy_type: Option<String>,
     pub registry_image: Option<String>,
+    pub auto_deploy_enabled: Option<i64>,
+    pub auto_deploy_interval: Option<i64>,
+    pub auto_deploy_timeout: Option<i64>,
+    pub last_auto_deploy_check: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -97,6 +101,9 @@ pub struct CreateApplicationInput {
     pub cpu_limit: Option<f64>,
     pub deploy_type: Option<String>,
     pub registry_image: Option<String>,
+    pub auto_deploy_enabled: Option<i64>,
+    pub auto_deploy_interval: Option<i64>,
+    pub auto_deploy_timeout: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,6 +126,9 @@ pub struct UpdateApplicationInput {
     pub cf_worker_url: Option<String>,
     pub deploy_type: Option<String>,
     pub registry_image: Option<String>,
+    pub auto_deploy_enabled: Option<i64>,
+    pub auto_deploy_interval: Option<i64>,
+    pub auto_deploy_timeout: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]

@@ -103,5 +103,12 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     .execute(&pool)
     .await;
 
+    // 3. Auto-Deploy ağıllı idarəetmə sütunlarının təhlükəsiz əlavə olunması
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN auto_deploy_enabled INTEGER DEFAULT 0").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN auto_deploy_interval INTEGER DEFAULT 15").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN auto_deploy_timeout INTEGER DEFAULT 10").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN last_auto_deploy_check DATETIME").execute(&pool).await;
+
     Ok(pool)
 }
+
