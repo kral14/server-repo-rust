@@ -2576,17 +2576,32 @@ async fn trigger_deployment_impl(
     Ok(deployment)
 }
 
-async fn get_changelog(State(state): State<AppState>) -> axum::response::Response {
-    add_activity_log_impl(&state.db, "[Yenilənmə] MasterDeploy üçün mövcud panel versiyaları yoxlanılır...", "info").await;
+async fn get_changelog(State(_state): State<AppState>) -> axum::response::Response {
+    let local_content = tokio::fs::read_to_string("static/changelog.json")
+        .await
+        .unwrap_or_else(|_| "[]".to_string());
+
     let url = "https://raw.githubusercontent.com/kral14/server-repo-rust/main/MasterDeploy-rust/static/changelog.json";
-    let output = std::process::Command::new("curl").args(["-s", url]).output();
-    let text = if let Ok(out) = output {
-        String::from_utf8_lossy(&out.stdout).to_string()
-    } else {
-        "[]".to_string()
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_millis(2000))
+        .build()
+        .unwrap_or_default();
+
+    let text = match client.get(url).send().await {
+        Ok(res) if res.status().is_success() => {
+            let remote_text = res.text().await.unwrap_or_default();
+            if remote_text.trim().starts_with('[') {
+                remote_text
+            } else {
+                local_content
+            }
+        }
+        _ => local_content,
     };
+
     axum::response::Response::builder()
         .header("Content-Type", "application/json")
+        .header("Cache-Control", "no-cache")
         .body(axum::body::Body::from(text))
         .unwrap()
 }

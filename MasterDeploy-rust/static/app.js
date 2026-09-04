@@ -1823,12 +1823,21 @@ function toggleRepoSource(mode) {
 
 // Handle application creation
 async function handleCreateApp(event) {
-    if (event) event.preventDefault();
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
 
-    const name = document.getElementById('app-name').value.trim();
+    const modal = document.getElementById('app-modal');
+    if (modal && (modal.style.display === 'none' || modal.classList.contains('minimized'))) {
+        return;
+    }
+
+    const nameEl = document.getElementById('app-name');
+    const name = nameEl ? nameEl.value.trim() : '';
     if (!name) {
-        alert('⚠️ Zəhmət olmasa Layihə Adını (Service Name) daxil edin.');
-        document.getElementById('app-name').focus();
+        showToast('Zəhmət olmasa Layihə Adını (Service Name) daxil edin.', 'warning');
+        if (nameEl) nameEl.focus();
         return;
     }
 
@@ -3615,7 +3624,15 @@ function resetWizEnvVarsContainer() {
 
 // Final Deploy Trigger from Wizard
 async function handleWizardDeploy(event) {
-    if (event) event.preventDefault();
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    const modal = document.getElementById('create-service-modal');
+    if (modal && (modal.style.display === 'none' || modal.classList.contains('minimized'))) {
+        return;
+    }
 
     try {
         const appNameInput = document.getElementById('wiz-app-name');
@@ -3628,21 +3645,21 @@ async function handleWizardDeploy(event) {
 
         const appName = appNameInput ? appNameInput.value.trim() : '';
         if (!appName) {
-            alert('⚠️ Zəhmət olmasa Service Name (Tətbiq adı) daxil edin.');
+            showToast('Zəhmət olmasa Service Name (Tətbiq adı) daxil edin.', 'warning');
             if (appNameInput) appNameInput.focus();
             return;
         }
 
         const portVal = appPortInput ? parseInt(appPortInput.value) : 0;
         if (!portVal || isNaN(portVal) || portVal <= 0) {
-            alert('⚠️ Zəhmət olmasa düzgün Daxili Port nömrəsi daxil edin.');
+            showToast('Zəhmət olmasa düzgün Daxili Port nömrəsi daxil edin.', 'warning');
             if (appPortInput) appPortInput.focus();
             return;
         }
 
         const serverId = appServerSelect ? appServerSelect.value : '';
         if (!serverId) {
-            alert('⚠️ Zəhmət olmasa Hədəf Serveri seçin.');
+            showToast('Zəhmət olmasa Hədəf Serveri seçin.', 'warning');
             return;
         }
 
@@ -4367,10 +4384,12 @@ function parseVersionNum(v) {
 }
 
 async function initSystemUpdates() {
-    const changelog = await fetchChangelog();
-    systemVersions = changelog;
-
     try {
+        const changelog = await fetchChangelog();
+        if (changelog && Array.isArray(changelog) && changelog.length > 0) {
+            systemVersions = changelog;
+        }
+
         const vRes = await fetch('/api/version');
         const vData = await vRes.json();
         _currentPanelVersion = vData.version;
@@ -4378,8 +4397,8 @@ async function initSystemUpdates() {
 
         let latestVer = '';
         let hasNewer = false;
-        if (changelog.length > 0) {
-            latestVer = changelog[0].version;
+        if (systemVersions.length > 0) {
+            latestVer = systemVersions[0].version;
             if (parseVersionNum(latestVer) > currentNum) {
                 hasNewer = true;
             }
@@ -4387,7 +4406,6 @@ async function initSystemUpdates() {
 
         // Badge məntiqi — yalnız burada, fetchAppVersion-da deyil
         const badge = document.getElementById('version-badge');
-        const versionText = document.getElementById('version-text');
         if (badge) {
             if (hasNewer) {
                 badge.innerHTML = `<span onclick="openSystemUpdateModal()" style="background: linear-gradient(135deg, #ff416c, #ff4b2b); color: white; border-radius: 5px; padding: 2px 7px; font-size: 0.52rem; margin-left: 4px; cursor: pointer; font-weight: 700; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(255,65,108,0.4); animation: pulse-badge 2s infinite;" title="${latestVer} mövcuddur — klikləyin">UPDATE</span>`;
@@ -4395,11 +4413,26 @@ async function initSystemUpdates() {
                 badge.innerHTML = '';
             }
         }
+
+        // Əgər pəncərə açıqdırsa, dərhal kartları göstər!
+        const modal = document.getElementById('system-update-modal');
+        if (modal && modal.style.display !== 'none' && !modal.classList.contains('minimized')) {
+            renderVersionCards();
+        }
     } catch (e) { }
 }
 
-function openSystemUpdateModal() {
+async function openSystemUpdateModal() {
     showModal('system-update-modal');
+    if (systemVersions && systemVersions.length > 0) {
+        renderVersionCards();
+    } else {
+        const container = document.getElementById('version-cards-list');
+        if (container) {
+            container.innerHTML = '<div style="text-align:center; padding:30px; color:var(--text-secondary);"><span style="display:inline-block; animation:spin 1s linear infinite; margin-right:8px;">⏳</span> Versiyalar yoxlanılır...</div>';
+        }
+    }
+    await initSystemUpdates();
     renderVersionCards();
 }
 
