@@ -7,6 +7,12 @@ temp_*
 .env
 *.db
 *.db.backup
+*.db-shm
+*.db-wal
 **/*.db
 **/*.db.backup
+**/*.db-shm
+**/*.db-wal
+local_data/
+**/local_data/
 
