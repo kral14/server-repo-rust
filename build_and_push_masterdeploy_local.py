@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 import re
+from datetime import datetime
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
@@ -45,6 +46,7 @@ def bump_cargo_version(root_dir):
                     if not any(x.get('version') == v_str for x in logs):
                         new_log = {
                             "version": v_str,
+                            "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
                             "changes": ["Lokal suretli build ve tehlukesizlik tekmillesdirmeleri."]
                         }
                         logs.insert(0, new_log)

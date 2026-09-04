@@ -4452,6 +4452,11 @@ function renderVersionCards() {
             btnHtml = `<button class="btn btn-secondary" onclick="confirmVersionSwitch('${v.version}', true)" style="padding: 6px 14px; font-size: 0.8rem;">↩ Qayıt</button>`;
         }
 
+        // Tarix badge
+        const dateBadge = v.date
+            ? `<span style="font-size: 0.72rem; color: #94a3b8; background: rgba(255,255,255,0.06); padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.08);">📅 ${v.date}</span>`
+            : '';
+
         // Changelog sətirləri
         const changesHtml = v.changes && v.changes.length > 0
             ? `<ul style="margin: 8px 0 0; padding-left: 18px; color: var(--text-secondary); font-size: 0.8rem; line-height: 1.6;">${v.changes.map(c => `<li>${c}</li>`).join('')}</ul>`
@@ -4465,10 +4470,11 @@ function renderVersionCards() {
             padding: 14px 16px;
             transition: all 0.2s ease;
         ">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div style="display: flex; align-items: center; gap: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                     <span style="font-weight: 700; font-size: 1rem; color: var(--text-primary); font-family: monospace;">${v.version}</span>
                     ${badgeHtml}
+                    ${dateBadge}
                 </div>
                 ${btnHtml}
             </div>
@@ -5105,7 +5111,10 @@ async function openHelpCenter() {
     clog.innerHTML = 'Yüklənir...';
     if (systemVersions.length === 0) systemVersions = await fetchChangelog();
     clog.innerHTML = systemVersions.map(v => `<div style="margin-bottom: 20px;">
-        <h3 style="margin-bottom:10px; color:var(--primary-color);">${v.version}</h3>
+        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+            <h3 style="margin: 0; color: var(--primary-color);">${v.version}</h3>
+            ${v.date ? `<span style="font-size: 0.75rem; color: var(--text-secondary); background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">📅 ${v.date}</span>` : ''}
+        </div>
         <ul style="padding-left:20px; color:var(--text-secondary); line-height:1.6;">
             ${v.changes.map(c => `<li>${c}</li>`).join('')}
         </ul>

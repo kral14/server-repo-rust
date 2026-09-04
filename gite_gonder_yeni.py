@@ -16,6 +16,7 @@ def run_cmd(cmd, ignore_error=False):
 
 import re
 import json
+from datetime import datetime
 
 def bump_cargo_version():
     cargo_path = os.path.join(ROOT_DIR, "MasterDeploy-rust", "Cargo.toml")
@@ -47,6 +48,7 @@ def bump_cargo_version():
                 if not any(x.get('version') == v_str for x in logs):
                     new_log = {
                         "version": v_str,
+                        "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
                         "changes": ["Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."]
                     }
                     logs.insert(0, new_log)
