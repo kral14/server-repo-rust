@@ -131,6 +131,13 @@ pub struct UpdateApplicationInput {
     pub auto_deploy_timeout: Option<i64>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct QuickAutoDeployInput {
+    pub auto_deploy_enabled: Option<i64>,
+    pub auto_deploy_interval: Option<i64>,
+    pub auto_deploy_timeout: Option<i64>,
+}
+
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Deployment {
     pub id: String,

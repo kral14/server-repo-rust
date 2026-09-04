@@ -218,6 +218,68 @@ function saveWindowPosition(id, card) {
     localStorage.setItem(`win_pos_${id}`, JSON.stringify(pos));
 }
 
+// Pəncərənin ekran hüdudlarından (xüsusilə yuxarıdan və kənarlardan) kənara qaçmasının qarşısını alan funksiya
+function clampWindowToScreen(card) {
+    if (!card || card.classList.contains('maximized')) return;
+    const headerHeight = 42;
+    const minTop = 15;
+    const winWidth = window.innerWidth;
+    const winHeight = window.innerHeight;
+
+    // Mövcud koordinatlar
+    let top = card.offsetTop;
+    let left = card.offsetLeft;
+    const width = card.offsetWidth || 530;
+    const height = card.offsetHeight || 400;
+
+    // Yuxarı başlıq heç vaxt ekrandan yuxarıda gizlənə bilməz
+    if (top < minTop || isNaN(top)) {
+        top = minTop;
+    }
+    // Aşağı taskbar-ın altına düşə bilməz
+    if (top > winHeight - headerHeight - 30) {
+        top = Math.max(minTop, winHeight - headerHeight - 50);
+    }
+
+    // Sağa və ya sola tam qaçmasının qarşısını al
+    const minVisible = 120;
+    if (left + width < minVisible) {
+        left = minVisible - width;
+    }
+    if (left > winWidth - minVisible) {
+        left = winWidth - minVisible;
+    }
+
+    card.style.top = `${top}px`;
+    card.style.left = `${left}px`;
+}
+
+// İstənilən pəncərəni tən ortada bərpa etmə (Emergency Center Reset)
+function centerWindow(windowId) {
+    const backdrop = document.getElementById(windowId);
+    if (!backdrop) return;
+    const card = backdrop.querySelector('.modal-card');
+    if (!card) return;
+
+    card.classList.remove('maximized');
+    card.style.width = card.dataset.prevWidth || (window.innerWidth < 700 ? '94vw' : '650px');
+    card.style.height = 'auto';
+    card.style.borderRadius = '16px';
+    
+    // Mərkəzə yerləşdir
+    const cardWidth = card.offsetWidth || 650;
+    const cardHeight = card.offsetHeight || 450;
+    const left = Math.max(15, Math.floor((window.innerWidth - cardWidth) / 2));
+    const top = Math.max(25, Math.floor((window.innerHeight - cardHeight) / 2.5));
+
+    card.style.left = `${left}px`;
+    card.style.top = `${top}px`;
+    saveWindowPosition(windowId, card);
+    clampWindowToScreen(card);
+    bringToFront(windowId);
+    showToast('Pəncərə mövqeyi mərkəzə qaytarıldı', 'info');
+}
+
 function applySavedPosition(id, card) {
     const saved = localStorage.getItem(`win_pos_${id}`);
     if (saved) {
@@ -231,6 +293,8 @@ function applySavedPosition(id, card) {
             console.error("Error parsing saved position", e);
         }
     }
+    // Həmişə təhlükəsizlik üçün ekran hüdudlarını yoxla
+    setTimeout(() => clampWindowToScreen(card), 10);
 }
 
 // Səhifə yenilənəndə bütün açıq və kiçildilmiş pəncərələrin statusunu yadda saxla
@@ -404,10 +468,10 @@ function initializeWindow(backdropId, titleText) {
             // Constrain within screen boundaries so the header is always reachable
             const cardWidth = card.offsetWidth || 530;
             const headerHeight = header.offsetHeight || 40;
-            const minVisibleSide = 100; // at least 100px of side must remain visible
+            const minVisibleSide = 120;
             
-            if (nextTop < 0) nextTop = 0; // Header can't go above top edge
-            if (nextTop > window.innerHeight - headerHeight - 40) nextTop = window.innerHeight - headerHeight - 40; // Can't drop below taskbar
+            if (nextTop < 15) nextTop = 15; // Başlıq heç vaxt ekranın yuxarı qırağına yapışıb gizlənə bilməz
+            if (nextTop > window.innerHeight - headerHeight - 35) nextTop = window.innerHeight - headerHeight - 35; // Taskbar altına düşə bilməz
             if (nextLeft < -cardWidth + minVisibleSide) nextLeft = -cardWidth + minVisibleSide;
             if (nextLeft > window.innerWidth - minVisibleSide) nextLeft = window.innerWidth - minVisibleSide;
             
@@ -645,13 +709,26 @@ function updateTaskbar() {
             ${name}
         `;
 
+        btn.title = "Sol klik: Gizlət / Göstər | Sağ klik: Ekranın mərkəzinə gətir";
+
         btn.onclick = () => {
             if (isMin) {
                 restoreWindow(winId);
+                const b = document.getElementById(winId);
+                const c = b ? b.querySelector('.modal-card') : null;
+                if (c) clampWindowToScreen(c);
             } else {
                 minimizeWindow(winId);
             }
         };
+
+        // Sağ klik ilə itmiş və ya kənarda qalmış pəncərəni dərhal mərkəzə qaytar
+        btn.oncontextmenu = (e) => {
+            e.preventDefault();
+            if (isMin) restoreWindow(winId);
+            centerWindow(winId);
+        };
+
         container.appendChild(btn);
     });
 }
@@ -744,6 +821,7 @@ function showModal(id) {
     const card = backdrop.querySelector('.modal-card');
     if (card) {
         applySavedPosition(id, card);
+        setTimeout(() => clampWindowToScreen(card), 20);
     }
 
     activeWindows[id] = true;
@@ -1437,7 +1515,8 @@ async function loadApplications() {
                     'building': '#00d2ff', 'cancelled': '#ff9800', 'idle': '#9aa0a6'
                 };
                 const sc = statusColors[app.status] || '#9aa0a6';
-                const apiLink = `http://${srvIp}:${app.port}`;
+                const resolvedHost = (srvIp === 'local' || srvIp === '127.0.0.1') ? 'localhost' : srvIp;
+                const apiLink = `http://${resolvedHost}:${app.port}`;
 
                 const cached = serverStatsCache[sid];
                 let cpuVal = '0%';
@@ -3518,6 +3597,10 @@ function switchTab(tabId) {
         if (typeof loadLocalSshKey === 'function') loadLocalSshKey();
         if (typeof loadGithubTokenStatus === 'function') loadGithubTokenStatus();
         if (typeof filterCoolifyKeys === 'function') filterCoolifyKeys();
+    }
+
+    if (tabId === 'autodeploy') {
+        loadAutoDeployCenter();
     }
 
     if (tabId !== 'deployment-logs') {
@@ -6040,6 +6123,46 @@ document.addEventListener('keydown', (e) => {
             closeModal(topWindowId);
         }
     }
+
+    // Alt + R (və ya Ctrl + Alt + C): Aktiv pəncərəni dərhal mərkəzə bərpa et
+    if ((e.altKey && (e.key === 'r' || e.key === 'R')) || (e.ctrlKey && e.altKey && (e.key === 'c' || e.key === 'C'))) {
+        let topWindowId = null;
+        let maxZ = -1;
+        Object.keys(activeWindows).forEach(winId => {
+            if (activeWindows[winId] && !minimizedWindows[winId]) {
+                const backdrop = document.getElementById(winId);
+                if (backdrop) {
+                    const card = backdrop.querySelector('.modal-card');
+                    if (card) {
+                        const z = parseInt(card.style.zIndex) || 0;
+                        if (z > maxZ) {
+                            maxZ = z;
+                            topWindowId = winId;
+                        }
+                    }
+                }
+            }
+        });
+        if (topWindowId) {
+            e.preventDefault();
+            centerWindow(topWindowId);
+        }
+    }
+});
+
+// Brauzer və ya monitor ölçüsü dəyişdikdə bütün aktiv pəncərələri avtomatik ekran hüdudlarına qaytar
+window.addEventListener('resize', () => {
+    Object.keys(activeWindows).forEach(winId => {
+        if (activeWindows[winId] && !minimizedWindows[winId]) {
+            const backdrop = document.getElementById(winId);
+            if (backdrop) {
+                const card = backdrop.querySelector('.modal-card');
+                if (card) {
+                    clampWindowToScreen(card);
+                }
+            }
+        }
+    });
 });
 
 function fitTerminalHeight() {
@@ -6380,3 +6503,288 @@ async function loadKeysTokensModularUI() {
         initKeysTokens();
     }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// AĞILLI AUTO-DEPLOY VƏ ARXA PLAN TƏTBİQLƏRİNİN İDARƏETMƏ MƏRKƏZİ
+// ══════════════════════════════════════════════════════════════════
+let autoDeployAppsList = [];
+let autoDeployCurrentFilter = 'all';
+
+async function loadAutoDeployCenter() {
+    const container = document.getElementById('autodeploy-cards-container');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div style="text-align: center; padding: 2.5rem; color: var(--text-secondary);">
+            <div style="display: inline-block; animation: spin 1s linear infinite; margin-bottom: 0.5rem;">🔄</div>
+            <div>Bütün layihələrin və arxa plan servislərinin statusları oxunur...</div>
+        </div>
+    `;
+
+    try {
+        const res = await fetch('/api/applications/autodeploy-list');
+        if (!res.ok) throw new Error('Məlumatları almaq mümkün olmadı');
+        autoDeployAppsList = await res.json();
+        renderAutoDeployCenter();
+    } catch (e) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 2.5rem; color: #ff5252;">
+                Xəta baş verdi: ${e.message}
+            </div>
+        `;
+    }
+}
+
+function setAutoDeployFilter(filter, btn) {
+    autoDeployCurrentFilter = filter;
+    document.querySelectorAll('.ad-filter-btn').forEach(b => {
+        b.classList.remove('active');
+        b.style.background = 'rgba(255,255,255,0.04)';
+        b.style.borderColor = 'rgba(255,255,255,0.08)';
+    });
+    if (btn) {
+        btn.classList.add('active');
+        btn.style.background = 'rgba(56, 189, 248, 0.15)';
+        btn.style.borderColor = 'rgba(56, 189, 248, 0.3)';
+    }
+    renderAutoDeployCenter();
+}
+
+function filterAutoDeployList() {
+    renderAutoDeployCenter();
+}
+
+function renderAutoDeployCenter() {
+    const container = document.getElementById('autodeploy-cards-container');
+    if (!container) return;
+
+    const searchTerm = (document.getElementById('ad-search-input')?.value || '').toLowerCase().trim();
+
+    // Stats
+    const totalCount = autoDeployAppsList.length;
+    const enabledCount = autoDeployAppsList.filter(a => Number(a.auto_deploy_enabled) === 1).length;
+    const disabledCount = totalCount - enabledCount;
+
+    const statTotalEl = document.getElementById('ad-stat-total');
+    const statEnabledEl = document.getElementById('ad-stat-enabled');
+    const statDisabledEl = document.getElementById('ad-stat-disabled');
+    if (statTotalEl) statTotalEl.innerText = totalCount;
+    if (statEnabledEl) statEnabledEl.innerText = enabledCount;
+    if (statDisabledEl) statDisabledEl.innerText = disabledCount;
+
+    // Filter
+    let filtered = autoDeployAppsList.filter(app => {
+        const matchesSearch = app.name.toLowerCase().includes(searchTerm) || 
+                              (app.registry_image && app.registry_image.toLowerCase().includes(searchTerm)) ||
+                              (app.repo_url && app.repo_url.toLowerCase().includes(searchTerm));
+
+        if (!matchesSearch) return false;
+
+        const isEnabled = Number(app.auto_deploy_enabled) === 1;
+        if (autoDeployCurrentFilter === 'active') return isEnabled;
+        if (autoDeployCurrentFilter === 'inactive') return !isEnabled;
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 3rem; background: rgba(15, 23, 42, 0.3); border: 1px dashed var(--card-border); border-radius: 12px; color: var(--text-secondary);">
+                Heç bir tətbiq və ya servis tapılmadı.
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = filtered.map(app => {
+        const isEnabled = Number(app.auto_deploy_enabled) === 1;
+        const isWatchdogOrSystem = app.name.includes('watchdog') || app.name.includes('masterdeploy-');
+        const isImage = app.deploy_type === 'image';
+        const interval = app.auto_deploy_interval || 15;
+        const timeout = app.auto_deploy_timeout || 10;
+        const lastCheck = app.last_auto_deploy_check || 'Hələ yoxlanılmayıb';
+
+        const typeBadge = isImage 
+            ? `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 600; border: 1px solid rgba(56, 189, 248, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="container" style="width: 12px; height: 12px;"></i> Docker Image</span>`
+            : `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); color: #c084fc; font-weight: 600; border: 1px solid rgba(168, 85, 247, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="git-branch" style="width: 12px; height: 12px;"></i> Git Repo (${app.branch || 'main'})</span>`;
+
+        const roleBadge = isWatchdogOrSystem 
+            ? `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(234, 179, 8, 0.15); color: #facc15; font-weight: 600; border: 1px solid rgba(234, 179, 8, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="shield" style="width: 12px; height: 12px;"></i> Arxa Plan Servisi</span>`
+            : `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(52, 211, 153, 0.12); color: #34d399; font-weight: 600; border: 1px solid rgba(52, 211, 153, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="sparkles" style="width: 12px; height: 12px;"></i> Tətbiq</span>`;
+
+        const sourceAddress = isImage ? (app.registry_image || 'Təyin edilməyib') : (app.repo_url || 'Repo linki yoxdur');
+
+        return `
+            <div class="item-card" style="background: rgba(15, 23, 42, 0.55); border: 1px solid ${isEnabled ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.06)'}; border-left: 4px solid ${isEnabled ? '#38bdf8' : '#64748b'}; border-radius: 12px; padding: 1.1rem 1.3rem; transition: all 0.2s;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    
+                    <!-- Sol: İdentifikasiya -->
+                    <div style="display: flex; align-items: center; gap: 1rem; min-width: 250px; flex: 1;">
+                        <div style="width: 44px; height: 44px; border-radius: 10px; background: ${isEnabled ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.05)'}; display: flex; align-items: center; justify-content: center; color: ${isEnabled ? '#38bdf8' : '#94a3b8'}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                            ${isImage 
+                                ? '<i data-lucide="container" style="width: 22px; height: 22px; color: #38bdf8;"></i>' 
+                                : '<i data-lucide="rocket" style="width: 22px; height: 22px; color: #f43f5e;"></i>'}
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                                <strong style="font-size: 1rem; color: #fff;">${app.name}</strong>
+                                ${roleBadge}
+                                ${typeBadge}
+                            </div>
+                            <div style="font-size: 0.77rem; color: var(--text-secondary); font-family: monospace; max-width: 450px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${sourceAddress}">
+                                ${sourceAddress}
+                            </div>
+                            <div style="font-size: 0.74rem; color: #94a3b8; display: flex; align-items: center; gap: 0.4rem;">
+                                <i data-lucide="clock" style="width: 12px; height: 12px; color: #64748b;"></i>
+                                <span>Son Yoxlanış: <strong style="color: #cbd5e1;">${lastCheck}</strong></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Orta: Sazlamalar (İnterval və Timeout) -->
+                    <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;">
+                        <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+                            <label style="font-size: 0.68rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">İnterval</label>
+                            <select onchange="updateAppAutoDeployQuick('${app.id}', this.value, null, null)" style="background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 0.35rem 0.6rem; color: #fff; font-size: 0.78rem;">
+                                <option value="5" ${interval == 5 ? 'selected' : ''}>Hər 5 dəqiqə</option>
+                                <option value="15" ${interval == 15 ? 'selected' : ''}>Hər 15 dəqiqə</option>
+                                <option value="30" ${interval == 30 ? 'selected' : ''}>Hər 30 dəqiqə</option>
+                                <option value="60" ${interval == 60 ? 'selected' : ''}>Hər 1 saat</option>
+                                <option value="360" ${interval == 360 ? 'selected' : ''}>Hər 6 saat</option>
+                                <option value="1440" ${interval == 1440 ? 'selected' : ''}>Hər 24 saat</option>
+                            </select>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 0.2rem;">
+                            <label style="font-size: 0.68rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Limit</label>
+                            <select onchange="updateAppAutoDeployQuick('${app.id}', null, this.value, null)" style="background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 0.35rem 0.6rem; color: #fff; font-size: 0.78rem;">
+                                <option value="5" ${timeout == 5 ? 'selected' : ''}>5 saniyə</option>
+                                <option value="10" ${timeout == 10 ? 'selected' : ''}>10 saniyə</option>
+                                <option value="15" ${timeout == 15 ? 'selected' : ''}>15 saniyə</option>
+                                <option value="30" ${timeout == 30 ? 'selected' : ''}>30 saniyə</option>
+                                <option value="60" ${timeout == 60 ? 'selected' : ''}>60 saniyə</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Sağ: ON/OFF Toggle və İndi Yoxla -->
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
+                            <label class="md-switch" title="Auto-Deploy aktivləşdir və ya söndür">
+                                <input type="checkbox" ${isEnabled ? 'checked' : ''} onchange="updateAppAutoDeployQuick('${app.id}', null, null, this.checked ? 1 : 0)">
+                                <span class="md-switch-slider"></span>
+                            </label>
+                            <span style="font-size: 0.68rem; font-weight: 600; color: ${isEnabled ? '#38bdf8' : '#64748b'};">
+                                ${isEnabled ? 'Aktiv 🟢' : 'Sönülü ⚪'}
+                            </span>
+                        </div>
+
+                        <button class="hbtn hbtn-check" onclick="triggerManualDeployCheck('${app.id}', this)" title="Dərhal yoxla" style="padding: 0.45rem 0.85rem; font-size: 0.8rem;">
+                            <i data-lucide="scan" style="width: 13px; height: 13px;"></i>
+                            <span>İndi Yoxla</span>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+    }
+}
+
+async function updateAppAutoDeployQuick(appId, interval, timeout, enabled) {
+    const payload = {};
+    if (interval !== null) payload.auto_deploy_interval = parseInt(interval);
+    if (timeout !== null) payload.auto_deploy_timeout = parseInt(timeout);
+    if (enabled !== null) payload.auto_deploy_enabled = parseInt(enabled);
+
+    try {
+        const res = await fetch(`/api/applications/${appId}/quick-autodeploy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            showToast('Auto-Deploy tənzimləmələri yeniləndi! ⚡', 'success');
+            // Yerli massivdə dərhal yeniləyirik
+            const app = autoDeployAppsList.find(a => a.id === appId);
+            if (app) {
+                if (payload.auto_deploy_interval !== undefined) app.auto_deploy_interval = payload.auto_deploy_interval;
+                if (payload.auto_deploy_timeout !== undefined) app.auto_deploy_timeout = payload.auto_deploy_timeout;
+                if (payload.auto_deploy_enabled !== undefined) app.auto_deploy_enabled = payload.auto_deploy_enabled;
+            }
+            renderAutoDeployCenter();
+        } else {
+            showToast('Tənzimləmə yenilənə bilmədi.', 'error');
+        }
+    } catch (e) {
+        showToast('Xəta baş verdi: ' + e.message, 'error');
+    }
+}
+
+async function triggerCheckAllAutoDeploy(btn) {
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span>⏳ Hamısı Yoxlanılır...</span>`;
+
+    try {
+        const res = await fetch('/api/applications/check-all-deploy', { method: 'POST' });
+        if (res.ok) {
+            const data = await res.json();
+            showToast(data.message || 'Bütün aktiv layihələr üçün yoxlama başladıldı! 🚀', 'success');
+            setTimeout(loadAutoDeployCenter, 2000);
+        } else {
+            showToast('Toplu yoxlanış icra edilə bilmədi.', 'error');
+        }
+    } catch (e) {
+        showToast('Xəta baş verdi: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origText;
+    }
+}
+
+async function checkMasterDeployCoreUpdate(btn) {
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span>⏳ Yoxlanılır...</span>`;
+
+    const statusEl = document.getElementById('ad-core-status-text');
+    const badgeEl = document.getElementById('ad-core-version-badge');
+
+    try {
+        await initSystemUpdates();
+        const currentNum = parseVersionNum(_currentPanelVersion || '1.0.0');
+        if (badgeEl && _currentPanelVersion) {
+            badgeEl.innerText = 'v' + _currentPanelVersion;
+        }
+
+        if (systemVersions && systemVersions.length > 0) {
+            const latestVer = systemVersions[0].version;
+            const latestNum = parseVersionNum(latestVer);
+
+            if (latestNum > currentNum) {
+                if (statusEl) {
+                    statusEl.innerHTML = `<strong style="color: #ff4757;">Yeni versiya mövcuddur: ${latestVer} 🚀</strong> (Yeniləmək üçün 'Bütün Versiyalar' klikləyin)`;
+                }
+                showToast(`MasterDeploy üçün yeni versiya tapıldı: ${latestVer}!`, 'info');
+            } else {
+                if (statusEl) {
+                    statusEl.innerHTML = `<span style="color: #2ecc71; font-weight:600;">Sistem ən son versiyadadır (${_currentPanelVersion}) ✅</span>`;
+                }
+                showToast(`MasterDeploy ən son versiyadadır (${_currentPanelVersion})`, 'success');
+            }
+        } else {
+            showToast('Versiya məlumatı oxuna bilmədi.', 'warning');
+        }
+    } catch (e) {
+        showToast('Xəta baş verdi: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = origText;
+    }
+}
+

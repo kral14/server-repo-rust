@@ -132,7 +132,8 @@ async function loadApplications() {
                     'building': '#00d2ff', 'cancelled': '#ff9800', 'idle': '#9aa0a6'
                 };
                 const sc = statusColors[app.status] || '#9aa0a6';
-                const apiLink = `http://${srvIp}:${app.port}`;
+                const resolvedHost = (srvIp === 'local' || srvIp === '127.0.0.1') ? 'localhost' : srvIp;
+                const apiLink = `http://${resolvedHost}:${app.port}`;
 
                 const cached = serverStatsCache[sid];
                 let cpuVal = '0%';
