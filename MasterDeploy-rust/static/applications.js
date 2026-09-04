@@ -313,6 +313,10 @@ async function handleCreateApp(event) {
     const memoryLimit = document.getElementById('app-memory').value.trim();
     const cpuLimit = document.getElementById('app-cpu').value.trim();
 
+    const autoDeployEnabled = document.getElementById('app-autodeploy-enabled')?.checked ? 1 : 0;
+    const autoDeployInterval = parseInt(document.getElementById('app-autodeploy-interval')?.value) || 15;
+    const autoDeployTimeout = parseInt(document.getElementById('app-autodeploy-timeout')?.value) || 10;
+
     const payload = {
         name: document.getElementById('app-name').value.trim(),
         repo_url: repoUrl,
@@ -324,6 +328,9 @@ async function handleCreateApp(event) {
         cpu_limit: cpuLimit ? parseFloat(cpuLimit) : null,
         deploy_type: deployType,
         registry_image: registryImage || null,
+        auto_deploy_enabled: autoDeployEnabled,
+        auto_deploy_interval: autoDeployInterval,
+        auto_deploy_timeout: autoDeployTimeout,
     };
 
     try {
@@ -1237,6 +1244,20 @@ async function openAppSettings(appId, showModalBool = true) {
         const regImgEl = document.getElementById('settings-registry-image');
         if (regImgEl) regImgEl.value = regImg;
 
+        // Auto-Deploy Fields
+        const autoEnabledEl = document.getElementById('settings-autodeploy-enabled');
+        if (autoEnabledEl) {
+            autoEnabledEl.checked = app.auto_deploy_enabled === 1;
+        }
+        const autoIntervalEl = document.getElementById('settings-autodeploy-interval');
+        if (autoIntervalEl) {
+            autoIntervalEl.value = app.auto_deploy_interval != null ? String(app.auto_deploy_interval) : '15';
+        }
+        const autoTimeoutEl = document.getElementById('settings-autodeploy-timeout');
+        if (autoTimeoutEl) {
+            autoTimeoutEl.value = app.auto_deploy_timeout != null ? String(app.auto_deploy_timeout) : '10';
+        }
+
         const bpt = app.build_pack_type || 'dockerfile';
         settingsSelectBuild(bpt);
 
@@ -1253,25 +1274,26 @@ function settingsSelectBuild(type) {
     const dfFields = document.getElementById('settings-df-fields');
 
     if (type === 'buildpack') {
-        bpBtn.style.background = 'rgba(0,210,255,0.15)';
+        settingsCurrentBuildType = 'buildpack';
+        bpBtn.classList.add('active');
+        bpBtn.style.background = 'rgba(0,210,255,0.1)';
         bpBtn.style.color = 'var(--accent-color)';
-        bpBtn.style.borderColor = 'var(--accent-color)';
+        dfBtn.classList.remove('active');
         dfBtn.style.background = 'transparent';
         dfBtn.style.color = 'var(--text-secondary)';
-        dfBtn.style.borderColor = 'var(--card-border)';
         bpFields.style.display = 'block';
         dfFields.style.display = 'none';
     } else {
-        dfBtn.style.background = 'rgba(0,210,255,0.15)';
+        settingsCurrentBuildType = 'dockerfile';
+        dfBtn.classList.add('active');
+        dfBtn.style.background = 'rgba(0,210,255,0.1)';
         dfBtn.style.color = 'var(--accent-color)';
-        dfBtn.style.borderColor = 'var(--accent-color)';
+        bpBtn.classList.remove('active');
         bpBtn.style.background = 'transparent';
         bpBtn.style.color = 'var(--text-secondary)';
-        bpBtn.style.borderColor = 'var(--card-border)';
         bpFields.style.display = 'none';
         dfFields.style.display = 'block';
     }
-    settingsCurrentBuildType = type;
 }
 
 let settingsCurrentBuildType = 'dockerfile';
@@ -1294,6 +1316,9 @@ function buildSettingsPayload() {
         cf_worker_url: document.getElementById('settings-cf-worker-url').value.trim() || null,
         deploy_type: document.getElementById('settings-deploy-type').value,
         registry_image: document.getElementById('settings-registry-image').value.trim() || null,
+        auto_deploy_enabled: document.getElementById('settings-autodeploy-enabled')?.checked ? 1 : 0,
+        auto_deploy_interval: parseInt(document.getElementById('settings-autodeploy-interval')?.value) || 15,
+        auto_deploy_timeout: parseInt(document.getElementById('settings-autodeploy-timeout')?.value) || 10,
     };
 }
 

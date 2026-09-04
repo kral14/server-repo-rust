@@ -1894,6 +1894,10 @@ async function handleCreateApp(event) {
     const memoryLimit = document.getElementById('app-memory').value.trim();
     const cpuLimit = document.getElementById('app-cpu').value.trim();
 
+    const autoDeployEnabled = document.getElementById('app-autodeploy-enabled')?.checked ? 1 : 0;
+    const autoDeployInterval = parseInt(document.getElementById('app-autodeploy-interval')?.value) || 15;
+    const autoDeployTimeout = parseInt(document.getElementById('app-autodeploy-timeout')?.value) || 10;
+
     const payload = {
         name: document.getElementById('app-name').value.trim(),
         repo_url: repoUrl,
@@ -1905,6 +1909,9 @@ async function handleCreateApp(event) {
         cpu_limit: cpuLimit ? parseFloat(cpuLimit) : null,
         deploy_type: deployType,
         registry_image: registryImage || null,
+        auto_deploy_enabled: autoDeployEnabled,
+        auto_deploy_interval: autoDeployInterval,
+        auto_deploy_timeout: autoDeployTimeout,
     };
 
     try {
@@ -2827,6 +2834,12 @@ async function openAppSettings(appId, showModalBool = true) {
         const autoEnabledEl = document.getElementById('settings-autodeploy-enabled');
         if (autoEnabledEl) {
             autoEnabledEl.checked = app.auto_deploy_enabled === 1;
+            const badge = document.getElementById('settings-autodeploy-badge');
+            if (badge) {
+                badge.innerText = autoEnabledEl.checked ? 'Aktivdir' : 'Sönülüdür';
+                badge.style.color = autoEnabledEl.checked ? '#38bdf8' : '#94a3b8';
+                badge.style.background = autoEnabledEl.checked ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)';
+            }
         }
         const autoIntervalEl = document.getElementById('settings-autodeploy-interval');
         if (autoIntervalEl) {
@@ -2919,6 +2932,10 @@ async function saveAppSettings() {
         if (res.ok) {
             alert('Ayarlar uğurla yadda saxlanıldı!');
             loadApplications();
+            // Overview ekranını və cari məlumatları yenilə
+            if (typeof openAppDetails === 'function') {
+                openAppDetails(appId, false);
+            }
             // Pending redeploy bayrağını qoy
             localStorage.setItem(`pending_redeploy_${appId}`, 'true');
             markRedeployPending(true);
@@ -2953,6 +2970,59 @@ async function cacheDeployApp() {
     localStorage.removeItem(`pending_redeploy_${appId}`);
     markRedeployPending(false);
     deployApp(appId, false); // no_cache=false → Docker keşini istifadə edir (sürətli)
+}
+
+function handleAutoDeployToggleChange(checked) {
+    const badge = document.getElementById('settings-autodeploy-badge');
+    if (badge) {
+        badge.innerText = checked ? 'Aktivdir' : 'Sönülüdür';
+        badge.style.color = checked ? '#38bdf8' : '#94a3b8';
+        badge.style.background = checked ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)';
+    }
+}
+
+async function quickToggleAutoDeploy(checked) {
+    const appId = currentAppDetailsId || currentAppId || currentSettingsAppId;
+    if (!appId) {
+        alert("Layihə tapılmadı!");
+        return;
+    }
+    try {
+        const res = await fetch(`/api/applications/${appId}`);
+        if (!res.ok) return;
+        const app = await res.json();
+        app.auto_deploy_enabled = checked ? 1 : 0;
+        
+        const updateRes = await fetch(`/api/applications/${appId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(app)
+        });
+        
+        if (updateRes.ok) {
+            // Sazlamalar səhifəsindəki switch və badge-i də sinxronlaşdır
+            const settingsSwitch = document.getElementById('settings-autodeploy-enabled');
+            if (settingsSwitch) {
+                settingsSwitch.checked = checked;
+                handleAutoDeployToggleChange(checked);
+            }
+            // Overview statusunu dərhal vizual yenilə
+            const adStatusEl = document.getElementById('detail-overview-autodeploy-status');
+            if (adStatusEl) {
+                if (checked) {
+                    adStatusEl.innerHTML = '<span style="color: #00e676; display: inline-flex; align-items: center; gap: 4px;"><span style="width:7px;height:7px;border-radius:50%;background:#00e676;display:inline-block;"></span> Aktivdir</span>';
+                } else {
+                    adStatusEl.innerHTML = '<span style="color: #94a3b8; display: inline-flex; align-items: center; gap: 4px;"><span style="width:7px;height:7px;border-radius:50%;background:#64748b;display:inline-block;"></span> Sönülüdür ⚪</span>';
+                }
+            }
+            showToast(checked ? '✅ Auto-Deploy aktivləşdirildi!' : '⚪ Auto-Deploy söndürüldü!', 'info');
+        } else {
+            alert('Statusu dəyişmək mümkün olmadı.');
+        }
+    } catch (e) {
+        console.error('quickToggleAutoDeploy error', e);
+        alert('Serverlə əlaqə xətası: ' + e);
+    }
 }
 
 // ============================================================
@@ -4367,6 +4437,10 @@ async function openAppDetails(appId, autoSwitchToOverview = true) {
         document.getElementById('detail-overview-port').innerText = app.port || '-';
 
         // Populate Auto-Deploy Overview
+        const adToggleEl = document.getElementById('overview-autodeploy-toggle');
+        if (adToggleEl) {
+            adToggleEl.checked = app.auto_deploy_enabled === 1;
+        }
         const adStatusEl = document.getElementById('detail-overview-autodeploy-status');
         if (adStatusEl) {
             if (app.auto_deploy_enabled === 1) {

@@ -1705,9 +1705,9 @@ async fn update_application(
             build_command = ?, run_command = ?, dockerfile_path = ?, entrypoint = ?, 
             command = ?, target = ?, work_dir = ?, privileged = ?, memory_limit = ?, cpu_limit = ?,
             cf_worker_url = ?, deploy_type = ?, registry_image = ?,
-            auto_deploy_enabled = COALESCE(?, auto_deploy_enabled),
-            auto_deploy_interval = COALESCE(?, auto_deploy_interval),
-            auto_deploy_timeout = COALESCE(?, auto_deploy_timeout),
+            auto_deploy_enabled = ?,
+            auto_deploy_interval = ?,
+            auto_deploy_timeout = ?,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = ?"
     )
@@ -1729,9 +1729,9 @@ async fn update_application(
     .bind(&input.cf_worker_url)
     .bind(&input.deploy_type)
     .bind(&input.registry_image)
-    .bind(input.auto_deploy_enabled)
-    .bind(input.auto_deploy_interval)
-    .bind(input.auto_deploy_timeout)
+    .bind(input.auto_deploy_enabled.unwrap_or(0))
+    .bind(input.auto_deploy_interval.unwrap_or(15))
+    .bind(input.auto_deploy_timeout.unwrap_or(10))
     .bind(&app_id)
     .execute(&state.db)
     .await
@@ -1894,15 +1894,81 @@ async fn check_application_deploy(
 
         add_activity_log_pro(&state.db, &format!("'{}' layihəsi üçün dərhal Git commit yoxlanılır (Budaq: {}, Timeout: {}s)...", app.name, app.branch, timeout_secs), "info", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
 
+        // Qlobal GitHub PAT tokenini yoxlayırıq
+        let gh_token: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = 'github_token'")
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or_default();
+
+        let mut final_repo_url = app.repo_url.clone();
+        if let Some((ref tok,)) = gh_token {
+            if !tok.trim().is_empty() && final_repo_url.starts_with("https://github.com/") {
+                final_repo_url = final_repo_url.replace("https://github.com/", &format!("https://{}@github.com/", tok.trim()));
+            }
+        }
+
+        // Serverin SSH açarını yoxlayırıq (əgər git@ və ya ssh formatıdırsa)
+        let mut temp_ssh_key: Option<String> = None;
+        if final_repo_url.starts_with("git@") || final_repo_url.starts_with("ssh://") {
+            let server_row: Option<(String, Option<String>)> = sqlx::query_as("SELECT ssh_key, ssh_key_id FROM servers WHERE id = ?")
+                .bind(&app.server_id)
+                .fetch_optional(&state.db)
+                .await
+                .unwrap_or_default();
+
+            if let Some((s_key, s_key_id)) = server_row {
+                let key_content = if let Some(ref kid) = s_key_id {
+                    let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+                        .bind(kid)
+                        .fetch_optional(&state.db)
+                        .await
+                        .unwrap_or_default();
+                    db_key.map(|r| r.0).unwrap_or(s_key)
+                } else {
+                    s_key
+                };
+
+                let key_content = if key_content.contains("BEGIN ") {
+                    key_content
+                } else {
+                    std::fs::read_to_string(key_content.trim()).unwrap_or_default()
+                };
+
+                if !key_content.trim().is_empty() {
+                    let kpath = std::env::temp_dir().join(format!("git_check_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+                    let normalized = key_content.replace("\r\n", "\n").replace('\r', "\n").trim().to_string() + "\n";
+                    if std::fs::write(&kpath, &normalized).is_ok() {
+                        #[cfg(target_os = "windows")]
+                        {
+                            let id_user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+                            let _ = std::process::Command::new("icacls").args(&[&kpath, "/inheritance:r"]).output();
+                            let _ = std::process::Command::new("icacls").args(&[&kpath, "/grant:r", &format!("{}:F", id_user)]).output();
+                        }
+                        #[cfg(not(target_os = "windows"))]
+                        {
+                            let _ = std::process::Command::new("chmod").args(&["600", &kpath]).output();
+                        }
+                        temp_ssh_key = Some(kpath);
+                    }
+                }
+            }
+        }
+
         let mut cmd = tokio::process::Command::new("git");
-        cmd.env("GIT_TERMINAL_PROMPT", "0")
-           .args(["ls-remote", &app.repo_url, &app.branch])
+        cmd.env("GIT_TERMINAL_PROMPT", "0");
+        if let Some(ref kpath) = temp_ssh_key {
+            cmd.env("GIT_SSH_COMMAND", format!("ssh -i \"{}\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", kpath.replace('\\', "/")));
+        }
+        cmd.args(["ls-remote", &final_repo_url, &app.branch])
            .stdout(std::process::Stdio::piped())
            .stderr(std::process::Stdio::piped());
 
         let mut child = match cmd.spawn() {
             Ok(c) => c,
             Err(e) => {
+                if let Some(ref kpath) = temp_ssh_key {
+                    let _ = std::fs::remove_file(kpath);
+                }
                 add_activity_log_pro(&state.db, &format!("'{}' üçün Git əmri başladıla bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("manual"), Some(&app.id), None).await;
                 return Ok(Json(serde_json::json!({
                     "status": "error",
@@ -1926,7 +1992,7 @@ async fn check_application_deploy(
 
         let timeout_res = tokio::time::timeout(tokio::time::Duration::from_secs(timeout_secs), wait_fut).await;
 
-        match timeout_res {
+        let final_res = match timeout_res {
             Ok((Ok(status), out_bytes, err_bytes)) => {
                 if status.success() {
                     let result_str = String::from_utf8_lossy(&out_bytes);
@@ -1998,7 +2064,13 @@ async fn check_application_deploy(
                     "message": format!("Git sorğusu vaxt aşımına uğradı ({}s limit).", timeout_secs)
                 })))
             }
+        };
+
+        if let Some(ref kpath) = temp_ssh_key {
+            let _ = std::fs::remove_file(kpath);
         }
+
+        final_res
     }
 }
 
@@ -3205,15 +3277,81 @@ async fn git_polling_loop(db: SqlitePool) {
 
             add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' layihəsi üçün yeni Git commit yoxlanılır (Budaq: {})...", app.name, app.branch), "info", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
 
+            // Qlobal GitHub PAT tokenini yoxlayırıq
+            let gh_token: Option<(String,)> = sqlx::query_as("SELECT value FROM settings WHERE key = 'github_token'")
+                .fetch_optional(&db)
+                .await
+                .unwrap_or_default();
+
+            let mut final_repo_url = app.repo_url.clone();
+            if let Some((ref tok,)) = gh_token {
+                if !tok.trim().is_empty() && final_repo_url.starts_with("https://github.com/") {
+                    final_repo_url = final_repo_url.replace("https://github.com/", &format!("https://{}@github.com/", tok.trim()));
+                }
+            }
+
+            // Serverin SSH açarını yoxlayırıq (əgər git@ və ya ssh formatıdırsa)
+            let mut temp_ssh_key: Option<String> = None;
+            if final_repo_url.starts_with("git@") || final_repo_url.starts_with("ssh://") {
+                let server_row: Option<(String, Option<String>)> = sqlx::query_as("SELECT ssh_key, ssh_key_id FROM servers WHERE id = ?")
+                    .bind(&app.server_id)
+                    .fetch_optional(&db)
+                    .await
+                    .unwrap_or_default();
+
+                if let Some((s_key, s_key_id)) = server_row {
+                    let key_content = if let Some(ref kid) = s_key_id {
+                        let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+                            .bind(kid)
+                            .fetch_optional(&db)
+                            .await
+                            .unwrap_or_default();
+                        db_key.map(|r| r.0).unwrap_or(s_key)
+                    } else {
+                        s_key
+                    };
+
+                    let key_content = if key_content.contains("BEGIN ") {
+                        key_content
+                    } else {
+                        std::fs::read_to_string(key_content.trim()).unwrap_or_default()
+                    };
+
+                    if !key_content.trim().is_empty() {
+                        let kpath = std::env::temp_dir().join(format!("git_poll_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+                        let normalized = key_content.replace("\r\n", "\n").replace('\r', "\n").trim().to_string() + "\n";
+                        if std::fs::write(&kpath, &normalized).is_ok() {
+                            #[cfg(target_os = "windows")]
+                            {
+                                let id_user = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+                                let _ = std::process::Command::new("icacls").args(&[&kpath, "/inheritance:r"]).output();
+                                let _ = std::process::Command::new("icacls").args(&[&kpath, "/grant:r", &format!("{}:F", id_user)]).output();
+                            }
+                            #[cfg(not(target_os = "windows"))]
+                            {
+                                let _ = std::process::Command::new("chmod").args(&["600", &kpath]).output();
+                            }
+                            temp_ssh_key = Some(kpath);
+                        }
+                    }
+                }
+            }
+
             let mut cmd = tokio::process::Command::new("git");
-            cmd.env("GIT_TERMINAL_PROMPT", "0")
-               .args(["ls-remote", &app.repo_url, &app.branch])
+            cmd.env("GIT_TERMINAL_PROMPT", "0");
+            if let Some(ref kpath) = temp_ssh_key {
+                cmd.env("GIT_SSH_COMMAND", format!("ssh -i \"{}\" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null", kpath.replace('\\', "/")));
+            }
+            cmd.args(["ls-remote", &final_repo_url, &app.branch])
                .stdout(std::process::Stdio::piped())
                .stderr(std::process::Stdio::piped());
 
             let mut child = match cmd.spawn() {
                 Ok(c) => c,
                 Err(e) => {
+                    if let Some(ref kpath) = temp_ssh_key {
+                        let _ = std::fs::remove_file(kpath);
+                    }
                     eprintln!("[AUTO-DEPLOY ERROR] Failed to spawn git command for {}: {}", app.name, e);
                     add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git əmri başladıla bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                     continue;
@@ -3291,6 +3429,10 @@ async fn git_polling_loop(db: SqlitePool) {
                     eprintln!("[AUTO-DEPLOY ERROR] git ls-remote timed out ({}s limit) for {}. Process forcefully killed.", timeout_secs, app.name);
                     add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' üçün Git sorğusu vaxt aşımına uğradı ({}s). Proses məcburi dayandırıldı.", app.name, timeout_secs), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                 }
+            }
+
+            if let Some(ref kpath) = temp_ssh_key {
+                let _ = std::fs::remove_file(kpath);
             }
         }
     }
