@@ -127,7 +127,7 @@ def main():
     log("Kod dəyişiklikləri GitHub-a push edilir...")
     subprocess.run("git add .", shell=True, cwd=server_repo_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(f'git commit -m "Lokal build yenilenmesi: {version}"', shell=True, cwd=server_repo_dir, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    git_push = subprocess.run("git push origin main", shell=True, cwd=server_repo_dir, capture_output=True, text=True)
+    git_push = subprocess.run("git push origin main --force", shell=True, cwd=server_repo_dir, capture_output=True, text=True)
     if git_push.returncode != 0:
         log(f"Warning: Git push ugursuz oldu: {git_push.stderr.strip()}")
     else:

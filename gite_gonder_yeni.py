@@ -140,9 +140,9 @@ __pycache__/
         print("Nothing to commit or commit failed.")
         # We don't return here, maybe there are just no changes
     
-    # 5. GitHub-a göndəririk (Normal push, Force (-f) deyil ki tarixçə silinməsin)
+    # 5. GitHub-a göndəririk (--force ilə sinxronlaşdırırıq)
     print("Pushing to GitHub, please wait...")
-    success = run_cmd("git push origin main")
+    success = run_cmd("git push origin main --force")
     
     if success:
         print("\nSUCCESS! All code pushed to GitHub (server-repo-rust) successfully!")
