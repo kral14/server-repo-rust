@@ -109,6 +109,21 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN auto_deploy_timeout INTEGER DEFAULT 10").execute(&pool).await;
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN last_auto_deploy_check DATETIME").execute(&pool).await;
 
+    // 4. Qlobal sistem və arxa plan xidmətləri sazlamaları cədvəli
+    let _ = sqlx::query(
+        "CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )"
+    ).execute(&pool).await;
+
+    let _ = sqlx::query("INSERT OR IGNORE INTO settings (key, value) VALUES ('bg_autodeploy_enabled', '1')").execute(&pool).await;
+    let _ = sqlx::query("INSERT OR IGNORE INTO settings (key, value) VALUES ('bg_autoclean_enabled', '1')").execute(&pool).await;
+    let _ = sqlx::query("INSERT OR IGNORE INTO settings (key, value) VALUES ('bg_autoclean_days', '30')").execute(&pool).await;
+    let _ = sqlx::query("INSERT OR IGNORE INTO settings (key, value) VALUES ('bg_tunnel_watchdog_enabled', '1')").execute(&pool).await;
+    let _ = sqlx::query("INSERT OR IGNORE INTO settings (key, value) VALUES ('bg_tunnel_watchdog_interval', '2')").execute(&pool).await;
+
     Ok(pool)
 }
+
 

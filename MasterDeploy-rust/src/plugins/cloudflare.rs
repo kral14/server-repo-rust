@@ -978,5 +978,252 @@ fn sanitize_cf_script_name(name: &str) -> String {
     result.trim_matches('-').to_string()
 }
 
+pub async fn start_tunnel_for_app_internal(db: &sqlx::SqlitePool, app_id: &str) -> Result<String, String> {
+    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
+        .bind(app_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Application not found".to_string())?;
+
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&app.server_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Server not found".to_string())?;
+
+    let port = app.port;
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+
+    let (bash_cmd, is_local) = if server.ip == "local" || server.ip == "127.0.0.1" {
+        (
+            format!(
+                "docker rm -f cf-tunnel-{} || true; \
+                 docker run -d --name cf-tunnel-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{}",
+                app_id, app_id, port
+            ),
+            true,
+        )
+    } else {
+        (
+            format!(
+                "sudo docker rm -f cf-tunnel-{} || true; \
+                 sudo docker run -d --name cf-tunnel-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{}",
+                app_id, app_id, port
+            ),
+            false,
+        )
+    };
+
+    if is_local {
+        tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(&bash_cmd)
+            .output()
+            .await
+            .map_err(|e| format!("Local start error: {}", e))?;
+    } else {
+        let temp_key_path = std::env::temp_dir().join(format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+        let key_content = if server.ssh_key.contains("BEGIN ") {
+            server.ssh_key.clone()
+        } else {
+            std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        };
+
+        std::fs::write(&temp_key_path, &key_content)
+            .map_err(|e| format!("Key write error: {}", e))?;
+
+        #[cfg(target_os = "windows")]
+        {
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+        }
+
+        let run_cmd = tokio::process::Command::new(ssh_bin)
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=8",
+                "-i", &temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                &bash_cmd
+            ])
+            .output()
+            .await;
+
+        let _ = std::fs::remove_file(&temp_key_path);
+        run_cmd.map_err(|e| format!("SSH tunnel start error: {}", e))?;
+    }
+
+    // Wait & extract new tunnel URL from logs
+    let log_cmd = if is_local {
+        format!("docker logs cf-tunnel-{}", app_id)
+    } else {
+        format!("sudo docker logs cf-tunnel-{}", app_id)
+    };
+
+    let mut found_url: Option<String> = None;
+    for _ in 0..12 {
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        let out_res = if is_local {
+            tokio::process::Command::new("sh").arg("-c").arg(&log_cmd).output().await
+        } else {
+            let temp_key_path = std::env::temp_dir().join(format!("temp_tunnel_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+            let key_content = if server.ssh_key.contains("BEGIN ") {
+                server.ssh_key.clone()
+            } else {
+                std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+            };
+            let _ = std::fs::write(&temp_key_path, &key_content);
+
+            #[cfg(target_os = "windows")]
+            {
+                let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+                let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+                let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+            }
+
+            let r = tokio::process::Command::new(ssh_bin)
+                .args(&[
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "BatchMode=yes",
+                    "-o", "ConnectTimeout=5",
+                    "-i", &temp_key_path,
+                    &format!("{}@{}", server.ssh_user, server.ip),
+                    &log_cmd
+                ])
+                .output()
+                .await;
+
+            let _ = std::fs::remove_file(&temp_key_path);
+            r
+        };
+
+        if let Ok(out) = out_res {
+            let log_str = format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+            for line in log_str.lines() {
+                if line.contains(".trycloudflare.com") {
+                    if let Some(start_idx) = line.find("https://") {
+                        let rest = &line[start_idx..];
+                        let end_idx = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
+                        found_url = Some(rest[..end_idx].to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        if found_url.is_some() {
+            break;
+        }
+    }
+
+    if let Some(url) = found_url {
+        println!("[TUNNEL WATCHDOG] Yeni tunel linki uğurla generasiya olundu: {}", url);
+        let _ = sqlx::query("UPDATE applications SET cloudflare_url = ? WHERE id = ?")
+            .bind(&url)
+            .bind(app_id)
+            .execute(db)
+            .await;
+
+        let _ = send_url_to_kv(db, &app.name, app.cf_worker_url.clone(), &url).await;
+        Ok(url)
+    } else {
+        Err("Tunel linki loqlardan oxuna bilmədi (Timeout)".to_string())
+    }
+}
+
+pub async fn verify_and_heal_tunnel(db: &sqlx::SqlitePool, app: &Application) -> bool {
+    let cf_url = match &app.cloudflare_url {
+        Some(u) if !u.is_empty() => u.clone(),
+        _ => return false,
+    };
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(6))
+        .danger_accept_invalid_certs(true)
+        .build() {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    let is_alive = match client.get(&cf_url).send().await {
+        Ok(res) => {
+            let code = res.status().as_u16();
+            // Error 1016 və ya 530, 502 Cloudflare DNS/tunnel ölümüdür
+            if code == 530 || code == 502 || code == 504 {
+                false
+            } else {
+                true
+            }
+        }
+        Err(e) => {
+            // DNS lookup xətası və ya connect xətası tunelin ölməsi deməkdir
+            if e.is_connect() || e.is_timeout() || e.to_string().contains("dns") {
+                false
+            } else {
+                true
+            }
+        }
+    };
+
+    if !is_alive {
+        println!("[TUNNEL WATCHDOG] ⚠️ '{}' tətbiqinin tuneli cavab vermir (URL: {}). Avtomatik bərpa başladılır...", app.name, cf_url);
+        crate::utils::add_activity_log_pro(
+            db,
+            &format!("Cloudflare Tuneli ('{}') dayanıb (Error 1016/DNS). Arxa planda bərpa icra edilir...", app.name),
+            "warning",
+            Some("Watchdog"),
+            Some("system"),
+            Some(&app.id),
+            None
+        ).await;
+
+        match start_tunnel_for_app_internal(db, &app.id).await {
+            Ok(new_url) => {
+                println!("[TUNNEL WATCHDOG] ✅ Tunel bərpa edildi və Cloudflare KV-yə ötürüldü: {}", new_url);
+                crate::utils::add_activity_log_pro(
+                    db,
+                    &format!("Cloudflare Tuneli ('{}') uğurla bərpa olundu və yeni link KV bazasına yazıldı: {}", app.name, new_url),
+                    "success",
+                    Some("Watchdog"),
+                    Some("system"),
+                    Some(&app.id),
+                    None
+                ).await;
+                return true;
+            }
+            Err(e) => {
+                eprintln!("[TUNNEL WATCHDOG] ❌ Bərpa xətası: {}", e);
+                crate::utils::add_activity_log_pro(
+                    db,
+                    &format!("Cloudflare Tuneli bərpa olunarkən xəta baş verdi ('{}'): {}", app.name, e),
+                    "error",
+                    Some("Watchdog"),
+                    Some("system"),
+                    Some(&app.id),
+                    None
+                ).await;
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
 
 

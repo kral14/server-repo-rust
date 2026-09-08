@@ -5,12 +5,53 @@ use crate::deploy::trigger_deployment_impl;
 
 pub async fn git_polling_loop(db: SqlitePool) {
     println!("[INFO] Git Auto-Deploy Polling Service is running... 🕵️");
+    let mut loop_tick: u64 = 0;
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+        loop_tick += 1;
 
-        let _ = sqlx::query("DELETE FROM deployments WHERE created_at < datetime('now', '-30 days')")
-            .execute(&db)
-            .await;
+        // 1. Köhnə deployment loqlarının tənzimlənə bilən həddə əsasən avtomatik təmizlənməsi
+        let autoclean_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autoclean_enabled'")
+            .fetch_optional(&db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+
+        if autoclean_enabled == "1" || autoclean_enabled == "true" {
+            let autoclean_days_str: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autoclean_days'")
+                .fetch_optional(&db).await.unwrap_or_default().unwrap_or_else(|| "30".to_string());
+            let days: i32 = autoclean_days_str.parse().unwrap_or(30);
+            let query_str = format!("DELETE FROM deployments WHERE created_at < datetime('now', '-{} days')", days);
+            let _ = sqlx::query(&query_str).execute(&db).await;
+        }
+
+        // 2. Ağıllı Cloudflare Tunel İzləyicisi (Tunnel Watchdog)
+        // Hər 2 dəqiqədən bir (4 dövrədən bir = 120 san) tunellərin canlılığını yoxlayıb bərpa edir
+        let tunnel_watchdog_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_tunnel_watchdog_enabled'")
+            .fetch_optional(&db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+
+        if (tunnel_watchdog_enabled == "1" || tunnel_watchdog_enabled == "true") && loop_tick % 4 == 0 {
+            if let Ok(tunnel_apps) = sqlx::query_as::<_, Application>(
+                "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
+                 build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
+                 privileged, memory_limit, cpu_limit, \
+                 CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
+                 last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+                 auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
+                 CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
+                 FROM applications \
+                 WHERE cloudflare_url IS NOT NULL AND cloudflare_url != ''"
+            ).fetch_all(&db).await {
+                for tapp in tunnel_apps {
+                    crate::plugins::cloudflare::verify_and_heal_tunnel(&db, &tapp).await;
+                }
+            }
+        }
+
+        // 3. Qlobal Auto-Deploy Yoxlanışı: Əgər qlobal olaraq söndürülübsə, resurs sərf etmədən ötürürük
+        let autodeploy_global_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autodeploy_enabled'")
+            .fetch_optional(&db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+
+        if autodeploy_global_enabled != "1" && autodeploy_global_enabled != "true" {
+            continue;
+        }
 
         let apps = match sqlx::query_as::<_, Application>(
             "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
@@ -23,6 +64,7 @@ pub async fn git_polling_loop(db: SqlitePool) {
              FROM applications \
              WHERE auto_deploy_enabled = 1"
         ).fetch_all(&db).await {
+
             Ok(list) => list,
             Err(e) => {
                 eprintln!("[ERROR] Polling loop DB error: {}", e);

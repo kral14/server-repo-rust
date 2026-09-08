@@ -359,11 +359,21 @@ async function handleCreateApp(event) {
     }
 }
 
-let currentActiveDeploymentId = null;
-let logInterval = null;
-let lastUpdateTime = null;
-let lastSeenLog = '';
-let updateBadgeTimer = null;
+if (typeof window.currentActiveDeploymentId === 'undefined') {
+    window.currentActiveDeploymentId = null;
+}
+if (typeof logInterval === 'undefined') {
+    var logInterval = null;
+}
+if (typeof lastUpdateTime === 'undefined') {
+    var lastUpdateTime = null;
+}
+if (typeof lastSeenLog === 'undefined') {
+    var lastSeenLog = '';
+}
+if (typeof updateBadgeTimer === 'undefined') {
+    var updateBadgeTimer = null;
+}
 
 // Delete Application
 async function deleteApp(appId, appName) {
@@ -2606,13 +2616,27 @@ document.addEventListener('click', () => {
 });
 
 // Modallar açılanda pluginləri yüklə
-const originalShowModal = showModal;
-showModal = function (id) {
-    originalShowModal(id);
-    if (id === 'plugins-modal') {
-        loadPlugins();
-    }
-};
+if (typeof showModal === 'function') {
+    const originalShowModal = showModal;
+    showModal = function (id) {
+        originalShowModal(id);
+        if (id === 'plugins-modal' && typeof loadPlugins === 'function') {
+            loadPlugins();
+        }
+    };
+} else {
+    window.addEventListener('DOMContentLoaded', () => {
+        if (typeof showModal === 'function') {
+            const originalShowModal = showModal;
+            showModal = function (id) {
+                originalShowModal(id);
+                if (id === 'plugins-modal' && typeof loadPlugins === 'function') {
+                    loadPlugins();
+                }
+            };
+        }
+    });
+}
 
 // ESC düyməsi ilə ən öndəki (aktiv) pəncərəni bağlamaq
 document.addEventListener('keydown', (e) => {

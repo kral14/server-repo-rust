@@ -48,7 +48,7 @@ pub async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec
 }
 
 pub async fn list_autodeploy_applications(State(state): State<AppState>) -> Result<Json<Vec<Application>>, (StatusCode, String)> {
-    let apps = match sqlx::query_as::<_, Application>(
+    let mut apps = match sqlx::query_as::<_, Application>(
         "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
@@ -68,6 +68,88 @@ pub async fn list_autodeploy_applications(State(state): State<AppState>) -> Resu
             Vec::new()
         }
     };
+
+    // Sistem arxa plan xidmətlərini də Auto-Deploy siyahısına virtual olaraq əlavə edirik:
+    let tw_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_tunnel_watchdog_enabled'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+    let tw_interval_str: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_tunnel_watchdog_interval'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "2".to_string());
+
+    let ac_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autoclean_enabled'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+    let ac_days_str: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autoclean_days'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "30".to_string());
+
+    let tunnel_service = Application {
+        id: "sys-tunnel-watchdog".to_string(),
+        name: "Cloudflare Tunel Nəzarətçisi (Watchdog)".to_string(),
+        repo_url: "Avtomatik Tunel Bərpası & Cloudflare KV Sinxronu".to_string(),
+        branch: "trycloudflare".to_string(),
+        port: 0,
+        server_id: "local-server-id".to_string(),
+        status: if tw_enabled == "1" || tw_enabled == "true" { "running".to_string() } else { "stopped".to_string() },
+        env_vars: None,
+        build_pack_type: Some("system".to_string()),
+        build_command: None,
+        run_command: None,
+        dockerfile_path: None,
+        entrypoint: None,
+        command: None,
+        target: None,
+        work_dir: None,
+        privileged: Some(1),
+        memory_limit: None,
+        cpu_limit: None,
+        created_at: "".to_string(),
+        updated_at: "".to_string(),
+        last_commit_hash: None,
+        cloudflare_url: None,
+        cf_worker_url: None,
+        deploy_type: Some("system_service".to_string()),
+        registry_image: Some("Sistem Nəzarətçisi: trycloudflare health & DNS error 1016 bərpaçı".to_string()),
+        auto_deploy_enabled: Some(if tw_enabled == "1" || tw_enabled == "true" { 1 } else { 0 }),
+        auto_deploy_interval: Some(tw_interval_str.parse().unwrap_or(2)),
+        auto_deploy_timeout: Some(10),
+        last_auto_deploy_check: Some("Aktiv dövr (hər 2 dəqiqə)".to_string()),
+    };
+
+    let autoclean_service = Application {
+        id: "sys-autoclean".to_string(),
+        name: "Avtomatik Loq & Keş Təmizləmə (Auto-Clean)".to_string(),
+        repo_url: "Verilənlər bazası və köhnə deploymentlərin optimizasiyası".to_string(),
+        branch: format!("{} günlük limit", ac_days_str),
+        port: 0,
+        server_id: "local-server-id".to_string(),
+        status: if ac_enabled == "1" || ac_enabled == "true" { "running".to_string() } else { "stopped".to_string() },
+        env_vars: None,
+        build_pack_type: Some("system".to_string()),
+        build_command: None,
+        run_command: None,
+        dockerfile_path: None,
+        entrypoint: None,
+        command: None,
+        target: None,
+        work_dir: None,
+        privileged: Some(1),
+        memory_limit: None,
+        cpu_limit: None,
+        created_at: "".to_string(),
+        updated_at: "".to_string(),
+        last_commit_hash: None,
+        cloudflare_url: None,
+        cf_worker_url: None,
+        deploy_type: Some("system_service".to_string()),
+        registry_image: Some(format!("Gündəlik arxa plan təmizləyicisi ({} gündən köhnə loqlar)", ac_days_str)),
+        auto_deploy_enabled: Some(if ac_enabled == "1" || ac_enabled == "true" { 1 } else { 0 }),
+        auto_deploy_interval: Some(1440),
+        auto_deploy_timeout: Some(30),
+        last_auto_deploy_check: Some("Hər gün avtomatik icra olunur".to_string()),
+    };
+
+    // Siyahının əvvəlinə və ya sonuna əlavə edirik
+    apps.push(tunnel_service);
+    apps.push(autoclean_service);
+
     Ok(Json(apps))
 }
 
@@ -253,6 +335,29 @@ pub async fn quick_update_autodeploy(
     AxumPath(app_id): AxumPath<String>,
     Json(input): Json<QuickAutoDeployInput>,
 ) -> Result<Json<bool>, (StatusCode, String)> {
+    if app_id == "sys-tunnel-watchdog" {
+        if let Some(enabled) = input.auto_deploy_enabled {
+            let _ = sqlx::query("INSERT INTO settings (key, value) VALUES ('bg_tunnel_watchdog_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                .bind(if enabled == 1 { "1" } else { "0" })
+                .execute(&state.db).await;
+        }
+        if let Some(interval) = input.auto_deploy_interval {
+            let _ = sqlx::query("INSERT INTO settings (key, value) VALUES ('bg_tunnel_watchdog_interval', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                .bind(interval.to_string())
+                .execute(&state.db).await;
+        }
+        return Ok(Json(true));
+    }
+
+    if app_id == "sys-autoclean" {
+        if let Some(enabled) = input.auto_deploy_enabled {
+            let _ = sqlx::query("INSERT INTO settings (key, value) VALUES ('bg_autoclean_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                .bind(if enabled == 1 { "1" } else { "0" })
+                .execute(&state.db).await;
+        }
+        return Ok(Json(true));
+    }
+
     let mut query = String::from("UPDATE applications SET updated_at = CURRENT_TIMESTAMP");
     if let Some(enabled) = input.auto_deploy_enabled {
         query.push_str(&format!(", auto_deploy_enabled = {}", enabled));
@@ -278,6 +383,14 @@ pub async fn check_application_deploy(
     State(state): State<AppState>,
     AxumPath(app_id): AxumPath<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    if app_id == "sys-tunnel-watchdog" {
+        return crate::system::trigger_tunnel_check_now(State(state)).await;
+    }
+
+    if app_id == "sys-autoclean" {
+        return crate::system::trigger_clean_now(State(state)).await;
+    }
+
     let app = sqlx::query_as::<_, Application>(
         "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \

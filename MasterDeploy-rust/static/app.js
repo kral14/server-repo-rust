@@ -180,6 +180,56 @@ function initTabs() {
     });
 }
 
+function switchTab(tabId) {
+    localStorage.setItem('active_tab', tabId);
+
+    // Update nav buttons active state
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        if (btn.getAttribute('data-tab') === tabId) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Remove initial tab lock if present
+    const initLock = document.getElementById('initial-tab-lock');
+    if (initLock) initLock.remove();
+
+    // Update tab sections visibility
+    document.querySelectorAll('.tab-section').forEach(section => {
+        section.classList.remove('active');
+        section.style.setProperty('display', 'none', 'important');
+    });
+
+    const targetSection = document.getElementById(`tab-${tabId}`);
+    if (targetSection) {
+        targetSection.classList.add('active');
+        targetSection.style.setProperty('display', 'flex', 'important');
+        targetSection.style.setProperty('flex-direction', 'column', 'important');
+        targetSection.style.setProperty('flex', '1', 'important');
+        targetSection.style.setProperty('min-height', '0', 'important');
+    }
+
+    // Trigger tab-specific loaders
+    if (tabId === 'background-services') {
+        loadBackgroundServicesTab();
+    } else if (tabId === 'autodeploy') {
+        if (typeof loadAutoDeployCenter === 'function') loadAutoDeployCenter();
+    } else if (tabId === 'applications') {
+        if (typeof loadApplications === 'function') loadApplications();
+    } else if (tabId === 'servers') {
+        if (typeof loadServers === 'function') loadServers();
+    } else if (tabId === 'keys-tokens') {
+        if (typeof initKeysTokens === 'function') initKeysTokens();
+    }
+
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+    }
+}
+
+
 // --- Desktop Window Management System ---
 const activeWindows = {};
 const minimizedWindows = {};
@@ -6597,32 +6647,46 @@ function renderAutoDeployCenter() {
 
     container.innerHTML = filtered.map(app => {
         const isEnabled = Number(app.auto_deploy_enabled) === 1;
-        const isWatchdogOrSystem = app.name.includes('watchdog') || app.name.includes('masterdeploy-');
+        const isSystemService = app.deploy_type === 'system_service' || app.id.startsWith('sys-');
         const isImage = app.deploy_type === 'image';
         const interval = app.auto_deploy_interval || 15;
         const timeout = app.auto_deploy_timeout || 10;
         const lastCheck = app.last_auto_deploy_check || 'Hələ yoxlanılmayıb';
 
-        const typeBadge = isImage 
-            ? `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 600; border: 1px solid rgba(56, 189, 248, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="container" style="width: 12px; height: 12px;"></i> Docker Image</span>`
-            : `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); color: #c084fc; font-weight: 600; border: 1px solid rgba(168, 85, 247, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="git-branch" style="width: 12px; height: 12px;"></i> Git Repo (${app.branch || 'main'})</span>`;
+        let typeBadge = '';
+        if (isSystemService) {
+            typeBadge = `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="shield" style="width: 12px; height: 12px;"></i> Sistem Servisi</span>`;
+        } else if (isImage) {
+            typeBadge = `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 600; border: 1px solid rgba(56, 189, 248, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="container" style="width: 12px; height: 12px;"></i> Docker Image</span>`;
+        } else {
+            typeBadge = `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); color: #c084fc; font-weight: 600; border: 1px solid rgba(168, 85, 247, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="git-branch" style="width: 12px; height: 12px;"></i> Git Repo (${app.branch || 'main'})</span>`;
+        }
 
-        const roleBadge = isWatchdogOrSystem 
-            ? `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(234, 179, 8, 0.15); color: #facc15; font-weight: 600; border: 1px solid rgba(234, 179, 8, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="shield" style="width: 12px; height: 12px;"></i> Arxa Plan Servisi</span>`
+        const roleBadge = isSystemService 
+            ? `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(234, 179, 8, 0.15); color: #facc15; font-weight: 600; border: 1px solid rgba(234, 179, 8, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="cpu" style="width: 12px; height: 12px;"></i> Arxa Plan Modulu</span>`
             : `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(52, 211, 153, 0.12); color: #34d399; font-weight: 600; border: 1px solid rgba(52, 211, 153, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="sparkles" style="width: 12px; height: 12px;"></i> Tətbiq</span>`;
 
-        const sourceAddress = isImage ? (app.registry_image || 'Təyin edilməyib') : (app.repo_url || 'Repo linki yoxdur');
+        const sourceAddress = isSystemService
+            ? (app.registry_image || app.repo_url || 'Sistem nüvə xidməti')
+            : (isImage ? (app.registry_image || 'Təyin edilməyib') : (app.repo_url || 'Repo linki yoxdur'));
+
+        let mainIcon = '<i data-lucide="rocket" style="width: 22px; height: 22px; color: #f43f5e;"></i>';
+        if (isSystemService) {
+            mainIcon = app.id.includes('tunnel') 
+                ? '<i data-lucide="cloud" style="width: 22px; height: 22px; color: #f59e0b;"></i>' 
+                : '<i data-lucide="trash-2" style="width: 22px; height: 22px; color: #34d399;"></i>';
+        } else if (isImage) {
+            mainIcon = '<i data-lucide="container" style="width: 22px; height: 22px; color: #38bdf8;"></i>';
+        }
 
         return `
-            <div class="item-card" style="background: rgba(15, 23, 42, 0.55); border: 1px solid ${isEnabled ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.06)'}; border-left: 4px solid ${isEnabled ? '#38bdf8' : '#64748b'}; border-radius: 12px; padding: 1.1rem 1.3rem; transition: all 0.2s;">
+            <div class="item-card" style="background: rgba(15, 23, 42, 0.55); border: 1px solid ${isEnabled ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.06)'}; border-left: 4px solid ${isEnabled ? (isSystemService ? '#f59e0b' : '#38bdf8') : '#64748b'}; border-radius: 12px; padding: 1.1rem 1.3rem; transition: all 0.2s;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                     
                     <!-- Sol: İdentifikasiya -->
                     <div style="display: flex; align-items: center; gap: 1rem; min-width: 250px; flex: 1;">
-                        <div style="width: 44px; height: 44px; border-radius: 10px; background: ${isEnabled ? 'rgba(56, 189, 248, 0.12)' : 'rgba(255, 255, 255, 0.05)'}; display: flex; align-items: center; justify-content: center; color: ${isEnabled ? '#38bdf8' : '#94a3b8'}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                            ${isImage 
-                                ? '<i data-lucide="container" style="width: 22px; height: 22px; color: #38bdf8;"></i>' 
-                                : '<i data-lucide="rocket" style="width: 22px; height: 22px; color: #f43f5e;"></i>'}
+                        <div style="width: 44px; height: 44px; border-radius: 10px; background: ${isEnabled ? (isSystemService ? 'rgba(245, 158, 11, 0.12)' : 'rgba(56, 189, 248, 0.12)') : 'rgba(255, 255, 255, 0.05)'}; display: flex; align-items: center; justify-content: center; color: ${isEnabled ? '#38bdf8' : '#94a3b8'}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                            ${mainIcon}
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.25rem;">
                             <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
@@ -6787,4 +6851,250 @@ async function checkMasterDeployCoreUpdate(btn) {
         btn.innerHTML = origText;
     }
 }
+
+// ══════════════════════════════════════════════════════════════════
+// ARXA PLAN XİDMƏTLƏRİ VƏ TUNEL WATCHDOG İDARƏETMƏ PANELİ
+// ══════════════════════════════════════════════════════════════════
+
+async function loadBackgroundServicesTab() {
+    await Promise.all([
+        loadBackgroundServicesSettings(),
+        loadBackgroundAppsOverview(),
+        loadBackgroundActivityLogs()
+    ]);
+}
+
+async function loadBackgroundServicesSettings() {
+    try {
+        const res = await fetch('/api/settings/background-services');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        // Checkboxes & inputs
+        const toggleAd = document.getElementById('bg-toggle-autodeploy');
+        const toggleAc = document.getElementById('bg-toggle-autoclean');
+        const toggleTw = document.getElementById('bg-toggle-tunnel-watchdog');
+        const inputDays = document.getElementById('bg-input-autoclean-days');
+
+        if (toggleAd) toggleAd.checked = data.autodeploy_enabled;
+        if (toggleAc) toggleAc.checked = data.autoclean_enabled;
+        if (toggleTw) toggleTw.checked = data.tunnel_watchdog_enabled;
+        if (inputDays) inputDays.value = data.autoclean_days;
+
+        // Badges
+        updateBgBadge('bg-badge-autodeploy', data.autodeploy_enabled);
+        updateBgBadge('bg-badge-autoclean', data.autoclean_enabled);
+        updateBgBadge('bg-badge-tunnel', data.tunnel_watchdog_enabled);
+    } catch (e) {
+        console.error('Failed to load background services settings:', e);
+    }
+}
+
+function updateBgBadge(badgeId, isEnabled) {
+    const el = document.getElementById(badgeId);
+    if (!el) return;
+    if (isEnabled) {
+        el.innerText = 'Aktiv';
+        el.style.background = 'rgba(52, 211, 153, 0.15)';
+        el.style.color = '#34d399';
+    } else {
+        el.innerText = 'Sönülüdür';
+        el.style.background = 'rgba(239, 68, 68, 0.15)';
+        el.style.color = '#ef4444';
+    }
+}
+
+async function saveBackgroundServicesSettings() {
+    const autodeploy_enabled = document.getElementById('bg-toggle-autodeploy')?.checked ?? true;
+    const autoclean_enabled = document.getElementById('bg-toggle-autoclean')?.checked ?? true;
+    const tunnel_watchdog_enabled = document.getElementById('bg-toggle-tunnel-watchdog')?.checked ?? true;
+    const autoclean_days = parseInt(document.getElementById('bg-input-autoclean-days')?.value || '30', 10);
+    const tunnel_watchdog_interval = 2;
+
+    try {
+        const res = await fetch('/api/settings/background-services', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                autodeploy_enabled,
+                autoclean_enabled,
+                autoclean_days,
+                tunnel_watchdog_enabled,
+                tunnel_watchdog_interval
+            })
+        });
+
+        if (res.ok) {
+            showToast('Arxa plan xidmətləri və Tunel Watchdog ayarları uğurla saxlanıldı! ✅', 'success');
+            updateBgBadge('bg-badge-autodeploy', autodeploy_enabled);
+            updateBgBadge('bg-badge-autoclean', autoclean_enabled);
+            updateBgBadge('bg-badge-tunnel', tunnel_watchdog_enabled);
+        } else {
+            showToast('Ayarları saxlamaq mümkün olmadı.', 'error');
+        }
+    } catch (e) {
+        showToast('Xəta: ' + e.message, 'error');
+    }
+}
+
+async function triggerCleanNow() {
+    if (!confirm('Köhnə deployment qeydlərini indi təmizləmək istəyirsiniz?')) return;
+    try {
+        const res = await fetch('/api/settings/background-services/clean-now', { method: 'POST' });
+        if (res.ok) {
+            const data = await res.json();
+            showToast(`Təmizləmə tamamlandı: ${data.deleted_count} köhnə qeyd silindi! 🧹`, 'success');
+            loadBackgroundActivityLogs();
+        } else {
+            showToast('Təmizləmə zamanı xəta baş verdi.', 'error');
+        }
+    } catch (e) {
+        showToast('Xəta: ' + e.message, 'error');
+    }
+}
+
+async function triggerTunnelCheckNow() {
+    showToast('Bütün aktiv tunellər yoxlanılır və lazım gələrsə bərpa edilir... 🔍', 'info');
+    try {
+        const res = await fetch('/api/settings/background-services/tunnel-check-now', { method: 'POST' });
+        if (res.ok) {
+            const data = await res.json();
+            showToast(`Tunel yoxlaması başa çatdı! (Yoxlanılan: ${data.checked}, Yenidən qurulan: ${data.repaired}) ✅`, 'success');
+            loadBackgroundAppsOverview();
+            loadBackgroundActivityLogs();
+        } else {
+            showToast('Tunel yoxlaması zamanı xəta baş verdi.', 'error');
+        }
+    } catch (e) {
+        showToast('Xəta: ' + e.message, 'error');
+    }
+}
+
+async function loadBackgroundAppsOverview() {
+    const tbody = document.getElementById('bg-apps-table-body');
+    if (!tbody) return;
+
+    try {
+        const res = await fetch('/api/applications/autodeploy-list');
+        if (!res.ok) throw new Error('Layihələr və servislər oxunmadı');
+        const apps = await res.json();
+
+        if (apps.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="padding: 1.5rem; text-align: center; color: var(--text-secondary);">Heç bir layihə tapılmadı.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = apps.map(app => {
+            const isAutoDeploy = Number(app.auto_deploy_enabled) === 1;
+            const isSystemService = app.deploy_type === 'system_service' || app.id.startsWith('sys-');
+            const hasTunnel = app.cloudflare_url && app.cloudflare_url.length > 5;
+            let tunnelLink = '<span style="color: #64748b;">Aktiv deyil</span>';
+            if (isSystemService) {
+                tunnelLink = app.id.includes('tunnel') 
+                    ? `<span style="color: #f59e0b; font-weight: 500;">☁️ Tunel Qoruyucusu</span>`
+                    : `<span style="color: #34d399; font-weight: 500;">🧹 Keş & Loq</span>`;
+            } else if (hasTunnel) {
+                tunnelLink = `<a href="${app.cloudflare_url}" target="_blank" style="color: #38bdf8; text-decoration: none; display: inline-flex; align-items: center; gap: 4px;" title="${app.cloudflare_url}">🔗 ${app.cloudflare_url.replace('https://','').split('.')[0]}...</a>`;
+            }
+
+            const lastCheckText = app.last_auto_deploy_check 
+                ? (app.last_auto_deploy_check.includes('Aktiv') || app.last_auto_deploy_check.includes('Hər') ? app.last_auto_deploy_check : formatTimeAgo(new Date(app.last_auto_deploy_check)))
+                : '<span style="color: #64748b;">Yoxlanmayıb</span>';
+
+            const appIcon = isSystemService ? (app.id.includes('tunnel') ? '☁️' : '🧹') : '🚀';
+            const typeLabel = isSystemService ? 'SİSTEM SERVİSİ' : (app.deploy_type || 'git').toUpperCase();
+
+            return `
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.04);">
+                    <td style="padding: 0.6rem 0.8rem; font-weight: 600; color: #fff;">
+                        ${appIcon} ${app.name}
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem;">
+                        <span style="font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: ${isSystemService ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.06)'}; color: ${isSystemService ? '#f59e0b' : 'var(--text-secondary)'}; font-weight: ${isSystemService ? '600' : 'normal'};">
+                            ${typeLabel}
+                        </span>
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem;">
+                        <span style="font-size: 0.72rem; padding: 2px 8px; border-radius: 12px; font-weight: 600; background: ${isAutoDeploy ? 'rgba(52, 211, 153, 0.15)' : 'rgba(148, 163, 184, 0.1)'}; color: ${isAutoDeploy ? '#34d399' : '#94a3b8'};">
+                            ${isAutoDeploy ? 'Aktiv' : 'Deaktiv'}
+                        </span>
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem;">
+                        ${tunnelLink}
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem; color: var(--text-secondary);">
+                        ${app.auto_deploy_interval || 15} dəq
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem; font-size: 0.76rem; color: var(--text-secondary);">
+                        ${lastCheckText}
+                    </td>
+                    <td style="padding: 0.6rem 0.8rem; text-align: right;">
+                        <button class="btn btn-secondary btn-sm" onclick="triggerBgManualCheck('${app.id}', this)" style="padding: 3px 8px; font-size: 0.72rem;">
+                            ⚡ Yoxla
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" style="padding: 1.5rem; text-align: center; color: #ef4444;">Xəta: ${e.message}</td></tr>`;
+    }
+}
+
+async function triggerBgManualCheck(appId, btn) {
+    if (btn) {
+        btn.disabled = true;
+        btn.innerText = '⌛...';
+    }
+    try {
+        if (typeof triggerManualDeployCheck === 'function') {
+            await triggerManualDeployCheck(appId);
+        } else {
+            await fetch(`/api/applications/${appId}/check-deploy`, { method: 'POST' });
+        }
+        setTimeout(loadBackgroundAppsOverview, 1500);
+        setTimeout(loadBackgroundActivityLogs, 1500);
+    } catch (e) {
+        showToast('Yoxlanış zamanı xəta: ' + e.message, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerText = '⚡ Yoxla';
+        }
+    }
+}
+
+async function loadBackgroundActivityLogs() {
+    const container = document.getElementById('bg-activity-logs-container');
+    if (!container) return;
+
+    try {
+        const res = await fetch('/api/activity-logs');
+        if (!res.ok) return;
+        const logs = await res.json();
+
+        if (logs.length === 0) {
+            container.innerHTML = `<div style="color: var(--text-secondary);">Hələ heç bir fəaliyyət loqu qeydə alınmayıb.</div>`;
+            return;
+        }
+
+        container.innerHTML = logs.slice(0, 40).map(log => {
+            let color = '#38bdf8';
+            if (log.log_type === 'warning') color = '#f59e0b';
+            if (log.log_type === 'error') color = '#ef4444';
+            if (log.log_type === 'success') color = '#34d399';
+
+            return `
+                <div style="display: flex; gap: 8px; align-items: baseline; line-height: 1.4;">
+                    <span style="color: #64748b; font-size: 0.72rem; flex-shrink: 0;">[${log.created_at || 'indi'}]</span>
+                    <span style="color: ${color}; font-weight: 600; flex-shrink: 0;">[${(log.module || 'SİSTEM').toUpperCase()}]:</span>
+                    <span style="color: #e2e8f0;">${log.message}</span>
+                </div>
+            `;
+        }).join('');
+    } catch (e) {
+        container.innerHTML = `<div style="color: #ef4444;">Loqları oxumaq mümkün olmadı: ${e.message}</div>`;
+    }
+}
+
 

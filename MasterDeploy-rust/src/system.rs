@@ -21,7 +21,11 @@ pub fn router() -> Router<AppState> {
 pub fn settings_router() -> Router<AppState> {
     Router::new()
         .route("/github-token", get(get_github_token).post(save_github_token))
+        .route("/background-services", get(get_background_services_settings).post(save_background_services_settings))
+        .route("/background-services/clean-now", post(trigger_clean_now))
+        .route("/background-services/tunnel-check-now", post(trigger_tunnel_check_now))
 }
+
 
 pub fn activity_logs_router() -> Router<AppState> {
     Router::new()
@@ -128,6 +132,136 @@ pub async fn save_github_token(
 
     Ok(Json(true))
 }
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct BackgroundServicesSettings {
+    pub autodeploy_enabled: bool,
+    pub autoclean_enabled: bool,
+    pub autoclean_days: i32,
+    pub tunnel_watchdog_enabled: bool,
+    pub tunnel_watchdog_interval: i32,
+}
+
+pub async fn get_background_services_settings(
+    State(state): State<AppState>,
+) -> Result<Json<BackgroundServicesSettings>, (StatusCode, String)> {
+    let autodeploy_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autodeploy_enabled'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+
+    let autoclean_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autoclean_enabled'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+
+    let autoclean_days_str: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autoclean_days'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "30".to_string());
+
+    let tunnel_watchdog_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_tunnel_watchdog_enabled'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+
+    let tunnel_watchdog_interval_str: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_tunnel_watchdog_interval'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "2".to_string());
+
+    Ok(Json(BackgroundServicesSettings {
+        autodeploy_enabled: autodeploy_enabled == "1" || autodeploy_enabled == "true",
+        autoclean_enabled: autoclean_enabled == "1" || autoclean_enabled == "true",
+        autoclean_days: autoclean_days_str.parse().unwrap_or(30),
+        tunnel_watchdog_enabled: tunnel_watchdog_enabled == "1" || tunnel_watchdog_enabled == "true",
+        tunnel_watchdog_interval: tunnel_watchdog_interval_str.parse().unwrap_or(2),
+    }))
+}
+
+pub async fn save_background_services_settings(
+    State(state): State<AppState>,
+    Json(payload): Json<BackgroundServicesSettings>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let autoclean_days_str = payload.autoclean_days.to_string();
+    let tunnel_watchdog_interval_str = payload.tunnel_watchdog_interval.to_string();
+
+    let items = vec![
+        ("bg_autodeploy_enabled", if payload.autodeploy_enabled { "1" } else { "0" }),
+        ("bg_autoclean_enabled", if payload.autoclean_enabled { "1" } else { "0" }),
+        ("bg_autoclean_days", autoclean_days_str.as_str()),
+        ("bg_tunnel_watchdog_enabled", if payload.tunnel_watchdog_enabled { "1" } else { "0" }),
+        ("bg_tunnel_watchdog_interval", tunnel_watchdog_interval_str.as_str()),
+    ];
+
+    for (k, v) in items {
+
+        let _ = sqlx::query(
+            "INSERT INTO settings (key, value) VALUES (?, ?) \
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value"
+        )
+        .bind(k)
+        .bind(v)
+        .execute(&state.db)
+        .await;
+    }
+
+    add_activity_log_pro(
+        &state.db,
+        "Arxa plan xidmətləri və Tunel Nəzarətçisi tənzimləmələri yeniləndi.",
+        "info",
+        Some("Settings"),
+        Some("admin"),
+        None,
+        None
+    ).await;
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
+pub async fn trigger_clean_now(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let autoclean_days_str: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autoclean_days'")
+        .fetch_optional(&state.db).await.unwrap_or_default().unwrap_or_else(|| "30".to_string());
+    let days: i32 = autoclean_days_str.parse().unwrap_or(30);
+
+    let query_str = format!("DELETE FROM deployments WHERE created_at < datetime('now', '-{} days')", days);
+    let res = sqlx::query(&query_str)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let affected = res.rows_affected();
+    add_activity_log_pro(
+        &state.db,
+        &format!("Əl ilə təmizləmə icra edildi: {} köhnə deployment qeydi silindi (Hədd: {} gün).", affected, days),
+        "info",
+        Some("System"),
+        Some("admin"),
+        None,
+        None
+    ).await;
+
+    Ok(Json(serde_json::json!({ "success": true, "deleted_count": affected })))
+}
+
+pub async fn trigger_tunnel_check_now(
+    State(state): State<AppState>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let apps = sqlx::query_as::<_, crate::models::Application>(
+        "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
+         build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
+         privileged, memory_limit, cpu_limit, \
+         CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
+         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
+         CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
+         FROM applications \
+         WHERE cloudflare_url IS NOT NULL AND cloudflare_url != ''"
+    ).fetch_all(&state.db).await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let count = apps.len();
+    let mut healed = 0;
+    for app in apps {
+        if !crate::plugins::cloudflare::verify_and_heal_tunnel(&state.db, &app).await {
+            healed += 1;
+        }
+    }
+
+    Ok(Json(serde_json::json!({ "success": true, "checked": count, "repaired": healed })))
+}
+
 
 pub async fn list_activity_logs(State(state): State<AppState>) -> Result<Json<Vec<ActivityLog>>, (StatusCode, String)> {
     let logs = sqlx::query_as::<_, ActivityLog>("SELECT id, message, log_type, module, operator_name, target_id, ip_address, CAST(created_at AS TEXT) as created_at FROM activity_logs ORDER BY created_at DESC LIMIT 250")

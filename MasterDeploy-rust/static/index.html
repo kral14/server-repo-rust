@@ -347,6 +347,10 @@
                     <i data-lucide="refresh-cw" style="color: #00d2ff;"></i>
                     <span>Auto-Deploy</span>
                 </button>
+                <button class="nav-btn" data-tab="background-services">
+                    <i data-lucide="cpu" style="color: #38bdf8;"></i>
+                    <span>Arxa Plan Xidmətləri</span>
+                </button>
  
                 <button class="nav-btn" onclick="showModal('plugins-modal')" style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">
                     <i data-lucide="puzzle" style="color: #a78bfa;"></i>
@@ -1723,8 +1727,172 @@
                     </div>
                 </div>
             </section>
+
+            <!-- Background Services Center Tab -->
+            <section id="tab-background-services" class="tab-section" style="overflow-y: auto; padding-bottom: 3rem;">
+                <header class="tab-header-btn" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <h2 style="display: flex; align-items: center; gap: 8px;">⚙️ Arxa Plan Xidmətləri və Nəzarət Mərkəzi</h2>
+                        <p>Sistemin arxa fonda işləyən avtomatik modulları: Auto-Deploy, Cloudflare Tunel İzləyicisi (Watchdog) və Keş Təmizliyi</p>
+                    </div>
+                    <div style="display: flex; gap: 0.6rem; align-items: center;">
+                        <button class="btn btn-secondary" onclick="loadBackgroundServicesTab()" style="display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 0.9rem;">
+                            <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+                            <span>Yenilə</span>
+                        </button>
+                        <button class="btn btn-primary" onclick="saveBackgroundServicesSettings()" style="display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1.1rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; font-weight: 600;">
+                            <i data-lucide="save" style="width: 14px; height: 14px;"></i>
+                            <span>Ayarları Saxla</span>
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Global Services Cards Grid -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.25rem; margin-bottom: 1.8rem;">
+                    
+                    <!-- Card 1: Cloudflare Tunel İzləyicisi və Bərpaçısı (Tunnel Watchdog) -->
+                    <div class="card" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; border-left: 4px solid #f59e0b;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.6rem;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 1.4rem;">☁️</span>
+                                    <div>
+                                        <h3 style="margin: 0; font-size: 1rem; font-weight: 600;">Cloudflare Tunel Nəzarətçisi (Watchdog)</h3>
+                                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Error 1016 / DNS avto-bərpa və KV sinxronu</span>
+                                    </div>
+                                </div>
+                                <span id="bg-badge-tunnel" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 12px; font-weight: 600; background: rgba(245, 158, 11, 0.15); color: #f59e0b;">Aktiv</span>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+                                Trycloudflare tuneli qırıldıqda (Error 1016 və ya timeout) arxa planda avtomatik yeni tunel generasiya edir və yeni linki dərhal Cloudflare Worker KV-yə yazaraq canlı saxlayır.
+                            </p>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.6rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.06);">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <label style="font-size: 0.82rem; font-weight: 500; cursor: pointer;" for="bg-toggle-tunnel-watchdog">Ağıllı Tunel Bərpası Aktivdir</label>
+                                <input type="checkbox" id="bg-toggle-tunnel-watchdog" style="width: 18px; height: 18px; cursor: pointer;" checked>
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span style="font-size: 0.78rem; color: var(--text-secondary);">Yoxlanış Dövrü:</span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <span style="font-size: 0.8rem; color: #38bdf8; font-weight: 600;">Hər 2 dəqiqədən bir</span>
+                                    <button class="btn btn-secondary btn-sm" onclick="triggerTunnelCheckNow()" style="padding: 3px 8px; font-size: 0.75rem; margin-left: 6px;" title="Bütün aktiv tunelləri dərhal yoxla və bərpa et">🔍 İndi Yoxla</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Card 2: Git & Docker Auto-Deploy Dövrü -->
+                    <div class="card" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; border-left: 4px solid #38bdf8;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.6rem;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 1.4rem;">🔄</span>
+                                    <div>
+                                        <h3 style="margin: 0; font-size: 1rem; font-weight: 600;">Qlobal Auto-Deploy Xidməti</h3>
+                                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Bütün layihələrin avtomatik polling dövrü</span>
+                                    </div>
+                                </div>
+                                <span id="bg-badge-autodeploy" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 12px; font-weight: 600; background: rgba(56, 189, 248, 0.15); color: #38bdf8;">Aktiv</span>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+                                Arxa planda GitHub və Docker Registry dəyişikliklərini izləyir. Bu seçimi söndürdükdə heç bir tətbiq üçün arxa plan yoxlaması aparılmır və server resursları tam qorunur.
+                            </p>
+                        </div>
+                        <div style="display: flex; align-items: center; justify-content: space-between; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.06);">
+                            <label style="font-size: 0.82rem; font-weight: 500; cursor: pointer;" for="bg-toggle-autodeploy">Auto-Deploy Xidməti Aktivdir</label>
+                            <input type="checkbox" id="bg-toggle-autodeploy" style="width: 18px; height: 18px; cursor: pointer;" checked>
+                        </div>
+                    </div>
+
+                    <!-- Card 3: Köhnə Loqların Təmizlənməsi (Auto-Clean) -->
+                    <div class="card" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; gap: 1rem; border-left: 4px solid #34d399;">
+                        <div>
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.6rem;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span style="font-size: 1.4rem;">🧹</span>
+                                    <div>
+                                        <h3 style="margin: 0; font-size: 1rem; font-weight: 600;">Avtomatik Loq Təmizləmə</h3>
+                                        <span style="font-size: 0.75rem; color: var(--text-secondary);">Verilənlər bazası & disk optimallaşdırması</span>
+                                    </div>
+                                </div>
+                                <span id="bg-badge-autoclean" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 12px; font-weight: 600; background: rgba(52, 211, 153, 0.15); color: #34d399;">Aktiv</span>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4; margin: 0;">
+                                Arxa planda köhnə və lüzumsuz deployment loqlarını avtomatik silərək serverin disk və RAM resurslarını qoruyur.
+                            </p>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 0.6rem; padding-top: 0.8rem; border-top: 1px solid rgba(255,255,255,0.06);">
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <label style="font-size: 0.82rem; font-weight: 500; cursor: pointer;" for="bg-toggle-autoclean">Təmizləmə Aktivdir</label>
+                                <input type="checkbox" id="bg-toggle-autoclean" style="width: 18px; height: 18px; cursor: pointer;" checked>
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;">
+                                <span style="font-size: 0.78rem; color: var(--text-secondary);">Silinmə Həddi:</span>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="number" id="bg-input-autoclean-days" value="30" min="1" max="365" style="width: 65px; padding: 3px 6px; font-size: 0.8rem; text-align: center; border-radius: 6px; border: 1px solid var(--card-border); background: var(--bg-dark);">
+                                    <span style="font-size: 0.78rem; color: var(--text-secondary);">gün</span>
+                                    <button class="btn btn-secondary btn-sm" onclick="triggerCleanNow()" style="padding: 3px 8px; font-size: 0.75rem; margin-left: 6px;" title="Dərhal köhnə loqları təmizlə">🧹 İndi Təmizlə</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Applications Auto-Deploy & Tunnel Overview Table -->
+                <div class="card" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem; margin-bottom: 1.8rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.2rem;">📋</span>
+                            <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Layihələrin Vəziyyəti və Tunel Əlaqələri</h3>
+                        </div>
+                        <span style="font-size: 0.78rem; color: var(--text-secondary);">Canlı layihələr, tunellər və son yoxlanış statusu</span>
+                    </div>
+
+                    <div style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.82rem; text-align: left;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.08); color: var(--text-secondary);">
+                                    <th style="padding: 0.6rem 0.8rem;">Layihə Adı</th>
+                                    <th style="padding: 0.6rem 0.8rem;">Yayım Növü</th>
+                                    <th style="padding: 0.6rem 0.8rem;">Auto-Deploy</th>
+                                    <th style="padding: 0.6rem 0.8rem;">Cloudflare Tuneli</th>
+                                    <th style="padding: 0.6rem 0.8rem;">İnterval</th>
+                                    <th style="padding: 0.6rem 0.8rem;">Son Yoxlanış</th>
+                                    <th style="padding: 0.6rem 0.8rem; text-align: right;">Əməliyyat</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bg-apps-table-body">
+                                <tr>
+                                    <td colspan="7" style="padding: 1.5rem; text-align: center; color: var(--text-secondary);">
+                                        Məlumatlar yüklənir...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Live Auto-Deploy & System Background Activity Logs -->
+                <div class="card" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 1.2rem;">📡</span>
+                            <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Arxa Plan Nəzarət və Watchdog Loqları</h3>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="loadBackgroundActivityLogs()" style="display: inline-flex; align-items: center; gap: 5px;">
+                            <i data-lucide="refresh-cw" style="width:12px;height:12px;"></i> Loqları Yenilə
+                        </button>
+                    </div>
+                    <div id="bg-activity-logs-container" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 0.8rem; max-height: 260px; overflow-y: auto; font-family: monospace; font-size: 0.78rem; display: flex; flex-direction: column; gap: 4px;">
+                        <div style="color: var(--text-secondary);">Loqlar oxunur...</div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
+
 
     <!-- Server Add Modal -->
     <div id="server-modal" class="modal-backdrop">
@@ -2842,7 +3010,9 @@
     <!-- JavaScript Files -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="keys_tokens.js?v=2.7"></script>
-    <script src="app.js?v=5.9"></script>
+    <script src="app.js?v=6.0"></script>
+
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             if (window.lucide && typeof lucide.createIcons === 'function') {
