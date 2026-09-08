@@ -4,6 +4,20 @@
 let autoDeployAppsList = [];
 let autoDeployCurrentFilter = 'all';
 
+function formatTimeAgo(date) {
+    if (!date || isNaN(date.getTime())) return '<span style="color: #64748b;">Yoxlanmayıb</span>';
+    const now = new Date();
+    const diffSec = Math.floor((now - date) / 1000);
+    if (diffSec < 10) return '<span style="color: #34d399;">İndicə</span>';
+    if (diffSec < 60) return `${diffSec} san əvvəl`;
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} dəq əvvəl`;
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) return `${diffHour} saat əvvəl`;
+    const diffDay = Math.floor(diffHour / 24);
+    return `${diffDay} gün əvvəl`;
+}
+
 async function loadAutoDeployCenter() {
     const container = document.getElementById('autodeploy-cards-container');
     if (!container) return;
@@ -383,19 +397,311 @@ async function saveBackgroundServicesSettings() {
     }
 }
 
-async function triggerCleanNow() {
-    if (!confirm('Köhnə deployment qeydlərini indi təmizləmək istəyirsiniz?')) return;
+let cleanModalCurrentStats = null;
+
+// Server Dərindən Təmizləmə Modalı Açılması
+async function openServerCleanModal() {
+    await showModal('server-clean-modal');
+
+    // Hədd gününü sinxronlaşdırırıq
+    const daysInput = document.getElementById('bg-input-autoclean-days');
+    const labelDays = document.getElementById('clean-db-days-label');
+    if (daysInput && labelDays) {
+        labelDays.textContent = daysInput.value || '30';
+    }
+
+    // Terminal və nəticə hissəsini ilkin vəziyyətə gətiririk
+    const term = document.getElementById('clean-terminal-console');
+    const termStatus = document.getElementById('clean-terminal-status');
+    const diffResult = document.getElementById('clean-diff-result');
+    if (term) term.textContent = '[Sistem] Təmizləməyə hazırdır. Serveri seçib "Təmizləməyə Başla" düyməsini sıxın.';
+    if (termStatus) {
+        termStatus.textContent = 'Gözlənilir';
+        termStatus.style.color = '#64748b';
+    }
+    if (diffResult) diffResult.style.display = 'none';
+    const ramFreedBarInit = document.getElementById('clean-stat-ram-freed-bar');
+    const ramLegendInit = document.getElementById('clean-stat-ram-legend');
+    const diskFreedBarInit = document.getElementById('clean-stat-disk-freed-bar');
+    const diskLegendInit = document.getElementById('clean-stat-disk-legend');
+    if (ramFreedBarInit) ramFreedBarInit.style.display = 'none';
+    if (ramLegendInit) ramLegendInit.style.display = 'none';
+    if (diskFreedBarInit) diskFreedBarInit.style.display = 'none';
+    if (diskLegendInit) diskLegendInit.style.display = 'none';
+
+    // Serverləri yükləyirik
+    const select = document.getElementById('clean-modal-server-select');
+    if (!select) return;
+
+    select.innerHTML = '<option value="">Serverlər yüklənir...</option>';
+
     try {
-        const res = await fetch('/api/settings/background-services/clean-now', { method: 'POST' });
-        if (res.ok) {
-            const data = await res.json();
-            showToast(`Təmizləmə tamamlandı: ${data.deleted_count} köhnə qeyd silindi! 🧹`, 'success');
-            loadBackgroundActivityLogs();
+        const res = await fetch('/api/servers');
+        if (!res.ok) throw new Error('Serverləri almaq mümkün olmadı');
+        const servers = await res.json();
+        
+        if (!Array.isArray(servers) || servers.length === 0) {
+            select.innerHTML = '<option value="">Heç bir server tapılmadı</option>';
+            return;
+        }
+
+        select.innerHTML = servers.map(s => `
+            <option value="${s.id}">${s.name} (${s.ip})</option>
+        `).join('');
+
+        // İlk serverin göstəricilərini oxuyuruq
+        await refreshCleanModalStats();
+    } catch (e) {
+        select.innerHTML = `<option value="">Xəta: ${e.message}</option>`;
+    }
+}
+
+async function handleCleanModalServerChange() {
+    const diffResult = document.getElementById('clean-diff-result');
+    if (diffResult) diffResult.style.display = 'none';
+    const ramFreedBar = document.getElementById('clean-stat-ram-freed-bar');
+    const ramLegend = document.getElementById('clean-stat-ram-legend');
+    const diskFreedBar = document.getElementById('clean-stat-disk-freed-bar');
+    const diskLegend = document.getElementById('clean-stat-disk-legend');
+    if (ramFreedBar) ramFreedBar.style.display = 'none';
+    if (ramLegend) ramLegend.style.display = 'none';
+    if (diskFreedBar) diskFreedBar.style.display = 'none';
+    if (diskLegend) diskLegend.style.display = 'none';
+    await refreshCleanModalStats();
+}
+
+async function refreshCleanModalStats(beforeStats = null) {
+    const select = document.getElementById('clean-modal-server-select');
+    if (!select || !select.value) return;
+
+    const serverId = select.value;
+    const ramText = document.getElementById('clean-stat-ram-text');
+    const ramBar = document.getElementById('clean-stat-ram-bar');
+    const ramFreedBar = document.getElementById('clean-stat-ram-freed-bar');
+    const ramLegend = document.getElementById('clean-stat-ram-legend');
+
+    const diskText = document.getElementById('clean-stat-disk-text');
+    const diskBar = document.getElementById('clean-stat-disk-bar');
+    const diskFreedBar = document.getElementById('clean-stat-disk-freed-bar');
+    const diskLegend = document.getElementById('clean-stat-disk-legend');
+
+    if (ramText) ramText.textContent = 'Yoxlanılır...';
+    if (diskText) diskText.textContent = 'Yoxlanılır...';
+
+    try {
+        const res = await fetch(`/api/servers/${serverId}/stats`);
+        if (!res.ok) throw new Error('Metriklər oxunmadı');
+        const stats = await res.json();
+        cleanModalCurrentStats = stats;
+
+        // RAM UI
+        const usedRam = stats.used_ram_mb || 0;
+        const totalRam = stats.total_ram_mb || 0;
+        const ramPct = stats.ram_percent || (totalRam > 0 ? Math.round((usedRam / totalRam) * 100) : 0);
+        if (ramText) ramText.textContent = `${usedRam} / ${totalRam} MB (${ramPct}%)`;
+        if (ramBar) {
+            ramBar.style.width = `${Math.min(ramPct, 100)}%`;
+            ramBar.style.background = ramPct > 85 ? 'linear-gradient(90deg, #ef4444, #dc2626)' : 'linear-gradient(90deg, #38bdf8, #818cf8)';
+        }
+
+        // RAM Təmizlənən Pay (Zolaq)
+        if (beforeStats && (beforeStats.used_ram_mb || 0) > usedRam) {
+            const oldRamPct = beforeStats.ram_percent || (totalRam > 0 ? Math.round(((beforeStats.used_ram_mb || 0) / totalRam) * 100) : 0);
+            const freedRamPct = Math.max(0, oldRamPct - ramPct);
+            if (ramFreedBar && freedRamPct > 0) {
+                ramFreedBar.style.display = 'block';
+                ramFreedBar.style.left = `${ramPct}%`;
+                ramFreedBar.style.width = `${freedRamPct}%`;
+            }
+            if (ramLegend) {
+                const freedMb = (beforeStats.used_ram_mb || 0) - usedRam;
+                ramLegend.style.display = 'block';
+                ramLegend.innerHTML = `✨ <strong>RAM Boşaldı:</strong> +${freedMb} MB (${oldRamPct}% ➔ ${ramPct}%)`;
+            }
+        } else if (!beforeStats) {
+            if (ramFreedBar) ramFreedBar.style.display = 'none';
+            if (ramLegend) ramLegend.style.display = 'none';
+        }
+
+        // Disk UI
+        const diskUsed = stats.disk_used || '--';
+        const diskTotal = stats.disk_total || '--';
+        const diskPct = stats.disk_percent || 0;
+        if (diskText) diskText.textContent = `${diskUsed} / ${diskTotal} (${diskPct}%)`;
+        if (diskBar) {
+            diskBar.style.width = `${Math.min(diskPct, 100)}%`;
+            diskBar.style.background = diskPct > 85 ? 'linear-gradient(90deg, #f59e0b, #ef4444)' : 'linear-gradient(90deg, #34d399, #10b981)';
+        }
+
+        // Disk Təmizlənən Pay (Tünd Yaşıl Zolaq)
+        if (beforeStats && (beforeStats.disk_percent || 0) > diskPct) {
+            const oldDiskPct = beforeStats.disk_percent || 0;
+            const freedPct = oldDiskPct - diskPct;
+            if (diskFreedBar && freedPct > 0) {
+                diskFreedBar.style.display = 'block';
+                diskFreedBar.style.left = `${diskPct}%`;
+                diskFreedBar.style.width = `${freedPct}%`;
+            }
+            if (diskLegend) {
+                diskLegend.style.display = 'block';
+                diskLegend.innerHTML = `🧹 <strong>Təmizlənən sahə:</strong> Əvvəl: ${beforeStats.disk_used} (${oldDiskPct}%) ➔ İndi: ${diskUsed} (${diskPct}%) — <span style="color: #10b981; font-weight: 700;">-${freedPct}% yer azad edildi!</span> (şkalada tünd yaşıl zolaqla göstərilib)`;
+            }
+        } else if (!beforeStats) {
+            if (diskFreedBar) diskFreedBar.style.display = 'none';
+            if (diskLegend) diskLegend.style.display = 'none';
+        }
+
+        return stats;
+    } catch (e) {
+        if (ramText) ramText.textContent = 'Əlçatmaz';
+        if (diskText) diskText.textContent = 'Əlçatmaz';
+        return null;
+    }
+}
+
+// Təmizləmə Prosesini Başlatmaq
+async function startServerCleanProcess(btn) {
+    const select = document.getElementById('clean-modal-server-select');
+    if (!select || !select.value) {
+        showToast('Zəhmət olmasa təmizlənəcək serveri seçin.', 'warning');
+        return;
+    }
+
+    const serverId = select.value;
+    const serverName = select.options[select.selectedIndex]?.text || serverId;
+    const term = document.getElementById('clean-terminal-console');
+    const termStatus = document.getElementById('clean-terminal-status');
+    const diffResult = document.getElementById('clean-diff-result');
+
+    const cleanDocker = document.getElementById('clean-opt-docker')?.checked ?? true;
+    const cleanSystem = document.getElementById('clean-opt-system')?.checked ?? true;
+    const cleanDb = document.getElementById('clean-opt-db')?.checked ?? true;
+    const days = parseInt(document.getElementById('bg-input-autoclean-days')?.value || '30');
+
+    if (!cleanDocker && !cleanSystem && !cleanDb) {
+        showToast('Ən azı 1 təmizləmə seçimi qeyd olunmalıdır!', 'warning');
+        return;
+    }
+
+    // Təmizləmədən əvvəlki son statistikanı yadda saxlayırıq
+    const beforeStats = cleanModalCurrentStats;
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ Təmizlənir...';
+    }
+    if (termStatus) {
+        termStatus.textContent = '🔄 Təmizləmə gedir...';
+        termStatus.style.color = '#f59e0b';
+    }
+    if (diffResult) diffResult.style.display = 'none';
+
+    // Canlı nöqtə animasiyası (bir-bir artıb sonra azalan və başdan başlayan dövrə)
+    let dotCount = 1;
+    let increasing = true;
+    const maxDots = 7;
+    const minDots = 1;
+
+    const renderAnimFrame = () => {
+        if (!term) return;
+        const dots = '.'.repeat(dotCount);
+        term.textContent = `[Sistem] '${serverName}' üçün əlaqə qurulur və təmizləmə skripti işə salınır...\nZəhmət olmasa gözləyin${dots}\n----------------------------------------\n`;
+        if (termStatus) {
+            termStatus.textContent = `🔄 Təmizləmə gedir${dots}`;
+        }
+    };
+
+    renderAnimFrame();
+
+    let cleanAnimInterval = setInterval(() => {
+        if (increasing) {
+            dotCount++;
+            if (dotCount >= maxDots) {
+                increasing = false;
+            }
         } else {
-            showToast('Təmizləmə zamanı xəta baş verdi.', 'error');
+            dotCount--;
+            if (dotCount <= minDots) {
+                increasing = true;
+            }
+        }
+        renderAnimFrame();
+    }, 280);
+
+    try {
+        const res = await fetch(`/api/servers/${serverId}/clean`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                clean_docker_cache: cleanDocker,
+                clean_apt_logs: cleanSystem,
+                clean_db_deployments: cleanDb,
+                autoclean_days: days
+            })
+        });
+
+        const data = await res.json();
+
+        if (cleanAnimInterval) {
+            clearInterval(cleanAnimInterval);
+            cleanAnimInterval = null;
+        }
+
+        if (term) {
+            term.textContent = (data.logs || 'Təmizləmə başa çatdı.') + `\n\n[Məlumat Bazası] Silinən köhnə qeydlər: ${data.db_deleted || 0} ədəd`;
+            term.scrollTop = term.scrollHeight;
+        }
+
+        if (termStatus) {
+            termStatus.textContent = '✅ Uğurla tamamlandı';
+            termStatus.style.color = '#34d399';
+        }
+
+        showToast(`'${serverName}' serveri uğurla təmizləndi! 🎉`, 'success');
+
+        // Təmizləmədən sonrakı yeni resurs göstəricilərini oxuyuruq
+        await new Promise(r => setTimeout(r, 1000));
+        const afterStats = await refreshCleanModalStats(beforeStats);
+
+        // Azad olunan yer və RAM fərqini hesablayıb göstəririk
+        if (diffResult) {
+            let diffHtml = `<strong>🎉 Təmizləmə Nəticəsi:</strong><br>`;
+            if (beforeStats && afterStats) {
+                const ramFreed = (beforeStats.used_ram_mb || 0) - (afterStats.used_ram_mb || 0);
+                const ramMsg = ramFreed > 0 
+                    ? `<span style="color: #38bdf8;">🧠 Boşalan RAM: +<strong>${ramFreed} MB</strong> (əvvəl: ${beforeStats.used_ram_mb} MB ➔ indi: ${afterStats.used_ram_mb} MB)</span><br>`
+                    : `<span>🧠 RAM dəyişimi: Stabil (${afterStats.used_ram_mb} MB)</span><br>`;
+
+                const diskMsg = `<span>💾 Disk vəziyyəti: <strong>${afterStats.disk_used} / ${afterStats.disk_total}</strong> (əvvəl: ${beforeStats.disk_used} ➔ indi: ${afterStats.disk_used})</span><br>`;
+                const dbMsg = `<span style="color: #a5b4fc;">🗄️ Təmizlənən köhnə deployment qeydləri: <strong>${data.db_deleted || 0}</strong> ədəd</span>`;
+
+                diffHtml += ramMsg + diskMsg + dbMsg;
+            } else {
+                diffHtml += `Serverdə keşlər, artıq konteynerlər və jurnallar uğurla təmizləndi! Silinən DB qeydləri: ${data.db_deleted || 0}`;
+            }
+            diffResult.innerHTML = diffHtml;
+            diffResult.style.display = 'block';
+        }
+
+        if (typeof loadBackgroundActivityLogs === 'function') {
+            loadBackgroundActivityLogs();
         }
     } catch (e) {
-        showToast('Xəta: ' + e.message, 'error');
+        if (term) term.textContent += `\n[XƏTA] ${e.message}`;
+        if (termStatus) {
+            termStatus.textContent = '❌ Xəta baş verdi';
+            termStatus.style.color = '#ef4444';
+        }
+        showToast('Təmizləmə zamanı xəta: ' + e.message, 'error');
+    } finally {
+        if (cleanAnimInterval) {
+            clearInterval(cleanAnimInterval);
+            cleanAnimInterval = null;
+        }
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span>🧹 Təmizləməyə Başla</span>';
+        }
     }
 }
 
@@ -427,7 +733,10 @@ async function loadBackgroundAppsOverview() {
         ]);
 
         if (!res.ok) throw new Error('Layihələr və servislər oxunmadı');
-        const apps = await res.json();
+        let apps = await res.json();
+        // İkinci cədvəl "Canlı Layihələrin Vəziyyəti və Tunel Əlaqələri" adlanır,
+        // masterdeploy-watchdog daxili servisdir və tunellə əlaqəsi olmadığı üçün bu cədvələ daxil edilmir:
+        apps = apps.filter(app => !app.name.toLowerCase().includes('watchdog') && !app.id.includes('watchdog'));
         let disabledTunnelApps = [];
         if (disabledRes && disabledRes.ok) {
             try { disabledTunnelApps = await disabledRes.json(); } catch(e) {}
@@ -651,5 +960,45 @@ function triggerActiveBgAction(btn) {
     }
 }
 
+// --- Canlı Təmizləmə Terminalı Köməkçi Funksiyaları ---
+function copyCleanTerminalLogs() {
+    const term = document.getElementById('clean-terminal-console');
+    if (!term) return;
+    const text = term.textContent || '';
+    if (!text.trim()) {
+        showToast('Kopyalanacaq loq yoxdur.', 'info');
+        return;
+    }
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Terminal loqları panoya kopyalandı! 📋', 'success');
+    }).catch(() => {
+        // Fallback
+        try {
+            const temp = document.createElement('textarea');
+            temp.value = text;
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            showToast('Terminal loqları panoya kopyalandı! 📋', 'success');
+        } catch (e) {
+            showToast('Kopyalamaq mümkün olmadı.', 'error');
+        }
+    });
+}
 
+function clearCleanTerminalLogs() {
+    const term = document.getElementById('clean-terminal-console');
+    const termStatus = document.getElementById('clean-terminal-status');
+    if (term) {
+        term.textContent = '[Konsol təmizləndi. Yeni əməliyyat gözlənilir.]';
+    }
+    if (termStatus) {
+        termStatus.textContent = 'Təmizləndi';
+        termStatus.style.color = '#64748b';
+    }
+    showToast('Terminal ekranı təmizləndi. 🧹', 'info');
+}
 
+window.copyCleanTerminalLogs = copyCleanTerminalLogs;
+window.clearCleanTerminalLogs = clearCleanTerminalLogs;

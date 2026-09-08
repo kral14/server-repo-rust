@@ -50,7 +50,7 @@ def start_container(project_dir):
         "-v", ssh_dir_volume,
         "-w", "/app",
         "rust:1-slim-bookworm",
-        "sh", "-c", "apt-get update && apt-get install -y pkg-config libssl-dev gcc libc6-dev sqlite3 openssh-client git curl && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz | tar -xz -C /usr/local/bin --strip-components=1 docker/docker && cargo run --bin masterdeploy-rust"
+        "sh", "-c", "apt-get update && apt-get install -y pkg-config libssl-dev gcc libc6-dev sqlite3 openssh-client git curl procps && curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-24.0.7.tgz | tar -xz -C /usr/local/bin --strip-components=1 docker/docker && cargo run --bin masterdeploy-rust"
     ]
     
     subprocess.run(cmd, stdout=subprocess.DEVNULL)

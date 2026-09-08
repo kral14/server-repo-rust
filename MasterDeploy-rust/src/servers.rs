@@ -19,6 +19,7 @@ pub fn servers_router() -> Router<AppState> {
         .route("/:server_id/check", get(check_server_connection))
         .route("/:server_id/volumes", get(list_server_volumes))
         .route("/:server_id/volumes/:volume_name", post(delete_server_volume))
+        .route("/:server_id/clean", post(clean_server))
 }
 
 pub fn ssh_keys_router() -> Router<AppState> {
@@ -292,10 +293,21 @@ pub async fn get_server_stats(
     };
 
     let temp_key_path = std::env::temp_dir().join(format!("temp_stats_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
-    let key_content = if server.ssh_key.contains("BEGIN ") {
-        server.ssh_key.clone()
+    let key_content = if let Some(ref kid) = server.ssh_key_id {
+        let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+            .bind(kid)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or_default();
+        db_key.map(|r| r.0).unwrap_or_else(|| server.ssh_key.clone())
     } else {
-        std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        server.ssh_key.clone()
+    };
+
+    let key_content = if key_content.contains("BEGIN ") {
+        key_content
+    } else {
+        std::fs::read_to_string(key_content.trim()).unwrap_or_else(|_| server.ssh_key.clone())
     };
 
     let normalized_key = key_content.replace("\r\n", "\n").replace('\r', "\n").trim().to_string() + "\n";
@@ -862,6 +874,158 @@ pub async fn delete_server_volume(
     }
 
     Ok(Json(true))
+}
+
+#[derive(serde::Deserialize)]
+pub struct CleanServerOptions {
+    pub clean_docker_cache: Option<bool>,
+    pub clean_apt_logs: Option<bool>,
+    pub clean_db_deployments: Option<bool>,
+    pub autoclean_days: Option<i32>,
+}
+
+pub async fn clean_server(
+    State(state): State<AppState>,
+    AxumPath(server_id): AxumPath<String>,
+    Json(options): Json<CleanServerOptions>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Server tapılmadı".to_string()))?;
+
+    let clean_docker = options.clean_docker_cache.unwrap_or(true);
+    let clean_system = options.clean_apt_logs.unwrap_or(true);
+    let clean_db = options.clean_db_deployments.unwrap_or(true);
+    let days = options.autoclean_days.unwrap_or(30);
+
+    // 1. Verilənlər bazasındakı köhnə deployment qeydlərini təmizləyirik (əgər seçilibsə)
+    let mut db_deleted: u64 = 0;
+    if clean_db {
+        let q = format!("DELETE FROM deployments WHERE server_id = ? AND created_at < datetime('now', '-{} days')", days);
+        if let Ok(res) = sqlx::query(&q).bind(&server_id).execute(&state.db).await {
+            db_deleted = res.rows_affected();
+        }
+    }
+
+    // 2. Serverdə icra olunacaq təmizləmə skriptini formalaşdırırıq
+    let mut commands: Vec<String> = Vec::new();
+    commands.push("echo '[BAŞLADI] Serverin dərindən təmizlənməsi prosesi başladıldı...'".to_string());
+    commands.push("echo '========================================'".to_string());
+
+    if clean_docker {
+        commands.push("echo '[1/4] 🐳 İstifadə olunmayan Docker obyektləri, konteynerlər və şəbəkələr silinir...'".to_string());
+        commands.push("sudo docker system prune -af --volumes 2>&1 || true".to_string());
+        commands.push("echo '[2/4] 📦 Docker Buildx və Builder keşləri təmizlənir...'".to_string());
+        commands.push("sudo docker builder prune -af 2>&1 || true".to_string());
+    }
+
+    if clean_system {
+        commands.push("echo '[3/4] 📜 Sistem jurnalları (journalctl) və köhnə sistem loqları təmizlənir...'".to_string());
+        commands.push("sudo journalctl --vacuum-time=2d 2>&1 || true".to_string());
+        commands.push("sudo find /var/log -type f -name '*.gz' -o -name '*.1' -delete 2>&1 || true".to_string());
+        commands.push("echo '[4/4] 🧹 Apt/paket keşi və istifadə olunmayan asılılıqlar təmizlənir...'".to_string());
+        commands.push("sudo apt-get clean 2>&1 || true".to_string());
+        commands.push("sudo apt-get autoremove -y 2>&1 || true".to_string());
+        commands.push("sudo rm -rf /tmp/* /var/tmp/* 2>&1 || true".to_string());
+    }
+
+    commands.push("echo '========================================'".to_string());
+    commands.push("echo '[TAMAMLANDI] Bütün lazımsız fayllar və keşlər uğurla təmizləndi! ✅'".to_string());
+
+    let final_script = commands.join("\n");
+
+    let temp_key_path = std::env::temp_dir().join(format!("temp_clean_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+    let key_content = if let Some(ref kid) = server.ssh_key_id {
+        let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+            .bind(kid)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or_default();
+        db_key.map(|r| r.0).unwrap_or_else(|| server.ssh_key.clone())
+    } else {
+        server.ssh_key.clone()
+    };
+
+    let key_content = if key_content.contains("BEGIN ") {
+        key_content
+    } else {
+        std::fs::read_to_string(key_content.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+    };
+
+    let normalized_key = key_content.replace("\r\n", "\n").replace('\r', "\n").trim().to_string() + "\n";
+    if let Err(e) = std::fs::write(&temp_key_path, &normalized_key) {
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Açar faylı yazıla bilmədi: {}", e)));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+        let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+        let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+    }
+
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+
+    let run_future = async {
+        if server.ip == "local" || server.ip == "127.0.0.1" {
+            let local_cmd = final_script.replace("sudo ", "");
+            tokio::process::Command::new("sh")
+                .arg("-c")
+                .arg(&local_cmd)
+                .output()
+                .await
+        } else {
+            tokio::process::Command::new(ssh_bin)
+                .args(&[
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "UserKnownHostsFile=/dev/null",
+                    "-o", "BatchMode=yes",
+                    "-o", "ConnectTimeout=10",
+                    "-i", &temp_key_path,
+                    &format!("{}@{}", server.ssh_user, server.ip),
+                    &final_script
+                ])
+                .output()
+                .await
+        }
+    };
+
+    let output_res = tokio::time::timeout(std::time::Duration::from_secs(60), run_future).await;
+    let _ = std::fs::remove_file(&temp_key_path);
+
+    let logs = match output_res {
+        Ok(Ok(out)) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            if stderr.is_empty() { stdout } else { format!("{}\n{}", stdout, stderr) }
+        }
+        Ok(Err(e)) => format!("[XƏTA] SSH əmri icra edilərkən xəta baş verdi: {}", e),
+        Err(_) => "[XƏTA] Təmizləmə əməliyyatı 60 saniyə ərzində cavab vermədi (Timeout).".to_string(),
+    };
+
+    add_activity_log_pro(
+        &state.db,
+        &format!("'{}' serverində əl ilə dərindən təmizləmə icra edildi ({} DB qeydi silindi).", server.name, db_deleted),
+        "info",
+        Some("Servers"),
+        Some("admin"),
+        Some(&server.id),
+        None
+    ).await;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "logs": logs,
+        "db_deleted": db_deleted
+    })))
 }
 
 pub async fn generate_rsa_keypair() -> Result<Json<serde_json::Value>, (StatusCode, String)> {

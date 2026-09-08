@@ -24,12 +24,12 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
 
     let connect_options = SqliteConnectOptions::from_str(&format!("sqlite://{}", db_path))?
         .create_if_missing(true)
-        .journal_mode(SqliteJournalMode::Wal)
+        .journal_mode(SqliteJournalMode::Delete)
         .synchronous(SqliteSynchronous::Normal)
-        .busy_timeout(Duration::from_secs(15));
+        .busy_timeout(Duration::from_secs(30));
 
     let pool = SqlitePoolOptions::new()
-        .max_connections(20)
+        .max_connections(5)
         .acquire_timeout(Duration::from_secs(10))
         .connect_with(connect_options)
         .await?;

@@ -22,7 +22,8 @@ const windowNames = {
     'rsa-result-modal': '🔑 RSA Açar Cütü',
     'kt-rsa-overlay': '🔐 RSA 4096-bit Açar',
     'kt-ssh-overlay': '🔑 Yeni SSH Açarı',
-    'kt-edit-ssh-overlay': '✏️ SSH Açarı Redaktə'
+    'kt-edit-ssh-overlay': '✏️ SSH Açarı Redaktə',
+    'server-clean-modal': '🧹 Server Dərindən Təmizləmə'
 };
 
 function saveWindowPosition(id, card) {
