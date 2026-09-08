@@ -138,12 +138,12 @@ function renderAutoDeployCenter() {
         }
 
         return `
-            <div class="item-card" style="background: rgba(15, 23, 42, 0.55); border: 1px solid ${isEnabled ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.06)'}; border-left: 4px solid ${isEnabled ? (isSystemService ? '#f59e0b' : '#38bdf8') : '#64748b'}; border-radius: 12px; padding: 1.1rem 1.3rem; transition: all 0.2s;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div class="item-card" style="background: rgba(15, 23, 42, 0.55); border: 1px solid ${isEnabled ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.06)'}; border-left: 2px solid ${isEnabled ? (isSystemService ? '#f59e0b' : '#38bdf8') : '#64748b'}; border-radius: 10px; padding: 0.75rem 1.1rem; transition: all 0.2s;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.85rem;">
                     
                     <!-- Sol: İdentifikasiya -->
-                    <div style="display: flex; align-items: center; gap: 1rem; min-width: 250px; flex: 1;">
-                        <div style="width: 44px; height: 44px; border-radius: 10px; background: ${isEnabled ? (isSystemService ? 'rgba(245, 158, 11, 0.12)' : 'rgba(56, 189, 248, 0.12)') : 'rgba(255, 255, 255, 0.05)'}; display: flex; align-items: center; justify-content: center; color: ${isEnabled ? '#38bdf8' : '#94a3b8'}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                    <div style="display: flex; align-items: center; gap: 0.85rem; min-width: 250px; flex: 1;">
+                        <div style="width: 38px; height: 38px; border-radius: 8px; background: ${isEnabled ? (isSystemService ? 'rgba(245, 158, 11, 0.12)' : 'rgba(56, 189, 248, 0.12)') : 'rgba(255, 255, 255, 0.05)'}; display: flex; align-items: center; justify-content: center; color: ${isEnabled ? '#38bdf8' : '#94a3b8'}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
                             ${mainIcon}
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 0.25rem;">
