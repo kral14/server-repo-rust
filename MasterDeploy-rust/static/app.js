@@ -77,6 +77,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // Səhifə yenilənəndə əvvəl açıq olan bütün pəncərələri avtomatik bərpa edirik
     setTimeout(restoreDesktopWindowsState, 150);
 
+    // Sidebar Collapse / Expand Toggle Logic (İki dəfə kliklədikdə açılır / yığılır)
+    const sidebar = document.getElementById('app-sidebar');
+    if (sidebar) {
+        const isCollapsed = localStorage.getItem('sidebar_collapsed') === 'true';
+        if (isCollapsed) {
+            sidebar.classList.add('collapsed');
+            document.documentElement.classList.add('sidebar-is-collapsed');
+        }
+
+        sidebar.addEventListener('dblclick', () => {
+            sidebar.classList.toggle('collapsed');
+            const nowCollapsed = sidebar.classList.contains('collapsed');
+            localStorage.setItem('sidebar_collapsed', nowCollapsed ? 'true' : 'false');
+            document.documentElement.classList.toggle('sidebar-is-collapsed', nowCollapsed);
+            if (typeof showToast === 'function') {
+                showToast(nowCollapsed ? 'Menyu yığıldı (Yalnız ikonlar) ◀' : 'Menyu genişləndirildi ▶', 'info');
+            }
+        });
+    }
+
     // Fetch server stats periodically
     fetchServerStats();
 
@@ -97,13 +117,19 @@ document.addEventListener('DOMContentLoaded', () => {
 function updateThemeUI() {
     const theme = document.documentElement.getAttribute('data-theme');
     const icon = document.getElementById('theme-icon');
+    const btn = document.getElementById('theme-toggle-btn');
     const text = document.getElementById('theme-text');
     if (theme === 'light') {
-        icon.innerText = '🌙';
-        text.innerText = 'Qara Tema';
+        if (icon) icon.innerHTML = '<i data-lucide="moon" style="width: 14px; height: 14px; color: #38bdf8;"></i>';
+        if (text) text.innerText = 'Qara Tema';
+        if (btn) btn.title = 'Qara Temaya keç';
     } else {
-        icon.innerText = '☀️';
-        text.innerText = 'Açıq Tema';
+        if (icon) icon.innerHTML = '<i data-lucide="sun" style="width: 14px; height: 14px; color: #fbbf24;"></i>';
+        if (text) text.innerText = 'Açıq Tema';
+        if (btn) btn.title = 'Açıq Temaya keç';
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
     }
 }
 
@@ -226,6 +252,27 @@ async function switchTab(tabId) {
             btn.classList.add('active');
         } else {
             btn.classList.remove('active');
+        }
+    });
+
+    // Update topbar quick-nav chips active state
+    const tabNamesMap = {
+        'dashboard': 'Dashboard',
+        'servers': 'Serverlər',
+        'applications': 'Layihələr',
+        'background-services': 'Auto-Deploy',
+        'keys-tokens': 'Açarlar',
+        'app-details': 'Layihə Detalları'
+    };
+    const activeTitle = tabNamesMap[tabId] || tabId;
+    const topbarBadge = document.getElementById('topbar-active-title');
+    if (topbarBadge) topbarBadge.innerText = activeTitle;
+
+    document.querySelectorAll('.topbar-nav-chip').forEach(chip => {
+        if (chip.getAttribute('data-topbar-tab') === tabId) {
+            chip.classList.add('active');
+        } else {
+            chip.classList.remove('active');
         }
     });
 

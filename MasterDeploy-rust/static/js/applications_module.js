@@ -101,7 +101,14 @@ async function loadApplications() {
                         </div>
                     </div>
                 </div>
-                <div class="server-apps-list" style="display:flex; flex-direction:column; gap:6px;">
+                <div class="server-apps-list">
+                    <div class="apps-table-header">
+                        <div>Tətbiq və Git</div>
+                        <div>Port</div>
+                        <div>Resurslar (CPU/RAM)</div>
+                        <div>Keçidlər</div>
+                        <div style="text-align: right; padding-right: 0.5rem;">Status</div>
+                    </div>
             `;
 
             // Apps under this server
@@ -126,8 +133,9 @@ async function loadApplications() {
                 }
 
                 const appStatsHtml = `
-                <span class="app-load-badge" data-app-name="${app.name}" id="app-load-${app.id}" style="display: inline-flex; align-items: center; gap: 4px;">
-                    <i data-lucide="cpu" style="width: 12px; height: 12px; vertical-align: -1px; color: #facc15;"></i> CPU: <strong>${cpuVal}</strong> | <i data-lucide="database" style="width: 12px; height: 12px; vertical-align: -1px; color: #a78bfa;"></i> RAM: <strong>${memVal}</strong>
+                <span class="app-load-badge" data-app-name="${app.name}" id="app-load-${app.id}">
+                    <span class="metric-chip cpu-chip"><span class="metric-tag">CPU</span><strong class="metric-num">${cpuVal || '0%'}</strong></span>
+                    <span class="metric-chip ram-chip"><span class="metric-tag">RAM</span><strong class="metric-num">${memVal || '0 MB'}</strong></span>
                 </span>
                 `;
 
@@ -136,54 +144,67 @@ async function loadApplications() {
 
                 html += `
                 <div class="list-item" onclick="openAppDetails('${app.id}')" style="cursor: pointer; transition: all 0.2s ease; position: relative;">
-                    <div class="item-info" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="flex: 1; min-width: 0;">
-                            <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                                <span style="display: inline-flex; align-items: center; gap: 6px; width: 200px; min-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${app.name}">
-                                    <i data-lucide="box" style="width: 16px; height: 16px; color: #38bdf8; flex-shrink: 0;"></i>
-                                    <span style="overflow: hidden; text-overflow: ellipsis;">${app.name}</span>
-                                </span>
-                                ${app.status === 'success' || app.status === 'running' ? `
-                                <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: var(--accent-color); text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 210, 255, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                    <i data-lucide="external-link" style="width: 12px; height: 12px;"></i> Lokal Keçid
+                    <div class="app-grid-row">
+                        
+                        <!-- Sütun 1: Tətbiq və Git Repo -->
+                        <div class="col-app">
+                            <div style="display: flex; align-items: center; gap: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${app.name}">
+                                <i data-lucide="box" style="width: 15px; height: 15px; color: #38bdf8; flex-shrink: 0;"></i>
+                                <strong style="font-size: 0.92rem; color: #f8fafc; overflow: hidden; text-overflow: ellipsis;">${app.name}</strong>
+                            </div>
+                            <div style="font-size: 0.72rem; color: #94a3b8; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px;" title="${app.repo_url || ''}">
+                                <i data-lucide="git-branch" style="width: 11px; height: 11px; color: #818cf8; flex-shrink: 0;"></i>
+                                <span>${shortUrl ? shortUrl + ' ' : ''}(${app.branch || 'main'})</span>
+                            </div>
+                        </div>
+
+                        <!-- Sütun 2: Port -->
+                        <div class="col-port">
+                            <span style="font-size: 0.76rem; color: #94a3b8; display: inline-flex; align-items: center; gap: 5px; background: rgba(56, 189, 248, 0.06); border: 1px solid rgba(56, 189, 248, 0.15); padding: 0.22rem 0.5rem; border-radius: 6px; white-space: nowrap;">
+                                <i data-lucide="network" style="width: 12px; height: 12px; color: #38bdf8;"></i>
+                                Port: <strong style="color: #38bdf8;">${app.port}</strong>
+                            </span>
+                        </div>
+
+                        <!-- Sütun 3: CPU və RAM Resurs Göstəricisi -->
+                        <div class="col-stats">
+                            ${appStatsHtml}
+                        </div>
+
+                        <!-- Sütun 4: Keçidlər və Linklər -->
+                        <div class="col-links">
+                            ${(app.status === 'success' || app.status === 'running') ? `
+                                <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.72rem; color: var(--accent-color); text-decoration: none; padding: 0.25rem 0.55rem; background: rgba(0, 210, 255, 0.08); border: 1px solid rgba(0, 210, 255, 0.22); border-radius: 5px; display: inline-flex; align-items: center; gap: 0.35rem; transition: 0.2s;" title="Lokal Keçid">
+                                    <i data-lucide="external-link" style="width: 11px; height: 11px;"></i> Lokal Keçid
                                 </a>
                                 ${app.cloudflare_url ? `
-                                <a href="${app.cloudflare_url}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: #ff9800; text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(255, 152, 0, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                    <i data-lucide="cloud" style="width: 12px; height: 12px;"></i> Cloudflare Keçidi
+                                <a href="${app.cloudflare_url}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.72rem; color: #ff9800; text-decoration: none; padding: 0.25rem 0.55rem; background: rgba(255, 152, 0, 0.08); border: 1px solid rgba(255, 152, 0, 0.22); border-radius: 5px; display: inline-flex; align-items: center; gap: 0.35rem; transition: 0.2s;" title="Cloudflare Keçidi">
+                                    <i data-lucide="cloud" style="width: 11px; height: 11px;"></i> Cloudflare Keçidi
                                 </a>
                                 ` : ''}
                                 ${app.cf_worker_url ? `
-                                <a href="${app.cf_worker_url}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: #00e676; text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 230, 118, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;" title="Sabit Worker Linki">
-                                    <i data-lucide="globe" style="width: 12px; height: 12px;"></i> Worker Linki
+                                <a href="${app.cf_worker_url}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.72rem; color: #00e676; text-decoration: none; padding: 0.25rem 0.55rem; background: rgba(0, 230, 118, 0.08); border: 1px solid rgba(0, 230, 118, 0.22); border-radius: 5px; display: inline-flex; align-items: center; gap: 0.35rem; transition: 0.2s;" title="Sabit Worker Linki">
+                                    <i data-lucide="globe" style="width: 11px; height: 11px;"></i> Worker Linki
                                 </a>
                                 ` : ''}
                                 ${isCfInstalled ? `
-                                <button onclick="generateCloudflareTunnel(event, '${app.id}')" style="font-size: 0.75rem; color: #fff; background: #e67e22; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem;" title="Cloudflare Tunelini İşə Sal / Link Al">
-                                    <i data-lucide="radio" style="width: 12px; height: 12px;"></i> Tunnel Al
+                                <button onclick="generateCloudflareTunnel(event, '${app.id}')" style="font-size: 0.72rem; color: #fff; background: linear-gradient(135deg, #f97316, #ea580c); border: none; border-radius: 5px; padding: 0.25rem 0.55rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; transition: 0.2s;" title="Cloudflare Tunelini İşə Sal / Link Al">
+                                    <i data-lucide="radio" style="width: 11px; height: 11px;"></i> Tunnel AI
                                 </button>
                                 ` : ''}
-                                ` : ''}
-                                ${appStatsHtml}
-                            </h3>
-                            <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 1rem; align-items: center;">
-                                <span style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-flex; align-items: center; gap: 4px;" title="${app.repo_url}">
-                                    <i data-lucide="git-branch" style="width: 13px; height: 13px; color: #818cf8; flex-shrink: 0;"></i>
-                                    <span>${shortUrl} (${app.branch})</span>
-                                </span>
-                                <span style="display: inline-flex; align-items: center; gap: 4px;">
-                                    <i data-lucide="network" style="width: 13px; height: 13px; color: #38bdf8;"></i> Port: <strong>${app.port}</strong>
-                                </span>
-                            </p>
+                            ` : '<span style="font-size: 0.72rem; color: #64748b; font-style: italic;">Keçid yoxdur</span>'}
                         </div>
-                        <div style="display:flex; align-items:center; gap:0.8rem;">
-                            <div style="display:inline-flex; align-items:center; gap:0.5rem; background: rgba(255,255,255,0.05); padding: 0.4rem 0.8rem; border-radius: 8px;">
-                                <span style="width:8px; height:8px; border-radius:50%; background:${sc}; display:inline-block; box-shadow: 0 0 5px ${sc};"></span>
-                                <span style="color:${sc}; font-weight:500;">${app.status.toUpperCase()}</span>
+
+                        <!-- Sütun 5: Status və Əməliyyat Menyusu -->
+                        <div class="col-status">
+                            <div style="display:inline-flex; align-items:center; gap:0.4rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); padding: 0.28rem 0.65rem; border-radius: 6px; font-size: 0.74rem; font-weight: 600;">
+                                <span style="width:7px; height:7px; border-radius:50%; background:${sc}; display:inline-block; box-shadow: 0 0 6px ${sc};"></span>
+                                <span style="color:${sc};">${app.status.toUpperCase()}</span>
                             </div>
                             
-                            <!-- 3 xətt menyusu -->
+                            <!-- 3 nöqtə menyu -->
                             <div style="position: relative;">
-                                <button class="app-menu-btn" onclick="toggleAppMenu(event, '${app.id}')">⋮</button>
+                                <button class="app-menu-btn" onclick="toggleAppMenu(event, '${app.id}')" style="padding: 0.2rem 0.45rem; font-size: 1rem; border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); color: #94a3b8; cursor: pointer;">⋮</button>
                                 <div id="app-menu-${app.id}" class="app-dropdown-menu">
                                     <button onclick="event.stopPropagation(); openAppDetails('${app.id}')" style="display: inline-flex; align-items: center; gap: 6px; width: 100%;">
                                         <i data-lucide="eye" style="width: 14px; height: 14px;"></i> Detallara Bax
@@ -194,6 +215,7 @@ async function loadApplications() {
                                 </div>
                             </div>
                         </div>
+
                     </div>
                 </div>
                 `;
@@ -205,7 +227,7 @@ async function loadApplications() {
             `;
         }
 
-        const renderHash = JSON.stringify(apps.map(a => `${a.id}_${a.name}_${a.status}_${a.port}_${a.server_id}_${a.cloudflare_url}_${a.cf_worker_url}`));
+        const renderHash = 'grid_v7_' + JSON.stringify(apps.map(a => `${a.id}_${a.name}_${a.status}_${a.port}_${a.server_id}_${a.cloudflare_url}_${a.cf_worker_url}`));
         if (appsList && appsList.getAttribute('data-render-hash') !== renderHash) {
             appsList.setAttribute('data-render-hash', renderHash);
             appsList.innerHTML = html;

@@ -197,11 +197,32 @@ switchAppTab = function (tabId) {
     }
 };
 
+function updateDebugButtonUI(isDebug) {
+    const btn = document.getElementById('debug-toggle-btn');
+    if (btn) {
+        if (isDebug) {
+            btn.classList.add('active');
+            btn.style.background = 'rgba(255, 184, 108, 0.25)';
+            btn.style.borderColor = '#ffb86c';
+            btn.title = 'Debug Rejimi: Aktivdir (Söndürmək üçün klikləyin)';
+        } else {
+            btn.classList.remove('active');
+            btn.style.background = '';
+            btn.style.borderColor = '';
+            btn.title = 'Debug Rejimi (Aktivləşdirmək üçün klikləyin)';
+        }
+    }
+}
+
 // --- Debug mode outline details and copying system ---
 function toggleDebugMode() {
     document.body.classList.toggle('debug-mode');
     const isDebug = document.body.classList.contains('debug-mode');
     localStorage.setItem('debug_mode', isDebug ? 'true' : 'false');
+    updateDebugButtonUI(isDebug);
+    if (typeof updateDebugDimensions === 'function') {
+        updateDebugDimensions();
+    }
     if (isDebug) {
         initDebugTooltips();
     } else {
@@ -305,9 +326,13 @@ document.addEventListener('click', (e) => {
 // Auto-run debug tooltips on page load if active
 window.addEventListener('load', () => {
     const isDebug = localStorage.getItem('debug_mode') === 'true' || document.body.classList.contains('debug-mode');
+    updateDebugButtonUI(isDebug);
     if (isDebug) {
         document.body.classList.add('debug-mode');
         setTimeout(initDebugTooltips, 500);
+        if (typeof updateDebugDimensions === 'function') {
+            setTimeout(updateDebugDimensions, 500);
+        }
     }
 });
 
@@ -323,15 +348,6 @@ viewLogs = function (appId, switchMainTab = true, specificDeployId = null) {
     originalViewLogs(appId, switchMainTab, specificDeployId);
     setTimeout(initDebugTooltips, 500);
 };
-
-
-
-// ── Layout Debugger ──
-// Layout Spacing Debugger
-function toggleDebugMode() {
-    document.body.classList.toggle('debug-mode');
-    updateDebugDimensions();
-}
 
 function updateDebugDimensions() {
     // Clear old dimensions attributes

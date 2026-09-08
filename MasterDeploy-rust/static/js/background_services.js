@@ -113,62 +113,66 @@ function renderAutoDeployCenter() {
 
         let typeBadge = '';
         if (isSystemService) {
-            typeBadge = `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="shield" style="width: 12px; height: 12px;"></i> Sistem Servisi</span>`;
+            typeBadge = `<span style="font-size:0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: #f59e0b; font-weight: 600; border: 1px solid rgba(245, 158, 11, 0.25); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="shield" style="width: 10px; height: 10px;"></i> Sistem Servisi</span>`;
         } else if (isImage) {
-            typeBadge = `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 600; border: 1px solid rgba(56, 189, 248, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="container" style="width: 12px; height: 12px;"></i> Docker Image</span>`;
+            typeBadge = `<span style="font-size:0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-weight: 600; border: 1px solid rgba(56, 189, 248, 0.25); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="container" style="width: 10px; height: 10px;"></i> Docker Image</span>`;
         } else {
-            typeBadge = `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); color: #c084fc; font-weight: 600; border: 1px solid rgba(168, 85, 247, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="git-branch" style="width: 12px; height: 12px;"></i> Git Repo (${app.branch || 'main'})</span>`;
+            typeBadge = `<span style="font-size:0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(168, 85, 247, 0.15); color: #c084fc; font-weight: 600; border: 1px solid rgba(168, 85, 247, 0.25); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="git-branch" style="width: 10px; height: 10px;"></i> Git Repo (${app.branch || 'main'})</span>`;
         }
 
         const roleBadge = isSystemService 
-            ? `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(234, 179, 8, 0.15); color: #facc15; font-weight: 600; border: 1px solid rgba(234, 179, 8, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="cpu" style="width: 12px; height: 12px;"></i> Arxa Plan Modulu</span>`
-            : `<span style="font-size:0.72rem; padding: 2px 7px; border-radius: 4px; background: rgba(52, 211, 153, 0.12); color: #34d399; font-weight: 600; border: 1px solid rgba(52, 211, 153, 0.25); display: inline-flex; align-items: center; gap: 4px;"><i data-lucide="sparkles" style="width: 12px; height: 12px;"></i> Tətbiq</span>`;
+            ? `<span style="font-size:0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(234, 179, 8, 0.15); color: #facc15; font-weight: 600; border: 1px solid rgba(234, 179, 8, 0.25); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="cpu" style="width: 10px; height: 10px;"></i> Arxa Plan Modulu</span>`
+            : `<span style="font-size:0.65rem; padding: 1px 6px; border-radius: 4px; background: rgba(52, 211, 153, 0.12); color: #34d399; font-weight: 600; border: 1px solid rgba(52, 211, 153, 0.25); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="sparkles" style="width: 10px; height: 10px;"></i> Tətbiq</span>`;
 
         const sourceAddress = isSystemService
             ? (app.registry_image || app.repo_url || 'Sistem nüvə xidməti')
             : (isImage ? (app.registry_image || 'Təyin edilməyib') : (app.repo_url || 'Repo linki yoxdur'));
 
-        let mainIcon = '<i data-lucide="rocket" style="width: 22px; height: 22px; color: #f43f5e;"></i>';
+        let mainIcon = '<i data-lucide="rocket" style="width: 15px; height: 15px; color: #f43f5e;"></i>';
         if (isSystemService) {
             mainIcon = app.id.includes('tunnel') 
-                ? '<i data-lucide="cloud" style="width: 22px; height: 22px; color: #f59e0b;"></i>' 
-                : '<i data-lucide="trash-2" style="width: 22px; height: 22px; color: #34d399;"></i>';
+                ? '<i data-lucide="cloud" style="width: 15px; height: 15px; color: #f59e0b;"></i>' 
+                : '<i data-lucide="trash-2" style="width: 15px; height: 15px; color: #34d399;"></i>';
         } else if (isImage) {
-            mainIcon = '<i data-lucide="container" style="width: 22px; height: 22px; color: #38bdf8;"></i>';
+            mainIcon = '<i data-lucide="container" style="width: 15px; height: 15px; color: #38bdf8;"></i>';
         }
 
         return `
-            <div class="item-card" style="background: rgba(15, 23, 42, 0.55); border: 1px solid ${isEnabled ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.06)'}; border-left: 2px solid ${isEnabled ? (isSystemService ? '#f59e0b' : '#38bdf8') : '#64748b'}; border-radius: 10px; padding: 0.75rem 1.1rem; transition: all 0.2s;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.85rem;">
+            <div class="item-card" style="background: rgba(15, 23, 42, 0.55); border: 1px solid ${isEnabled ? 'rgba(56, 189, 248, 0.22)' : 'rgba(255, 255, 255, 0.06)'}; border-left: 2px solid ${isEnabled ? (isSystemService ? '#f59e0b' : '#38bdf8') : '#64748b'}; border-radius: 8px; padding: 0.42rem 0.85rem; transition: all 0.2s;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.6rem;">
                     
-                    <!-- Sol: İdentifikasiya -->
-                    <div style="display: flex; align-items: center; gap: 0.85rem; min-width: 250px; flex: 1;">
-                        <div style="width: 38px; height: 38px; border-radius: 8px; background: ${isEnabled ? (isSystemService ? 'rgba(245, 158, 11, 0.12)' : 'rgba(56, 189, 248, 0.12)') : 'rgba(255, 255, 255, 0.05)'}; display: flex; align-items: center; justify-content: center; color: ${isEnabled ? '#38bdf8' : '#94a3b8'}; flex-shrink: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+                    <!-- Sol: İdentifikasiya (Kompakt və Zərif) -->
+                    <div style="display: flex; align-items: center; gap: 0.65rem; min-width: 280px; flex: 1;">
+                        <div style="width: 28px; height: 28px; border-radius: 6px; background: ${isEnabled ? (isSystemService ? 'rgba(245, 158, 11, 0.12)' : 'rgba(56, 189, 248, 0.12)') : 'rgba(255, 255, 255, 0.05)'}; display: flex; align-items: center; justify-content: center; color: ${isEnabled ? '#38bdf8' : '#94a3b8'}; flex-shrink: 0;">
                             ${mainIcon}
                         </div>
-                        <div style="display: flex; flex-direction: column; gap: 0.25rem;">
-                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                                <strong style="font-size: 1rem; color: #fff;">${app.name}</strong>
-                                ${roleBadge}
-                                ${typeBadge}
+                        <div style="display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+                                <div style="width: 165px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${app.name}">
+                                    <strong style="font-size: 0.88rem; color: #fff;">${app.name}</strong>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 5px; flex-shrink: 0;">
+                                    ${roleBadge}
+                                    ${typeBadge}
+                                </div>
                             </div>
-                            <div style="font-size: 0.77rem; color: var(--text-secondary); font-family: monospace; max-width: 450px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${sourceAddress}">
+                            <div style="font-size: 0.72rem; color: var(--text-secondary); font-family: monospace; max-width: 420px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${sourceAddress}">
                                 ${sourceAddress}
                             </div>
-                            <div style="font-size: 0.74rem; color: #94a3b8; display: flex; align-items: center; gap: 0.4rem;">
-                                <i data-lucide="clock" style="width: 12px; height: 12px; color: #64748b;"></i>
+                            <div style="font-size: 0.68rem; color: #94a3b8; display: flex; align-items: center; gap: 0.35rem;">
+                                <i data-lucide="clock" style="width: 11px; height: 11px; color: #64748b;"></i>
                                 <span>Son Yoxlanış: <strong style="color: #cbd5e1;">${lastCheck}</strong></span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Orta: Sazlamalar (İnterval və Timeout) -->
-                    <div style="display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; opacity: ${isEnabled ? '1' : '0.45'}; pointer-events: ${isEnabled ? 'auto' : 'none'};">
-                        <div style="display: flex; flex-direction: column; gap: 0.2rem;">
-                            <label style="font-size: 0.68rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">
+                    <!-- Orta: Sazlamalar (İnterval və Limit - Kompakt Sütunlar) -->
+                    <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; opacity: ${isEnabled ? '1' : '0.45'}; pointer-events: ${isEnabled ? 'auto' : 'none'};">
+                        <div style="width: 115px; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.15rem;">
+                            <label style="font-size: 0.62rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">
                                 İnterval ${isEnabled ? '' : '<span style="color: #ef4444;">(Sönülüdür)</span>'}
                             </label>
-                            <select ${isEnabled ? '' : 'disabled'} onchange="updateAppAutoDeployQuick('${app.id}', this.value, null, null)" style="background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 0.35rem 0.6rem; color: #fff; font-size: 0.78rem;">
+                            <select ${isEnabled ? '' : 'disabled'} onchange="updateAppAutoDeployQuick('${app.id}', this.value, null, null)" style="width: 100%; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 0.22rem 0.45rem; color: #fff; font-size: 0.72rem; height: 26px;">
                                 <option value="5" ${interval == 5 ? 'selected' : ''}>Hər 5 dəqiqə</option>
                                 <option value="15" ${interval == 15 ? 'selected' : ''}>Hər 15 dəqiqə</option>
                                 <option value="30" ${interval == 30 ? 'selected' : ''}>Hər 30 dəqiqə</option>
@@ -178,9 +182,9 @@ function renderAutoDeployCenter() {
                             </select>
                         </div>
 
-                        <div style="display: flex; flex-direction: column; gap: 0.2rem;">
-                            <label style="font-size: 0.68rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Limit</label>
-                            <select ${isEnabled ? '' : 'disabled'} onchange="updateAppAutoDeployQuick('${app.id}', null, this.value, null)" style="background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 0.35rem 0.6rem; color: #fff; font-size: 0.78rem;">
+                        <div style="width: 80px; flex-shrink: 0; display: flex; flex-direction: column; gap: 0.15rem;">
+                            <label style="font-size: 0.62rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase;">Limit</label>
+                            <select ${isEnabled ? '' : 'disabled'} onchange="updateAppAutoDeployQuick('${app.id}', null, this.value, null)" style="width: 100%; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 0.22rem 0.45rem; color: #fff; font-size: 0.72rem; height: 26px;">
                                 <option value="5" ${timeout == 5 ? 'selected' : ''}>5 saniyə</option>
                                 <option value="10" ${timeout == 10 ? 'selected' : ''}>10 saniyə</option>
                                 <option value="15" ${timeout == 15 ? 'selected' : ''}>15 saniyə</option>
@@ -190,22 +194,24 @@ function renderAutoDeployCenter() {
                         </div>
                     </div>
 
-                    <!-- Sağ: ON/OFF Toggle və İndi Yoxla -->
-                    <div style="display: flex; align-items: center; gap: 1rem;">
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 0.2rem;">
-                            <label class="md-switch" title="Auto-Deploy aktivləşdir və ya söndür">
+                    <!-- Sağ: ON/OFF Toggle və İndi Yoxla (Kompakt Düymələr) -->
+                    <div style="display: flex; align-items: center; gap: 0.8rem;">
+                        <div style="width: 65px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 0.15rem;">
+                            <label class="md-switch" title="Auto-Deploy aktivləşdir və ya söndür" style="transform: scale(0.85); margin: 0;">
                                 <input type="checkbox" ${isEnabled ? 'checked' : ''} onchange="updateAppAutoDeployQuick('${app.id}', null, null, this.checked ? 1 : 0)">
                                 <span class="md-switch-slider"></span>
                             </label>
-                            <span style="font-size: 0.68rem; font-weight: 600; color: ${isEnabled ? '#38bdf8' : '#64748b'};">
+                            <span style="font-size: 0.62rem; font-weight: 600; color: ${isEnabled ? '#38bdf8' : '#64748b'};">
                                 ${isEnabled ? 'Aktiv 🟢' : 'Sönülü ⚪'}
                             </span>
                         </div>
 
-                        <button class="hbtn hbtn-check" onclick="triggerManualDeployCheck('${app.id}', this)" title="Dərhal yoxla" style="padding: 0.45rem 0.85rem; font-size: 0.8rem;">
-                            <i data-lucide="scan" style="width: 13px; height: 13px;"></i>
-                            <span>İndi Yoxla</span>
-                        </button>
+                        <div style="width: 95px; flex-shrink: 0; display: flex; justify-content: flex-end;">
+                            <button class="hbtn hbtn-check" onclick="triggerManualDeployCheck('${app.id}', this)" title="Dərhal yoxla" style="padding: 0.28rem 0.6rem; font-size: 0.74rem; width: 100%; height: 28px; justify-content: center;">
+                                <i data-lucide="scan" style="width: 12px; height: 12px;"></i>
+                                <span>İndi Yoxla</span>
+                            </button>
+                        </div>
                     </div>
 
                 </div>

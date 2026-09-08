@@ -146,7 +146,8 @@ async function loadApplications() {
 
                 const appStatsHtml = `
                 <span class="app-load-badge" data-app-name="${app.name}" id="app-load-${app.id}">
-                    ⚡ CPU: <strong>${cpuVal}</strong> | 💾 RAM: <strong>${memVal}</strong>
+                    <span class="metric-chip cpu-chip"><span class="metric-tag">CPU</span><strong class="metric-num">${cpuVal || '0%'}</strong></span>
+                    <span class="metric-chip ram-chip"><span class="metric-tag">RAM</span><strong class="metric-num">${memVal || '0 MB'}</strong></span>
                 </span>
                 `;
 
@@ -1741,7 +1742,10 @@ function updateStatsUI(servers) {
         if (srvGroup) {
             const badges = srvGroup.querySelectorAll(`.app-load-badge`);
             badges.forEach(badge => {
-                badge.innerHTML = `⚡ CPU: <strong>0%</strong> | 💾 RAM: <strong>0MB</strong>`;
+                badge.innerHTML = `
+                    <span class="metric-chip cpu-chip"><span class="metric-tag">CPU</span><strong class="metric-num">0%</strong></span>
+                    <span class="metric-chip ram-chip"><span class="metric-tag">RAM</span><strong class="metric-num">0 MB</strong></span>
+                `;
             });
         }
 
@@ -1750,7 +1754,12 @@ function updateStatsUI(servers) {
                 const cstats = stats.containers[appName];
                 const badges = document.querySelectorAll(`.app-load-badge[data-app-name="${appName}"]`);
                 badges.forEach(badge => {
-                    badge.innerHTML = `⚡ CPU: <strong>${cstats.cpu}</strong> | 💾 RAM: <strong>${cstats.memory}</strong>`;
+                    const cpuStr = cstats.cpu || '0%';
+                    const memStr = cstats.memory || '0 MB';
+                    badge.innerHTML = `
+                        <span class="metric-chip cpu-chip"><span class="metric-tag">CPU</span><strong class="metric-num">${cpuStr}</strong></span>
+                        <span class="metric-chip ram-chip"><span class="metric-tag">RAM</span><strong class="metric-num">${memStr}</strong></span>
+                    `;
                 });
             });
         }

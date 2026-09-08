@@ -41,7 +41,7 @@ function saveWindowPosition(id, card) {
 function clampWindowToScreen(card) {
     if (!card || card.classList.contains('maximized')) return;
     const headerHeight = 42;
-    const minTop = 15;
+    const minTop = 54; // Qlobal Topbar 46px olduğu üçün pəncərələr heç vaxt onun altına girə bilməz
     const winWidth = window.innerWidth;
     const winHeight = window.innerHeight;
 
@@ -51,7 +51,7 @@ function clampWindowToScreen(card) {
     const width = card.offsetWidth || 530;
     const height = card.offsetHeight || 400;
 
-    // Yuxarı başlıq heç vaxt ekrandan yuxarıda gizlənə bilməz
+    // Yuxarı başlıq heç vaxt Topbar-ın altına girə bilməz
     if (top < minTop || isNaN(top)) {
         top = minTop;
     }
@@ -85,11 +85,11 @@ function centerWindow(windowId) {
     card.style.height = 'auto';
     card.style.borderRadius = '16px';
     
-    // Mərkəzə yerləşdir
+    // Mərkəzə yerləşdir (Həmişə topbar-dan 56px aşağıda)
     const cardWidth = card.offsetWidth || 650;
     const cardHeight = card.offsetHeight || 450;
     const left = Math.max(15, Math.floor((window.innerWidth - cardWidth) / 2));
-    const top = Math.max(25, Math.floor((window.innerHeight - cardHeight) / 2.5));
+    const top = Math.max(56, Math.floor((window.innerHeight - cardHeight) / 2.5));
 
     card.style.left = `${left}px`;
     card.style.top = `${top}px`;
@@ -106,10 +106,23 @@ function applySavedPosition(id, card) {
             const pos = JSON.parse(saved);
             if (pos.width) card.style.width = pos.width;
             if (pos.height) card.style.height = pos.height;
-            if (pos.top) card.style.top = pos.top;
+            if (pos.top) {
+                let parsedTop = parseInt(pos.top, 10);
+                // Əgər yaddaşda köhnə 52px-dən kiçik koordinat qalıbsa, dərhal 56px-ə düzəlt
+                if (isNaN(parsedTop) || parsedTop < 52) {
+                    parsedTop = 56;
+                }
+                card.style.top = `${parsedTop}px`;
+            } else {
+                card.style.top = '56px';
+            }
             if (pos.left) card.style.left = pos.left;
         } catch (e) {
             console.error("Error parsing saved position", e);
+        }
+    } else {
+        if (!card.style.top || parseInt(card.style.top, 10) < 52) {
+            card.style.top = '56px';
         }
     }
     // Həmişə təhlükəsizlik üçün ekran hüdudlarını yoxla
@@ -195,7 +208,7 @@ function initializeWindow(backdropId, titleText) {
     applySavedPosition(backdropId, card);
     if (!card.style.top || card.style.top === '') {
         const isTerminal = ['deploy-modal', 'cf-terminal-modal', 'logs-modal'].includes(backdropId);
-        card.style.top = isTerminal ? '40px' : '100px';
+        card.style.top = isTerminal ? '54px' : '90px';
         const cardWidth = card.offsetWidth || 530;
         // Pəncərənin sağ tərəfə girməməsi üçün 60px sola çəkirik
         card.style.left = `calc(50vw - ${cardWidth / 2}px - 60px)`;
@@ -293,7 +306,7 @@ function initializeWindow(backdropId, titleText) {
             const headerHeight = header.offsetHeight || 40;
             const minVisibleSide = 120;
             
-            if (nextTop < 15) nextTop = 15; // Başlıq heç vaxt ekranın yuxarı qırağına yapışıb gizlənə bilməz
+            if (nextTop < 50) nextTop = 50; // Başlıq heç vaxt yuxarıdakı Topbar Header-i keçə bilməz
             if (nextTop > window.innerHeight - headerHeight - 35) nextTop = window.innerHeight - headerHeight - 35; // Taskbar altına düşə bilməz
             if (nextLeft < -cardWidth + minVisibleSide) nextLeft = -cardWidth + minVisibleSide;
             if (nextLeft > window.innerWidth - minVisibleSide) nextLeft = window.innerWidth - minVisibleSide;
@@ -438,7 +451,7 @@ function maximizeWindow(windowId) {
         card.classList.remove('maximized');
         card.style.width = card.dataset.prevWidth || '530px';
         card.style.height = card.dataset.prevHeight || 'auto';
-        card.style.top = card.dataset.prevTop || '100px';
+        card.style.top = card.dataset.prevTop || '80px';
         card.style.left = card.dataset.prevLeft || '30%';
         card.style.maxWidth = 'none';
         card.style.maxHeight = 'none';
@@ -451,8 +464,8 @@ function maximizeWindow(windowId) {
 
         card.classList.add('maximized');
         card.style.width = '100vw';
-        card.style.height = 'calc(100vh - 50px)';
-        card.style.top = '0';
+        card.style.height = 'calc(100vh - 56px - 46px)';
+        card.style.top = '46px';
         card.style.left = '0';
         card.style.maxWidth = 'none';
         card.style.maxHeight = 'none';
@@ -481,14 +494,14 @@ function snapWindow(windowId, direction) {
 
     if (direction === 'left') {
         card.style.width = '50vw';
-        card.style.height = 'calc(100vh - 50px)';
-        card.style.top = '0';
+        card.style.height = 'calc(100vh - 56px - 46px)';
+        card.style.top = '46px';
         card.style.left = '0';
         card.style.borderRadius = '0';
     } else if (direction === 'right') {
         card.style.width = '50vw';
-        card.style.height = 'calc(100vh - 50px)';
-        card.style.top = '0';
+        card.style.height = 'calc(100vh - 56px - 46px)';
+        card.style.top = '46px';
         card.style.left = '50vw';
         card.style.borderRadius = '0';
     } else if (direction === 'full') {
@@ -496,7 +509,7 @@ function snapWindow(windowId, direction) {
     } else if (direction === 'center') {
         card.style.width = card.dataset.prevWidth || '530px';
         card.style.height = card.dataset.prevHeight || 'auto';
-        card.style.top = '100px';
+        card.style.top = '80px';
         const cardWidth = card.offsetWidth || 530;
         card.style.left = `calc(50vw - ${cardWidth / 2}px)`;
     }
@@ -564,9 +577,9 @@ function showToast(message, type = 'info') {
         container.id = 'toast-container';
         container.style.cssText = `
             position: fixed;
-            top: 20px;
+            top: 56px;
             right: 20px;
-            z-index: 99999;
+            z-index: 10000005;
             display: flex;
             flex-direction: column;
             gap: 10px;
@@ -682,7 +695,11 @@ async function showModal(id) {
     const card = backdrop.querySelector('.modal-card');
     if (card) {
         applySavedPosition(id, card);
-        setTimeout(() => clampWindowToScreen(card), 20);
+        const curTop = parseInt(card.style.top, 10);
+        if (isNaN(curTop) || curTop < 52) {
+            card.style.top = '56px';
+        }
+        clampWindowToScreen(card);
     }
 
     activeWindows[id] = true;

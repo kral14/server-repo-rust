@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="az">
+<html lang="az" class="preload-no-transition">
 
 <head>
     <meta charset="UTF-8">
@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/style.css?v=14">
+    <link rel="stylesheet" href="/style.css?v=19">
     <link rel="icon" type="image/png" href="/favicon.png">
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -18,6 +18,10 @@
         // Prevent theme flashing on load
         const savedTheme = localStorage.getItem('theme') || 'dark';
         document.documentElement.setAttribute('data-theme', savedTheme);
+        // Prevent sidebar flashing / jumping on load
+        if (localStorage.getItem('sidebar_collapsed') === 'true') {
+            document.documentElement.classList.add('sidebar-is-collapsed');
+        }
     </script>
 </head>
 
@@ -26,72 +30,123 @@
     <div class="ambient-glow glow-1"></div>
     <div class="ambient-glow glow-2"></div>
 
-    <div class="app-container">
-        <!-- Sidebar Navigation -->
-        <aside class="sidebar">
-            <div class="logo-area" style="display: flex; align-items: center; gap: 0.85rem; margin-bottom: 1.5rem;">
-                <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, rgba(0, 210, 255, 0.2), rgba(124, 58, 237, 0.25)); border: 1px solid rgba(0, 210, 255, 0.35); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px rgba(0, 210, 255, 0.25); flex-shrink: 0;">
-                    <i data-lucide="layers" style="width: 22px; height: 22px; color: #00d2ff;"></i>
+    <!-- Qlobal Başlıq Header (Sürətli Keçid Bölmələri və Yuxarı Sərhəd) -->
+    <header id="desktop-topbar" class="desktop-topbar">
+        <div class="topbar-left">
+            <div class="topbar-brand" style="display: flex; align-items: center; gap: 0.65rem;">
+                <div style="width: 28px; height: 28px; border-radius: 7px; background: linear-gradient(135deg, rgba(0, 210, 255, 0.2), rgba(124, 58, 237, 0.25)); border: 1px solid rgba(0, 210, 255, 0.35); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0, 210, 255, 0.2); flex-shrink: 0;">
+                    <i data-lucide="layers" style="width: 16px; height: 16px; color: #00d2ff;"></i>
                 </div>
-                <div style="display: flex; flex-direction: column; gap: 2px;">
-                    <h1 style="margin: 0; line-height: 1; font-size: 1.3rem; font-weight: 700; background: linear-gradient(135deg, #ffffff 40%, #a5b4fc 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">DeployMaster</h1>
-                    <div style="display: flex; align-items: center; gap: 6px; margin-top: 2px;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span class="topbar-title" style="font-size: 1.02rem; font-weight: 700; background: linear-gradient(135deg, #ffffff 40%, #a5b4fc 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">DeployMaster</span>
+                    <div style="display: flex; align-items: center; gap: 4px; margin-left: 2px;">
                         <span onclick="openHelpCenter()"
-                            style="cursor: pointer; opacity: 0.8; display: inline-flex; align-items: center; transition: opacity 0.2s;"
-                            onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'"
+                            style="cursor: pointer; opacity: 0.85; display: inline-flex; align-items: center; transition: opacity 0.2s;"
+                            onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.85'"
                             title="Kömək Mərkəzi və Versiyalar">
-                            <i data-lucide="info" style="width: 14px; height: 14px; color: #38bdf8;"></i>
+                            <i data-lucide="info" style="width: 13px; height: 13px; color: #38bdf8;"></i>
                         </span>
                         <span id="app-version"
-                            style="font-size: 0.72rem; color: var(--text-secondary); font-family: monospace; letter-spacing: 0.5px; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08);">v1.0.0</span>
+                            style="font-size: 0.72rem; color: var(--text-secondary); font-family: monospace; letter-spacing: 0.5px; background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.08); display: inline-flex; align-items: center;">v1.0.0</span>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Sürətli Keçid Bölmələri (Quick Nav Tabs) -->
+        <nav class="topbar-quick-nav">
+            <button class="topbar-nav-chip active" data-topbar-tab="dashboard" onclick="switchTab('dashboard')">
+                <i data-lucide="layout-dashboard"></i>
+                <span>Dashboard</span>
+            </button>
+            <button class="topbar-nav-chip" data-topbar-tab="servers" onclick="switchTab('servers')">
+                <i data-lucide="server"></i>
+                <span>Serverlər</span>
+            </button>
+            <button class="topbar-nav-chip" data-topbar-tab="applications" onclick="switchTab('applications')">
+                <i data-lucide="rocket"></i>
+                <span>Layihələr</span>
+            </button>
+            <button class="topbar-nav-chip" data-topbar-tab="background-services" onclick="switchTab('background-services')">
+                <i data-lucide="cpu"></i>
+                <span>Auto-Deploy</span>
+            </button>
+            <button class="topbar-nav-chip" data-topbar-tab="keys-tokens" onclick="switchTab('keys-tokens')">
+                <i data-lucide="key-round"></i>
+                <span>Açarlar</span>
+            </button>
+            <button class="topbar-nav-chip" onclick="showModal('activity-log-modal')">
+                <i data-lucide="file-text"></i>
+                <span>Jurnal</span>
+            </button>
+            <button class="topbar-nav-chip" onclick="showModal('plugins-modal')">
+                <i data-lucide="puzzle"></i>
+                <span>Modullar</span>
+            </button>
+        </nav>
+
+        <div class="topbar-right">
+            <button class="topbar-action-btn primary" onclick="showModal('create-service-modal')" title="Yeni Layihə Əlavə Et">
+                <i data-lucide="plus"></i>
+                <span>Yeni Layihə</span>
+            </button>
+            <button class="topbar-action-btn" onclick="showModal('server-modal')" title="Yeni Server Əlavə Et">
+                <i data-lucide="server"></i>
+                <span>+ Server</span>
+            </button>
+            <button id="theme-toggle-btn" class="topbar-action-btn icon-only" title="Temanı Dəyiş">
+                <span id="theme-icon" style="display: inline-flex; align-items: center; justify-content: center;"><i data-lucide="sun" style="width: 14px; height: 14px; color: #fbbf24;"></i></span>
+            </button>
+            <button id="debug-toggle-btn" class="topbar-action-btn icon-only" onclick="toggleDebugMode()" title="Debug Rejimi">
+                <i data-lucide="bug" style="width: 14px; height: 14px; color: #ffb86c;"></i>
+            </button>
+            <button class="topbar-action-btn icon-only" onclick="window.location.reload()" title="Səhifəni Yenilə">
+                <i data-lucide="rotate-cw"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <!-- Sidebar Navigation (İki dəfə kliklədikdə açılır / yığılır) -->
+        <aside id="app-sidebar" class="sidebar" title="Menyunu yığıb-açmaq üçün iki dəfə klikləyin">
+            <script>
+                if (localStorage.getItem('sidebar_collapsed') === 'true') {
+                    document.getElementById('app-sidebar').classList.add('collapsed');
+                }
+            </script>
             <nav class="nav-menu">
-                <button class="nav-btn active" data-tab="dashboard">
+                <button class="nav-btn active" data-tab="dashboard" title="Dashboard">
                     <i data-lucide="layout-dashboard" style="color: #38bdf8;"></i>
                     <span>Dashboard</span>
                 </button>
-                <button class="nav-btn" data-tab="servers">
+                <button class="nav-btn" data-tab="servers" title="Serverlər">
                     <i data-lucide="server" style="color: #818cf8;"></i>
                     <span>Serverlər</span>
                 </button>
-                <button class="nav-btn" data-tab="keys-tokens">
+                <button class="nav-btn" data-tab="keys-tokens" title="Açarlar və Tokenlər">
                     <i data-lucide="key-round" style="color: #facc15;"></i>
                     <span>Açarlar və Tokenlər</span>
                 </button>
-                <button class="nav-btn" data-tab="applications">
+                <button class="nav-btn" data-tab="applications" title="Layihələr">
                     <i data-lucide="rocket" style="color: #f43f5e;"></i>
                     <span>Layihələr</span>
                 </button>
-                <button class="nav-btn" data-tab="background-services">
+                <button class="nav-btn" data-tab="background-services" title="Arxa Plan və Auto-Deploy">
                     <i data-lucide="cpu" style="color: #00d2ff;"></i>
                     <span>Arxa Plan və Auto-Deploy</span>
                 </button>
  
-                <button class="nav-btn" onclick="showModal('plugins-modal')" style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">
+                <button class="nav-btn" onclick="showModal('plugins-modal')" title="Modullar (Plugins)" style="margin-top: 1rem; border-top: 1px solid var(--card-border); border-radius: 0; padding-top: 1.5rem;">
                     <i data-lucide="puzzle" style="color: #a78bfa;"></i>
                     <span>Modullar (Plugins)</span>
                 </button>
-                <button class="nav-btn" onclick="showModal('activity-log-modal')" style="margin-top: 0.5rem;">
+                <button class="nav-btn" onclick="showModal('activity-log-modal')" title="Fəaliyyət Jurnalı" style="margin-top: 0.5rem;">
                     <i data-lucide="file-text" style="color: #34d399;"></i>
                     <span>Fəaliyyət Jurnalı</span>
                 </button>
             </nav>
 
-            <div class="theme-toggle-container"
-                style="padding-bottom: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--card-border); margin-top: 0.75rem; display: flex; flex-direction: column; gap: 8px;">
-                <button id="theme-toggle-btn" class="btn btn-secondary"
-                    style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
-                    <span id="theme-icon"><i data-lucide="sun" style="width: 16px; height: 16px; color: #fbbf24;"></i></span> <span id="theme-text">Açıq Tema</span>
-                </button>
-                <button onclick="toggleDebugMode()" class="btn btn-secondary"
-                    style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px; border-color: rgba(255, 184, 108, 0.4); color: var(--btn-min);">
-                    <i data-lucide="bug" style="width: 16px; height: 16px; color: #ffb86c;"></i> <span>Debug Mode</span>
-                </button>
-            </div>
-
-            <div class="status-footer">
+            <div class="status-footer" title="Server Aktivdir (Rust)">
                 <div class="status-indicator online"></div>
                 <span>Server Aktivdir (Rust)</span>
             </div>
@@ -139,20 +194,20 @@
     <div id="dynamic-modals-container"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="/js/window_manager.js?v=3"></script>
+    <script src="/js/window_manager.js?v=5"></script>
     <script src="/js/servers_module.js?v=3"></script>
-    <script src="/js/applications_module.js?v=3"></script>
+    <script src="/js/applications_module.js?v=5"></script>
     <script src="/js/wizard_module.js?v=3"></script>
     <script src="/js/deploy_terminal.js?v=3"></script>
-    <script src="/js/app_details_module.js?v=4"></script>
+    <script src="/js/app_details_module.js?v=5"></script>
     <script src="/js/activity_logs.js?v=3"></script>
     <script src="/js/system_updates.js?v=3"></script>
     <script src="/js/help_center.js?v=3"></script>
     <script src="/js/cloudflare_plugins.js?v=3"></script>
     <script src="/js/ssh_keys_helpers.js?v=3"></script>
-    <script src="/js/background_services.js?v=4"></script>
+    <script src="/js/background_services.js?v=5"></script>
     <script src="/js/keys_tokens.js?v=3"></script>
-    <script src="/app.js?v=7.4"></script>
+    <script src="/app.js?v=7.7"></script>
 
 
     <script>
@@ -160,6 +215,12 @@
             if (window.lucide && typeof lucide.createIcons === 'function') {
                 lucide.createIcons();
             }
+            // Səhifə ilkin render edildikdən sonra hamar keçidləri (transition) aktiv edirik
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    document.documentElement.classList.remove('preload-no-transition');
+                });
+            });
         });
     </script>
 </body>
