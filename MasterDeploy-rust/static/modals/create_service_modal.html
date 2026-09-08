@@ -1,0 +1,313 @@
+<div id="create-service-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 800px; height: 580px;">
+            <h2>🚀 Yeni Layihə Qur</h2>
+
+            <div class="modal-body"
+                style="padding: 0; display: flex; flex-direction: column; flex: 1; overflow-y: auto;">
+                <!-- Step 1: Select Source -->
+                <div id="wizard-step-1" class="wizard-step active">
+                    <h3 style="margin-bottom: 1.5rem; font-weight: 500;">Create web service</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 2rem;">Can be accessed from the Internet or
+                        the private network</p>
+
+                    <div class="source-cards-grid">
+                        <div class="source-card" onclick="selectSource('github')">
+                            <span class="source-icon">🐱</span>
+                            <div class="source-info">
+                                <h4>GitHub</h4>
+                                <p>Connect, build and deploy your code from a GitHub repository</p>
+                            </div>
+                        </div>
+                        <div class="source-card" onclick="selectSource('docker')">
+                            <span class="source-icon">🐳</span>
+                            <div class="source-info">
+                                <h4>Docker</h4>
+                                <p>Deploy docker images from any public or private registries</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Select Repository -->
+                <div id="wizard-step-2" class="wizard-step">
+                    <div class="step-progress-bar">
+                        <div class="progress-indicator active">Import project (1 of 3)</div>
+                        <div class="progress-indicator">Build options</div>
+                        <div class="progress-indicator">Configure service</div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: center;">
+                        <input type="text" id="repo-search" placeholder="Search GitHub repository..."
+                            oninput="filterRepos()" style="flex: 1; padding: 0.8rem 1rem;">
+                        <button class="btn btn-secondary" onclick="loadGithubRepos()"
+                            style="padding: 0.8rem 1.2rem;">Refresh</button>
+                    </div>
+
+                    <div id="github-repos-list" class="github-repos-list">
+                        <!-- Repos will be loaded dynamically here -->
+                        <div class="no-data">Token quraşdırılmayıb. Lütfən əvvəlcə GitHub Ayarlarını edin.</div>
+                    </div>
+
+                    <div style="margin-top: 1rem; border-top: 1px solid var(--card-border); padding-top: 1rem;">
+                        <h4>Public GitHub repository</h4>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">Use a public
+                            repository by entering the URL below. Features like auto-deploy are not available.</p>
+                        <div style="display: flex; gap: 1rem;">
+                            <input type="text" id="manual-public-repo" placeholder="https://github.com/owner/repo"
+                                style="flex: 1; padding: 0.8rem 1rem;">
+                            <button class="btn btn-primary" onclick="importManualRepo()"
+                                style="padding: 0.8rem 1.6rem;">Import</button>
+                        </div>
+                    </div>
+
+                    <div class="wizard-actions" style="margin-top: 1rem;">
+                        <button class="btn btn-secondary" onclick="goToStep(1)">Back</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Build Options -->
+                <div id="wizard-step-3" class="wizard-step">
+                    <div class="step-progress-bar">
+                        <div class="progress-indicator done">Import project</div>
+                        <div class="progress-indicator active">Build options (2 of 3)</div>
+                        <div class="progress-indicator">Configure service</div>
+                    </div>
+
+                    <h4 style="margin-bottom: 1.5rem; font-weight: 500;">Choose whether to build your code with a
+                        Dockerfile or a Buildpack</h4>
+
+                    <div class="source-cards-grid">
+                        <div class="source-card active" id="buildpack-card" onclick="selectBuildOption('buildpack')">
+                            <span class="source-icon">📦</span>
+                            <div class="source-info">
+                                <h4>Buildpack</h4>
+                                <p>Detect your project's language, install dependencies, and package the environment
+                                    into a runnable image</p>
+                            </div>
+                        </div>
+                        <div class="source-card" id="dockerfile-card" onclick="selectBuildOption('dockerfile')">
+                            <span class="source-icon">🐳</span>
+                            <div class="source-info">
+                                <h4>Dockerfile</h4>
+                                <p>Build a runnable container image for your project. Requires your repository to
+                                    contain a Dockerfile.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buildpack Customization Settings (Collapsible) -->
+                    <div id="wiz-bp-container" style="display: none; margin-top: 1rem; max-width: 600px;">
+                        <div class="collapsible-header" onclick="toggleCollapsible('wiz-buildpack-settings', this)"
+                            style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; background: var(--card-bg); padding: 0.8rem 1.2rem; border-radius: 12px; border: 1px solid var(--card-border); font-weight: 500; font-size: 0.95rem; transition: all 0.3s ease;">
+                            <span class="arrow-icon"
+                                style="transition: transform 0.2s ease; transform: rotate(0deg); display: inline-block; font-size: 0.75rem;">❯</span>
+                            <span>Buildpack ayarlarını özəlləşdirin (Customize Buildpack settings)</span>
+                        </div>
+                        <div id="wiz-buildpack-settings" class="collapsible-content"
+                            style="display: none; padding: 1.2rem; background: rgba(255,255,255,0.01); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-bottom: 1px solid var(--card-border); border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; margin-top: -2px;">
+                            <div class="form-group">
+                                <label>Build command (Override)</label>
+                                <input type="text" id="wiz-bp-build-command" placeholder="Məs: npm run build">
+                            </div>
+                            <div class="form-group">
+                                <label>Run command (Override)</label>
+                                <input type="text" id="wiz-bp-run-command" placeholder="Məs: node dist/index.js">
+                            </div>
+                            <div class="form-group">
+                                <label>Work directory (Override)</label>
+                                <input type="text" id="wiz-bp-work-dir" placeholder="Məs: src">
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="wiz-bp-privileged" style="width: auto;">
+                                <label style="margin-bottom: 0; cursor: pointer;" for="wiz-bp-privileged">Privileged
+                                    mode</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dockerfile Customization Settings (Collapsible) -->
+                    <div id="wiz-df-container" style="display: none; margin-top: 1rem; max-width: 600px;">
+                        <div class="collapsible-header" onclick="toggleCollapsible('wiz-dockerfile-settings', this)"
+                            style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; background: var(--card-bg); padding: 0.8rem 1.2rem; border-radius: 12px; border: 1px solid var(--card-border); font-weight: 500; font-size: 0.95rem; transition: all 0.3s ease;">
+                            <span class="arrow-icon"
+                                style="transition: transform 0.2s ease; transform: rotate(0deg); display: inline-block; font-size: 0.75rem;">❯</span>
+                            <span>Dockerfile ayarlarını özəlləşdirin (Customize Dockerfile settings)</span>
+                        </div>
+                        <div id="wiz-dockerfile-settings" class="collapsible-content"
+                            style="display: none; padding: 1.2rem; background: rgba(255,255,255,0.01); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-bottom: 1px solid var(--card-border); border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; margin-top: -2px;">
+                            <div class="form-group">
+                                <label>Dockerfile location (Override)</label>
+                                <input type="text" id="wiz-df-path" placeholder="Məs: docker/Dockerfile">
+                            </div>
+                            <div class="form-group">
+                                <label>Entrypoint (Override)</label>
+                                <input type="text" id="wiz-df-entrypoint" placeholder="Məs: /bin/sh">
+                            </div>
+                            <div class="form-group">
+                                <label>Command (Override)</label>
+                                <input type="text" id="wiz-df-command" placeholder="Məs: -c 'echo test'">
+                            </div>
+                            <div class="form-group">
+                                <label>Target (Override)</label>
+                                <input type="text" id="wiz-df-target" placeholder="Məs: runner">
+                            </div>
+                            <div class="form-group">
+                                <label>Work directory (Override)</label>
+                                <input type="text" id="wiz-df-work-dir" placeholder="Məs: /app">
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="wiz-df-privileged" style="width: auto;">
+                                <label style="margin-bottom: 0; cursor: pointer;" for="wiz-df-privileged">Privileged
+                                    mode</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="wizard-actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
+                        <button class="btn btn-secondary" onclick="goToStep(2)">Back</button>
+                        <button class="btn btn-primary" onclick="goToStep(4)">Next</button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Configure Service -->
+                <div id="wizard-step-4" class="wizard-step">
+                    <form id="wizard-config-form" novalidate onsubmit="handleWizardDeploy(event); return false;"
+                        style="max-width: 100%; background: transparent; padding: 0; border: none; display: flex; flex-direction: column; gap: 0.85rem;">
+                        
+                        <!-- Top Actions Bar (Immediately below title) -->
+                        <div class="wizard-actions-top" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.6rem; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 0.4rem;">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="goBackFromConfig()" style="padding: 0.45rem 1.2rem; font-size: 0.82rem; font-weight: 500;">Geri</button>
+                            <button type="button" id="btn-wiz-submit-deploy" onclick="handleWizardDeploy(event)" class="btn btn-primary btn-sm" style="padding: 0.45rem 1.8rem; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.3px; cursor: pointer;">Qur və Yayına Al (Deploy)</button>
+                        </div>
+
+                        <!-- Main Required Settings Card -->
+                        <div class="accordion-section"
+                            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.2rem;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-weight: 500;">Service Name <span style="color: var(--danger-color);">*</span></label>
+                                    <input type="text" id="wiz-app-name" placeholder="Məs: my-web-app">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-weight: 500;">Daxili Port <span style="color: var(--danger-color);">*</span></label>
+                                    <input type="number" id="wiz-app-port" value="8080">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-weight: 500;">Hədəf Server <span style="color: var(--danger-color);">*</span></label>
+                                    <select id="wiz-app-server" style="background: #12141e;"
+                                        onchange="updateServerStatsAdvisor('wiz-app-server', 'wiz-server-advisor', 'wiz-app-memory', 'wiz-app-cpu')">
+                                        <!-- Server list loaded here -->
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="wiz-server-advisor"
+                                style="display: none; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 0.8rem; margin-top: 1rem; font-size: 0.82rem; color: #cbd5e1;">
+                                <!-- Advisor content dynamically loaded -->
+                            </div>
+                        </div>
+
+                        <!-- Accordion 1: Source & Deploy Type -->
+                        <div class="accordion-section"
+                            style="background: rgba(255,255,255,0.015); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('wiz-source-content', this)"
+                                style="padding: 0.75rem 1.1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3 style="font-size: 0.85rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.6rem; color: #f1f5f9;">
+                                    <svg style="width: 15px; height: 15px; stroke: #00d2ff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                    <span>Mənbə və Yayım Tipi (Source)</span>
+                                </h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.75rem; font-weight: 500; background: rgba(255,255,255,0.06); padding: 0.25rem 0.65rem; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="wiz-source-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.1rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-size: 0.8rem;">Yayım Növü (Deploy Type)</label>
+                                    <select id="wiz-deploy-type" onchange="toggleDeployTypeFields('wiz')">
+                                        <option value="git">Git Repository (Build edilsin)</option>
+                                        <option value="image">Hazır Registry İmic (Pull edilsin)</option>
+                                    </select>
+                                </div>
+
+                                <!-- Registry Image Inputs -->
+                                <div id="wiz-image-inputs" style="display: none;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Docker Registry İmic Linki (Registry Image)</label>
+                                        <input type="text" id="wiz-registry-image"
+                                            placeholder="Məs: ghcr.io/kral14/new-api:latest">
+                                    </div>
+                                </div>
+
+                                <div id="wiz-git-section-wrapper" style="display: flex; flex-direction: column; gap: 0.8rem;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Git Repo URL</label>
+                                        <input type="text" id="wiz-app-repo" placeholder="Məs: https://github.com/kral14/repo.git">
+                                    </div>
+                                    <div class="form-group" id="wiz-branch-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Branch (Budaq)</label>
+                                        <input type="text" id="wiz-app-branch" value="main" placeholder="main">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Accordion 2: Environment Variables -->
+                        <div class="accordion-section"
+                            style="background: rgba(255,255,255,0.015); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('wiz-env-content', this)"
+                                style="padding: 0.75rem 1.1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3 style="font-size: 0.85rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.6rem; color: #f1f5f9;">
+                                    <svg style="width: 15px; height: 15px; stroke: #00d2ff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                    <span>Mühit Dəyişənləri (ENV)</span>
+                                </h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.75rem; font-weight: 500; background: rgba(255,255,255,0.06); padding: 0.25rem 0.65rem; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="wiz-env-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.1rem; border-top: 1px solid var(--card-border);">
+                                <div id="wiz-env-vars-container"
+                                    style="max-height: 180px; overflow-y: auto; margin-bottom: 0.8rem; padding-right: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <!-- Dynamic ENV rows will be added here -->
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="addWizEnvVarRow()"
+                                    style="padding: 0.35rem 0.85rem; font-size: 0.78rem; font-weight: 500; border-radius: 6px; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg style="width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2;" viewBox="0 0 24 24"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                                    <span>Əlavə Et</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Accordion 3: Resource Limits -->
+                        <div class="accordion-section"
+                            style="background: rgba(255,255,255,0.015); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('wiz-resources-content', this)"
+                                style="padding: 0.75rem 1.1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3 style="font-size: 0.85rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.6rem; color: #f1f5f9;">
+                                    <svg style="width: 15px; height: 15px; stroke: #00d2ff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+                                    <span>Resurs Limitləri (RAM & CPU)</span>
+                                </h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.75rem; font-weight: 500; background: rgba(255,255,255,0.06); padding: 0.25rem 0.65rem; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="wiz-resources-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.1rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">RAM Limiti (Məs: 512m, 1g)</label>
+                                        <input type="text" id="wiz-app-memory" placeholder="Limitsiz (Boş saxlayın)">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">CPU Limiti (Məs: 0.5, 1)</label>
+                                        <input type="number" step="0.1" min="0.1" id="wiz-app-cpu"
+                                            placeholder="Limitsiz (Boş saxlayın)">
+                                    </div>
+                                </div>
+                                <small style="color: var(--text-secondary); display: block; margin-top: 0.2rem; font-size: 0.75rem;">
+                                    Layihəni yaradarkən serverinizin "Server Stats" panelində olan boş limitlərini nəzərə alın.
+                                </small>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>

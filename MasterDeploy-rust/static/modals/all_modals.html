@@ -1,0 +1,1114 @@
+    <!-- Server Add Modal -->
+    <div id="server-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>🖥️ Yeni Server Əlavə Et</h2>
+            <form id="server-form" novalidate onsubmit="handleCreateServer(event)">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Server Adı</label>
+                        <input type="text" id="srv-name" placeholder="Məs: Oracle Always Free">
+                    </div>
+                    <div class="form-group">
+                        <label>IP Ünvanı (Public IP)</label>
+                        <input type="text" id="srv-ip" placeholder="Məs: 79.72.95.173">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH İstifadəçi Adı</label>
+                        <input type="text" id="srv-user" placeholder="Məs: ubuntu">
+                    </div>
+                    <div class="form-group">
+                        <label>Qlobal SSH Açarını Seçin</label>
+                        <select id="srv-key-id" onchange="handleServerKeySelect('srv-key-id', 'srv-key-wrapper')">
+                            <!-- SSH keys list loaded dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group" id="srv-key-wrapper">
+                        <label>Mətn olaraq SSH Private Key (Köhnə üsul)</label>
+                        <textarea id="srv-key" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-modal')">Ləğv
+                        Et</button>
+                    <button type="submit" class="btn btn-primary">Yadda Saxla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Server Edit Modal -->
+    <div id="server-edit-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>✏️ Server Ayarlarını Redaktə Et</h2>
+            <form id="server-edit-form" novalidate onsubmit="handleUpdateServer(event)">
+                <input type="hidden" id="edit-srv-id">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Server Adı</label>
+                        <input type="text" id="edit-srv-name" placeholder="Məs: Oracle Always Free">
+                    </div>
+                    <div class="form-group">
+                        <label>IP Ünvanı (Public IP)</label>
+                        <input type="text" id="edit-srv-ip" placeholder="Məs: 79.72.95.173">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH İstifadəçi Adı</label>
+                        <input type="text" id="edit-srv-user" placeholder="Məs: ubuntu">
+                    </div>
+                    <div class="form-group">
+                        <label>Qlobal SSH Açarını Seçin</label>
+                        <select id="edit-srv-key-id" onchange="handleServerKeySelect('edit-srv-key-id', 'edit-srv-key-wrapper')">
+                            <!-- SSH keys list loaded dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group" id="edit-srv-key-wrapper">
+                        <label>Mətn olaraq SSH Private Key</label>
+                        <textarea id="edit-srv-key" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-edit-modal')">Ləğv
+                        Et</button>
+                    <button type="submit" class="btn btn-primary">Yadda Saxla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <!-- Application Add Modal -->
+    <div id="app-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 650px; width: 95%;">
+            <h2>🚀 Yeni Layihə Əlavə Et</h2>
+            <form id="app-form" novalidate onsubmit="handleCreateApp(event)" style="display: flex; flex-direction: column; gap: 0.85rem;">
+                <div class="modal-body" style="padding: 0; display: flex; flex-direction: column; gap: 0.85rem;">
+                    
+                    <!-- Main Card -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.2rem;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-weight: 500;">Layihə Adı <span style="color: var(--danger-color);">*</span></label>
+                                <input type="text" id="app-name" placeholder="Məs: Rust API Backend">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-weight: 500;">Daxili Port <span style="color: var(--danger-color);">*</span></label>
+                                <input type="number" id="app-port" value="8080">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-weight: 500;">Hədəf Server <span style="color: var(--danger-color);">*</span></label>
+                                <select id="app-server"
+                                    onchange="updateServerStatsAdvisor('app-server', 'app-server-advisor', 'app-memory', 'app-cpu')">
+                                    <!-- Server list will load here -->
+                                </select>
+                            </div>
+                        </div>
+                        <div id="app-server-advisor"
+                            style="display: none; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 0.8rem; margin-top: 1rem; font-size: 0.82rem; color: #cbd5e1;">
+                            <!-- Advisor content dynamically loaded -->
+                        </div>
+                    </div>
+
+                    <!-- Accordion 1: Source -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="accordion-header" onclick="toggleAccordion('app-source-content', this)"
+                            style="padding: 0.85rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                            <h3 style="font-size: 0.92rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                📁 Mənbə və Yayım Növü (Source)
+                            </h3>
+                            <span class="accordion-icon toggle-text-btn"
+                                style="font-size: 0.8rem; background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                        </div>
+                        <div id="app-source-content" class="accordion-content"
+                            style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label>Yayım Növü (Deploy Type)</label>
+                                <select id="app-deploy-type" onchange="toggleDeployTypeFields('app')">
+                                    <option value="git">⚙️ Git Repository (Build edilsin)</option>
+                                    <option value="image">📦 Hazır Registry İmic (Pull edilsin)</option>
+                                </select>
+                            </div>
+
+                            <!-- Registry Image Inputs -->
+                            <div id="app-image-inputs" style="display: none;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>Docker Registry İmic Linki (Registry Image)</label>
+                                    <input type="text" id="app-registry-image" placeholder="Məs: ghcr.io/kral14/new-api:latest">
+                                </div>
+                            </div>
+
+                            <div id="app-git-section-wrapper">
+                                <div class="form-group">
+                                    <label>Repo Mənbəyi</label>
+                                    <div class="source-switcher">
+                                        <button type="button" class="source-btn active" id="src-manual-btn"
+                                            onclick="toggleRepoSource('manual')">✍️ Əl ilə</button>
+                                        <button type="button" class="source-btn" id="src-github-btn"
+                                            onclick="toggleRepoSource('github')">🐱 GitHub</button>
+                                    </div>
+                                </div>
+
+                                <!-- Manual Git Details -->
+                                <div id="git-manual-inputs">
+                                    <div class="form-group">
+                                        <label>Git Repo URL</label>
+                                        <input type="text" id="app-repo"
+                                            placeholder="Məs: https://github.com/user/repo.git">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label>Budaq (Branch)</label>
+                                        <input type="text" id="app-branch" value="main">
+                                    </div>
+                                </div>
+
+                                <!-- GitHub Auto Details -->
+                                <div id="git-github-inputs" style="display: none;">
+                                    <div class="form-group">
+                                        <label>Repozitoriya Seçin</label>
+                                        <select id="app-repo-select" onchange="handleRepoSelectChange()">
+                                            <option value="">Token quraşdırılmayıb</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label>Budaq Seçin (Branch)</label>
+                                        <select id="app-branch-select">
+                                            <option value="main">main</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Accordion 2: Environment Variables -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="accordion-header" onclick="toggleAccordion('app-env-content', this)"
+                            style="padding: 0.85rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                            <h3 style="font-size: 0.92rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                🔐 Mühit Dəyişənləri (ENV)
+                            </h3>
+                            <span class="accordion-icon toggle-text-btn"
+                                style="font-size: 0.8rem; background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                        </div>
+                        <div id="app-env-content" class="accordion-content"
+                            style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border);">
+                            <div id="env-vars-container"
+                                style="max-height: 180px; overflow-y: auto; margin-bottom: 0.8rem; padding-right: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                <!-- Dynamic ENV rows will be added here via JS -->
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvVarRow()"
+                                style="padding: 0.4rem 0.9rem; font-size: 0.8rem; border-radius: 6px; align-self: flex-start;">+ Əlavə Et</button>
+                        </div>
+                    </div>
+
+                    <!-- Accordion 3: Resource Limits -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="accordion-header" onclick="toggleAccordion('app-resources-content', this)"
+                            style="padding: 0.85rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                            <h3 style="font-size: 0.92rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                ⚙️ Resurs Limitləri (RAM & CPU)
+                            </h3>
+                            <span class="accordion-icon toggle-text-btn"
+                                style="font-size: 0.8rem; background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                        </div>
+                        <div id="app-resources-content" class="accordion-content"
+                            style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>RAM Limiti (Məs: 512m, 1g)</label>
+                                    <input type="text" id="app-memory" placeholder="Limitsiz (Boş saxlayın)">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>CPU Limiti (Məs: 0.5, 1)</label>
+                                    <input type="number" step="0.1" min="0.1" id="app-cpu" placeholder="Limitsiz (Boş saxlayın)">
+                                </div>
+                            </div>
+                            <small style="color: var(--text-secondary); display: block; margin-top: 0.2rem; font-size: 0.78rem;">
+                                Layihəni yaradarkən serverinizin "Server Stats" panelində olan boş limitlərini nəzərə alın.
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Accordion 4: Auto-Deploy Settings -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="accordion-header" onclick="toggleAccordion('app-autodeploy-content', this)"
+                            style="padding: 0.85rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                            <h3 style="font-size: 0.92rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                🔄 Ağıllı Auto-Deploy (Avtomatik Yenilənmə)
+                            </h3>
+                            <span class="accordion-icon toggle-text-btn"
+                                style="font-size: 0.8rem; background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                        </div>
+                        <div id="app-autodeploy-content" class="accordion-content"
+                            style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border); gap: 1rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1rem; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); gap: 1rem;">
+                                <div style="flex: 1;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary);">Auto-Deploy Aktiv Olsun</span>
+                                        <span id="app-autodeploy-badge" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 12px; background: rgba(148, 163, 184, 0.15); color: #94a3b8; font-weight: 500;">Sönülüdür</span>
+                                    </div>
+                                    <small style="display: block; color: var(--text-secondary); font-size: 0.76rem; margin-top: 2px;">Yeni commit və ya yeni docker registry imici aşkarlandıqda avtomatik yenilənsin.</small>
+                                </div>
+                                <label class="md-switch" title="Auto-Deploy Aktivləşdir / Söndür">
+                                    <input type="checkbox" id="app-autodeploy-enabled" onchange="const b = document.getElementById('app-autodeploy-badge'); if(b){ b.innerText = this.checked ? 'Aktivdir' : 'Sönülüdür'; b.style.color = this.checked ? '#38bdf8' : '#94a3b8'; b.style.background = this.checked ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)'; }">
+                                    <span class="md-switch-slider"></span>
+                                </label>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>Yoxlama İntervalı</label>
+                                    <select id="app-autodeploy-interval" style="width: 100%;">
+                                        <option value="5">Hər 5 dəqiqədən bir</option>
+                                        <option value="15" selected>Hər 15 dəqiqədən bir (Tövsiyə)</option>
+                                        <option value="30">Hər 30 dəqiqədən bir</option>
+                                        <option value="60">Hər 1 saatdan bir</option>
+                                        <option value="360">Hər 6 saatdan bir</option>
+                                        <option value="1440">Hər 24 saatdan bir</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>Cavab Gözləmə Limiti (Saniyə)</label>
+                                    <input type="number" id="app-autodeploy-timeout" min="3" max="60" value="10" placeholder="10">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-actions" style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('app-modal')">Ləğv Et</button>
+                    <button type="submit" class="btn btn-primary" style="padding: 0.6rem 2rem; font-weight: 500;">Əlavə Et və Yadda Saxla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- GitHub Config Modal -->
+    <div id="github-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>🐱 GitHub Bağlantısı</h2>
+            <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem; line-height: 1.4;">
+                DeployMaster-a özəl və ümumi repozitoriyalarınızı gətirmək üçün GitHub Personal Access Token (PAT) daxil
+                edin.
+            </p>
+
+            <div class="form-group">
+                <label>GitHub Personal Access Token (PAT)</label>
+                <!-- Fake inputs to prevent password manager popups -->
+                <input type="text" style="display:none;" tabindex="-1">
+                <input type="password" style="display:none;" tabindex="-1">
+                <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                    <input type="password" id="gh-token" placeholder="ghp_..." style="font-family: monospace; padding-right: 45px; width: 100%;">
+                    <button type="button" onclick="toggleGithubTokenVisibility(event)" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.1rem; padding: 4px; z-index: 10; display: flex; align-items: center; justify-content: center; height: 100%;">👁️</button>
+                </div>
+                <small
+                    style="color: var(--text-secondary); display: block; margin-top: 6px; font-size: 0.8rem; line-height: 1.3;">
+                    Token yaratmaq üçün <a href="https://github.com/settings/tokens" target="_blank"
+                        style="color: var(--accent-color); text-decoration: underline;">GitHub Settings</a> səhifəsinə
+                    daxil olun. (Gərəkli icazələr: <code>repo</code>)
+                </small>
+            </div>
+
+            <div class="form-group"
+                style="background: rgba(255,255,255,0.02); padding: 1rem; border-radius: 8px; border: 1px solid var(--card-border); margin-top: 1rem;">
+                <span style="font-size: 0.9rem; color: var(--text-secondary);">Bağlantı Statusu:</span>
+                <strong id="gh-status" style="margin-left: 0.5rem; color: #94a3b8;">Məlumat yoxdur</strong>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('github-modal')">Ləğv Et</button>
+                <button type="button" class="btn btn-primary" onclick="saveGithubToken()">Yadda Saxla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modullar Modalı -->
+    <div id="plugins-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 600px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem;">🧩 Modullar Mərkəzi</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Əlavə imkanları buradan
+                        yükləyin və aktivləşdirin</p>
+                </div>
+            </div>
+            <div id="plugins-list"
+                style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px;">
+                <!-- Dinamik yüklənən modullar bura gələcək -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Help Center Modal -->
+    <div id="help-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 800px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">📚 Kömək Mərkəzi və Versiya Tarixçəsi</h2>
+                <button onclick="closeModal('help-modal')"
+                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
+            </div>
+            <div style="padding: 0;">
+                <div style="display: flex; border-bottom: 1px solid var(--card-border);">
+                    <button class="help-tab-btn active" onclick="switchHelpTab('help-changelog')"
+                        style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-primary); cursor: pointer; border-bottom: 2px solid var(--primary-color);">Yeniliklər
+                        (Changelog)</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-about')"
+                        style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Proqram
+                        Haqqında</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-external')"
+                        style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Xarici
+                        Server</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-local')"
+                        style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Lokal
+                        Server</button>
+                </div>
+                <div style="padding: 20px; max-height: 500px; overflow-y: auto;">
+                    <div id="help-changelog" class="help-tab-content">Yüklənir...</div>
+                    <div id="help-about" class="help-tab-content"
+                        style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">
+                        Yüklənir...</div>
+                    <div id="help-external" class="help-tab-content"
+                        style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">
+                        Yüklənir...</div>
+                    <div id="help-local" class="help-tab-content"
+                        style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">
+                        Yüklənir...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom Confirm Card Modal -->
+    <div id="confirm-card-modal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9998; align-items:center; justify-content:center; backdrop-filter:blur(6px);">
+        <div
+            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 28px; max-width: 440px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+            <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 16px;">
+                <span id="confirm-card-icon" style="font-size:1.8rem;">🔄</span>
+                <div>
+                    <h3 id="confirm-card-title" style="margin:0; font-size:1.1rem; color: var(--text-primary);">
+                        Əminsiniz?</h3>
+                    <p id="confirm-card-subtitle"
+                        style="margin:4px 0 0; font-size:0.8rem; color: var(--text-secondary);"></p>
+                </div>
+            </div>
+            <div id="confirm-card-body"
+                style="font-size:0.85rem; color: var(--text-secondary); background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 20px; line-height: 1.6;">
+            </div>
+            <div id="confirm-card-warning"
+                style="display:none; background: rgba(255,165,0,0.1); border: 1px solid rgba(255,165,0,0.3); border-radius: 8px; padding: 10px 12px; margin-bottom: 20px; font-size: 0.8rem; color: #ffaa00;">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap: 10px;">
+                <button type="button" id="confirm-card-no" class="btn btn-secondary" style="padding: 8px 20px;">Ləğv Et</button>
+                <button type="button" id="confirm-card-yes" class="btn btn-primary" style="padding: 8px 20px;">Təsdiqlə</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Update Modal -->
+    <div id="system-update-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 650px; width: 95%; max-height: calc(100vh - 60px);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.25rem; color: #fff;">🔄 Sistem Versiyaları</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.82rem; color: var(--text-secondary);">Yeni versiyaya keç və ya köhnəyə qayıt</p>
+                </div>
+                <button onclick="closeModal('system-update-modal')"
+                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+                    onmouseout="this.style.background='transparent'">✕</button>
+            </div>
+            <div id="version-cards-list"
+                style="max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 6px;">
+                <div style="text-align:center; padding: 20px; color: var(--text-secondary);">Yüklənir...</div>
+            </div>
+            <div class="modal-actions"
+                style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 15px; padding-top: 12px; border-top: 1px solid var(--card-border);">
+                <button class="btn btn-secondary" onclick="closeModal('system-update-modal')">Bağla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fəaliyyət Jurnalı və Canlı Debug Monitoru Modal -->
+    <div id="activity-log-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 950px; width: 95%; height: 85vh; display: flex; flex-direction: column;">
+            <div style="padding: 1.25rem 1.5rem 10px 1.5rem; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <!-- Başlıq və Canlı Status Çubuğu -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                            📋 Fəaliyyət Jurnalı & Live Debug
+                        </div>
+                        <span id="activity-live-badge" class="live-stream-badge" title="Canlı izləmə aktivdir">
+                            <span class="pulse-dot"></span> CANLI YAYIM
+                        </span>
+                        <span id="activity-last-update-time" style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">--:--</span>
+                    </div>
+
+                    <!-- İdarəetmə Düymələri (Sağ tərəf) -->
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button id="btn-activity-stream-toggle" class="btn btn-secondary" onclick="toggleActivityStream()" style="padding: 5px 10px; font-size: 0.78rem; display: flex; align-items: center; gap: 5px;" title="Canlı axını dondur və ya davam etdir">
+                            <span id="stream-toggle-icon">⏸️</span> <span id="stream-toggle-text">Dondur</span>
+                        </button>
+                        <div style="display: flex; background: var(--bg-card); border: 1px solid var(--card-border); border-radius: 6px; padding: 2px; gap: 2px;">
+                            <button id="btn-view-cards" class="activity-filter-pill active" onclick="setActivityViewMode('cards')" style="border: none; padding: 4px 8px; font-size: 0.75rem;">🗂️ Kartlar</button>
+                            <button id="btn-view-terminal" class="activity-filter-pill" onclick="setActivityViewMode('terminal')" style="border: none; padding: 4px 8px; font-size: 0.75rem;">💻 Terminal</button>
+                        </div>
+                        <button class="btn btn-secondary" onclick="renderActivityLogs()" style="padding: 5px 9px; font-size: 0.85rem;" title="Loqları dərhal yenilə">🔄</button>
+                    </div>
+                </div>
+
+                <!-- KPI İcmal Paneli -->
+                <div class="activity-kpi-container">
+                    <div class="activity-kpi-card">
+                        <span class="activity-kpi-label">Ümumi Hadisələr</span>
+                        <span id="stat-total-logs" class="activity-kpi-val">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #ff5252;">
+                        <span class="activity-kpi-label" style="color: #ff5252;">❌ Xətalar</span>
+                        <span id="stat-error-logs" class="activity-kpi-val" style="color: #ff5252;">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #ffb86c;">
+                        <span class="activity-kpi-label" style="color: #ffb86c;">⚠️ Xəbərdarlıq</span>
+                        <span id="stat-warn-logs" class="activity-kpi-val" style="color: #ffb86c;">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #69f0ae;">
+                        <span class="activity-kpi-label" style="color: #69f0ae;">✅ Uğurlu / Deploy</span>
+                        <span id="stat-success-logs" class="activity-kpi-val" style="color: #69f0ae;">0</span>
+                    </div>
+                </div>
+
+                <!-- Canlı Axtarış və Filtrlər -->
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="position: relative; flex: 1;">
+                            <input type="text" id="activity-search-input" placeholder="🔍 Layihə adı, port, server və ya xəta axtar..." oninput="handleActivitySearch()"
+                                style="width: 100%; padding: 7px 12px 7px 32px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-primary); outline: none;" />
+                            <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0.5; font-size: 0.85rem;">🔍</span>
+                        </div>
+                        <button id="btn-autoscroll-toggle" class="btn btn-secondary" onclick="toggleActivityAutoScroll()" style="padding: 7px 11px; font-size: 0.78rem; white-space: nowrap;" title="Son loqa avto-sürüşdürmə">
+                            ⬇️ <span id="autoscroll-text">Avto-Scroll: Açıq</span>
+                        </button>
+                    </div>
+
+                    <!-- Kateqoriya və Səviyyə Filtrləri -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <!-- Səviyyələr (Severity) -->
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="activity-filter-pill active" data-filter-type="level" data-filter-val="all" onclick="setActivityFilter('level', 'all')">Hamısı</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="error" onclick="setActivityFilter('level', 'error')" style="color: #ff5252;">❌ Xətalar</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="warning" onclick="setActivityFilter('level', 'warning')" style="color: #ffb86c;">⚠️ Xəbərdarlıq</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="success" onclick="setActivityFilter('level', 'success')" style="color: #69f0ae;">✅ Uğurlu</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="info" onclick="setActivityFilter('level', 'info')" style="color: #40c4ff;">ℹ️ Məlumat</span>
+                        </div>
+                        <!-- Modullar (Modules) -->
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="activity-filter-pill active" data-filter-type="module" data-filter-val="all" onclick="setActivityFilter('module', 'all')">Bütün Sahələr</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="apps" onclick="setActivityFilter('module', 'apps')">📦 Layihələr</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="servers" onclick="setActivityFilter('module', 'servers')">🖥️ Serverlər</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="deploy" onclick="setActivityFilter('module', 'deploy')">🚀 Deploy</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="system" onclick="setActivityFilter('module', 'system')">⚙️ Sistem</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. Vizuallaşdırılmış Kart Görünüşü -->
+                <div id="activity-cards-view" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; padding-bottom: 6px; min-height: 0;">
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 25px; opacity: 0.5;">Yüklənir...</div>
+                </div>
+
+                <!-- 2. Terminal / Live Debug Console Görünüşü -->
+                <div id="activity-terminal-view" class="activity-terminal-box" style="display: none;">
+                    <div style="color: #8b949e; margin-bottom: 8px;">// MasterDeploy Canlı Debug Konsolu aktivdir...</div>
+                </div>
+
+                <!-- Modal Alt Paneli -->
+                <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); margin-bottom: 0px;">
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important; font-size: 0.8rem;">🧹 Jurnalı Təmizlə</button>
+                        <button class="btn btn-secondary" onclick="copyCurrentSectionLogs()" style="font-size: 0.8rem;">📋 Loqları Kopyala</button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')" style="font-size: 0.8rem;">Bağla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Detalı Modalı -->
+    <div id="log-detail-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 650px; width: 90%; max-height: 80vh; display: flex; flex-direction: column;">
+            <div style="padding: 1.5rem; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.2rem;">📋 Loq Təfərrüatı</h2>
+                        <p id="log-detail-meta" style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);"></p>
+                    </div>
+                </div>
+                
+                <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px;">
+                    <div style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500; margin-bottom: 4px;">Mesaj / Xəta mətni:</div>
+                    <textarea id="log-detail-text" readonly style="flex: 1; width: 100%; min-height: 120px; font-family: monospace; font-size: 0.85rem; background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); color: #fff; padding: 12px; border-radius: 8px; resize: none; outline: none;"></textarea>
+                    
+                    <div id="log-detail-extra-section" style="display: none; flex: 1.5; min-height: 0; flex-direction: column;">
+                        <div style="font-size: 0.85rem; color: var(--text-primary); font-weight: 500; margin-bottom: 6px;" id="log-detail-extra-title">Terminal Çıxışı (Loqlar):</div>
+                        <div id="log-detail-extra-terminal" style="flex: 1; overflow-y: auto; background: #1e1e1e; border: 1px solid #333; border-radius: 8px; padding: 12px; font-family: monospace; font-size: 0.82rem; color: #00e676; white-space: pre-wrap; min-height: 100px;"></div>
+                    </div>
+                </div>
+
+                <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--card-border); padding-top: 15px; margin-top: auto;">
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="copyLogDetailText()">📋 Kopyala</button>
+                        <button id="log-detail-view-deploy-btn" class="btn btn-secondary btn-sm" style="display: none;">🚀 Yayım Loqlarına Keç</button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="closeModal('log-detail-modal')">Bağla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Layihə Silinməsi Terminal Modalı -->
+    <div id="delete-terminal-modal" class="modal-backdrop">
+        <div class="modal-card"
+            style="width: 700px; height: 420px; background: #1e1e1e; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+            <div id="delete-terminal-body"
+                style="flex: 1; padding: 20px; background: #0c0c0c; overflow-y: auto; font-family: 'Consolas', 'Courier New', Courier, monospace; font-size: 0.85rem; color: #ff1744; line-height: 1.6; text-align: left; white-space: pre-wrap; word-break: break-all;">
+                <div style="color: #888;">[SİSTEM] Layihə silinməsi başladıldı...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Service Modal -->
+    <div id="create-service-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 800px; height: 580px;">
+            <h2>🚀 Yeni Layihə Qur</h2>
+
+            <div class="modal-body"
+                style="padding: 0; display: flex; flex-direction: column; flex: 1; overflow-y: auto;">
+                <!-- Step 1: Select Source -->
+                <div id="wizard-step-1" class="wizard-step active">
+                    <h3 style="margin-bottom: 1.5rem; font-weight: 500;">Create web service</h3>
+                    <p style="color: var(--text-secondary); margin-bottom: 2rem;">Can be accessed from the Internet or
+                        the private network</p>
+
+                    <div class="source-cards-grid">
+                        <div class="source-card" onclick="selectSource('github')">
+                            <span class="source-icon">🐱</span>
+                            <div class="source-info">
+                                <h4>GitHub</h4>
+                                <p>Connect, build and deploy your code from a GitHub repository</p>
+                            </div>
+                        </div>
+                        <div class="source-card" onclick="selectSource('docker')">
+                            <span class="source-icon">🐳</span>
+                            <div class="source-info">
+                                <h4>Docker</h4>
+                                <p>Deploy docker images from any public or private registries</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Select Repository -->
+                <div id="wizard-step-2" class="wizard-step">
+                    <div class="step-progress-bar">
+                        <div class="progress-indicator active">Import project (1 of 3)</div>
+                        <div class="progress-indicator">Build options</div>
+                        <div class="progress-indicator">Configure service</div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: center;">
+                        <input type="text" id="repo-search" placeholder="Search GitHub repository..."
+                            oninput="filterRepos()" style="flex: 1; padding: 0.8rem 1rem;">
+                        <button class="btn btn-secondary" onclick="loadGithubRepos()"
+                            style="padding: 0.8rem 1.2rem;">Refresh</button>
+                    </div>
+
+                    <div id="github-repos-list" class="github-repos-list">
+                        <!-- Repos will be loaded dynamically here -->
+                        <div class="no-data">Token quraşdırılmayıb. Lütfən əvvəlcə GitHub Ayarlarını edin.</div>
+                    </div>
+
+                    <div style="margin-top: 1rem; border-top: 1px solid var(--card-border); padding-top: 1rem;">
+                        <h4>Public GitHub repository</h4>
+                        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">Use a public
+                            repository by entering the URL below. Features like auto-deploy are not available.</p>
+                        <div style="display: flex; gap: 1rem;">
+                            <input type="text" id="manual-public-repo" placeholder="https://github.com/owner/repo"
+                                style="flex: 1; padding: 0.8rem 1rem;">
+                            <button class="btn btn-primary" onclick="importManualRepo()"
+                                style="padding: 0.8rem 1.6rem;">Import</button>
+                        </div>
+                    </div>
+
+                    <div class="wizard-actions" style="margin-top: 1rem;">
+                        <button class="btn btn-secondary" onclick="goToStep(1)">Back</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Build Options -->
+                <div id="wizard-step-3" class="wizard-step">
+                    <div class="step-progress-bar">
+                        <div class="progress-indicator done">Import project</div>
+                        <div class="progress-indicator active">Build options (2 of 3)</div>
+                        <div class="progress-indicator">Configure service</div>
+                    </div>
+
+                    <h4 style="margin-bottom: 1.5rem; font-weight: 500;">Choose whether to build your code with a
+                        Dockerfile or a Buildpack</h4>
+
+                    <div class="source-cards-grid">
+                        <div class="source-card active" id="buildpack-card" onclick="selectBuildOption('buildpack')">
+                            <span class="source-icon">📦</span>
+                            <div class="source-info">
+                                <h4>Buildpack</h4>
+                                <p>Detect your project's language, install dependencies, and package the environment
+                                    into a runnable image</p>
+                            </div>
+                        </div>
+                        <div class="source-card" id="dockerfile-card" onclick="selectBuildOption('dockerfile')">
+                            <span class="source-icon">🐳</span>
+                            <div class="source-info">
+                                <h4>Dockerfile</h4>
+                                <p>Build a runnable container image for your project. Requires your repository to
+                                    contain a Dockerfile.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Buildpack Customization Settings (Collapsible) -->
+                    <div id="wiz-bp-container" style="display: none; margin-top: 1rem; max-width: 600px;">
+                        <div class="collapsible-header" onclick="toggleCollapsible('wiz-buildpack-settings', this)"
+                            style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; background: var(--card-bg); padding: 0.8rem 1.2rem; border-radius: 12px; border: 1px solid var(--card-border); font-weight: 500; font-size: 0.95rem; transition: all 0.3s ease;">
+                            <span class="arrow-icon"
+                                style="transition: transform 0.2s ease; transform: rotate(0deg); display: inline-block; font-size: 0.75rem;">❯</span>
+                            <span>Buildpack ayarlarını özəlləşdirin (Customize Buildpack settings)</span>
+                        </div>
+                        <div id="wiz-buildpack-settings" class="collapsible-content"
+                            style="display: none; padding: 1.2rem; background: rgba(255,255,255,0.01); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-bottom: 1px solid var(--card-border); border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; margin-top: -2px;">
+                            <div class="form-group">
+                                <label>Build command (Override)</label>
+                                <input type="text" id="wiz-bp-build-command" placeholder="Məs: npm run build">
+                            </div>
+                            <div class="form-group">
+                                <label>Run command (Override)</label>
+                                <input type="text" id="wiz-bp-run-command" placeholder="Məs: node dist/index.js">
+                            </div>
+                            <div class="form-group">
+                                <label>Work directory (Override)</label>
+                                <input type="text" id="wiz-bp-work-dir" placeholder="Məs: src">
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="wiz-bp-privileged" style="width: auto;">
+                                <label style="margin-bottom: 0; cursor: pointer;" for="wiz-bp-privileged">Privileged
+                                    mode</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dockerfile Customization Settings (Collapsible) -->
+                    <div id="wiz-df-container" style="display: none; margin-top: 1rem; max-width: 600px;">
+                        <div class="collapsible-header" onclick="toggleCollapsible('wiz-dockerfile-settings', this)"
+                            style="display: flex; align-items: center; gap: 0.6rem; cursor: pointer; background: var(--card-bg); padding: 0.8rem 1.2rem; border-radius: 12px; border: 1px solid var(--card-border); font-weight: 500; font-size: 0.95rem; transition: all 0.3s ease;">
+                            <span class="arrow-icon"
+                                style="transition: transform 0.2s ease; transform: rotate(0deg); display: inline-block; font-size: 0.75rem;">❯</span>
+                            <span>Dockerfile ayarlarını özəlləşdirin (Customize Dockerfile settings)</span>
+                        </div>
+                        <div id="wiz-dockerfile-settings" class="collapsible-content"
+                            style="display: none; padding: 1.2rem; background: rgba(255,255,255,0.01); border-left: 1px solid var(--card-border); border-right: 1px solid var(--card-border); border-bottom: 1px solid var(--card-border); border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; margin-top: -2px;">
+                            <div class="form-group">
+                                <label>Dockerfile location (Override)</label>
+                                <input type="text" id="wiz-df-path" placeholder="Məs: docker/Dockerfile">
+                            </div>
+                            <div class="form-group">
+                                <label>Entrypoint (Override)</label>
+                                <input type="text" id="wiz-df-entrypoint" placeholder="Məs: /bin/sh">
+                            </div>
+                            <div class="form-group">
+                                <label>Command (Override)</label>
+                                <input type="text" id="wiz-df-command" placeholder="Məs: -c 'echo test'">
+                            </div>
+                            <div class="form-group">
+                                <label>Target (Override)</label>
+                                <input type="text" id="wiz-df-target" placeholder="Məs: runner">
+                            </div>
+                            <div class="form-group">
+                                <label>Work directory (Override)</label>
+                                <input type="text" id="wiz-df-work-dir" placeholder="Məs: /app">
+                            </div>
+                            <div class="form-group" style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="wiz-df-privileged" style="width: auto;">
+                                <label style="margin-bottom: 0; cursor: pointer;" for="wiz-df-privileged">Privileged
+                                    mode</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="wizard-actions" style="margin-top: 2rem; display: flex; gap: 1rem;">
+                        <button class="btn btn-secondary" onclick="goToStep(2)">Back</button>
+                        <button class="btn btn-primary" onclick="goToStep(4)">Next</button>
+                    </div>
+                </div>
+
+                <!-- Step 4: Configure Service -->
+                <div id="wizard-step-4" class="wizard-step">
+                    <form id="wizard-config-form" novalidate onsubmit="handleWizardDeploy(event); return false;"
+                        style="max-width: 100%; background: transparent; padding: 0; border: none; display: flex; flex-direction: column; gap: 0.85rem;">
+                        
+                        <!-- Top Actions Bar (Immediately below title) -->
+                        <div class="wizard-actions-top" style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.6rem; border-bottom: 1px solid rgba(255,255,255,0.06); margin-bottom: 0.4rem;">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="goBackFromConfig()" style="padding: 0.45rem 1.2rem; font-size: 0.82rem; font-weight: 500;">Geri</button>
+                            <button type="button" id="btn-wiz-submit-deploy" onclick="handleWizardDeploy(event)" class="btn btn-primary btn-sm" style="padding: 0.45rem 1.8rem; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.3px; cursor: pointer;">Qur və Yayına Al (Deploy)</button>
+                        </div>
+
+                        <!-- Main Required Settings Card -->
+                        <div class="accordion-section"
+                            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.2rem;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-weight: 500;">Service Name <span style="color: var(--danger-color);">*</span></label>
+                                    <input type="text" id="wiz-app-name" placeholder="Məs: my-web-app">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-weight: 500;">Daxili Port <span style="color: var(--danger-color);">*</span></label>
+                                    <input type="number" id="wiz-app-port" value="8080">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-weight: 500;">Hədəf Server <span style="color: var(--danger-color);">*</span></label>
+                                    <select id="wiz-app-server" style="background: #12141e;"
+                                        onchange="updateServerStatsAdvisor('wiz-app-server', 'wiz-server-advisor', 'wiz-app-memory', 'wiz-app-cpu')">
+                                        <!-- Server list loaded here -->
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="wiz-server-advisor"
+                                style="display: none; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 0.8rem; margin-top: 1rem; font-size: 0.82rem; color: #cbd5e1;">
+                                <!-- Advisor content dynamically loaded -->
+                            </div>
+                        </div>
+
+                        <!-- Accordion 1: Source & Deploy Type -->
+                        <div class="accordion-section"
+                            style="background: rgba(255,255,255,0.015); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('wiz-source-content', this)"
+                                style="padding: 0.75rem 1.1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3 style="font-size: 0.85rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.6rem; color: #f1f5f9;">
+                                    <svg style="width: 15px; height: 15px; stroke: #00d2ff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                    <span>Mənbə və Yayım Tipi (Source)</span>
+                                </h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.75rem; font-weight: 500; background: rgba(255,255,255,0.06); padding: 0.25rem 0.65rem; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="wiz-source-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.1rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-size: 0.8rem;">Yayım Növü (Deploy Type)</label>
+                                    <select id="wiz-deploy-type" onchange="toggleDeployTypeFields('wiz')">
+                                        <option value="git">Git Repository (Build edilsin)</option>
+                                        <option value="image">Hazır Registry İmic (Pull edilsin)</option>
+                                    </select>
+                                </div>
+
+                                <!-- Registry Image Inputs -->
+                                <div id="wiz-image-inputs" style="display: none;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Docker Registry İmic Linki (Registry Image)</label>
+                                        <input type="text" id="wiz-registry-image"
+                                            placeholder="Məs: ghcr.io/kral14/new-api:latest">
+                                    </div>
+                                </div>
+
+                                <div id="wiz-git-section-wrapper" style="display: flex; flex-direction: column; gap: 0.8rem;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Git Repo URL</label>
+                                        <input type="text" id="wiz-app-repo" placeholder="Məs: https://github.com/kral14/repo.git">
+                                    </div>
+                                    <div class="form-group" id="wiz-branch-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Branch (Budaq)</label>
+                                        <input type="text" id="wiz-app-branch" value="main" placeholder="main">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Accordion 2: Environment Variables -->
+                        <div class="accordion-section"
+                            style="background: rgba(255,255,255,0.015); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('wiz-env-content', this)"
+                                style="padding: 0.75rem 1.1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3 style="font-size: 0.85rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.6rem; color: #f1f5f9;">
+                                    <svg style="width: 15px; height: 15px; stroke: #00d2ff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                    <span>Mühit Dəyişənləri (ENV)</span>
+                                </h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.75rem; font-weight: 500; background: rgba(255,255,255,0.06); padding: 0.25rem 0.65rem; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="wiz-env-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.1rem; border-top: 1px solid var(--card-border);">
+                                <div id="wiz-env-vars-container"
+                                    style="max-height: 180px; overflow-y: auto; margin-bottom: 0.8rem; padding-right: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                    <!-- Dynamic ENV rows will be added here -->
+                                </div>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="addWizEnvVarRow()"
+                                    style="padding: 0.35rem 0.85rem; font-size: 0.78rem; font-weight: 500; border-radius: 6px; align-self: flex-start; display: inline-flex; align-items: center; gap: 4px;">
+                                    <svg style="width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2;" viewBox="0 0 24 24"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>
+                                    <span>Əlavə Et</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Accordion 3: Resource Limits -->
+                        <div class="accordion-section"
+                            style="background: rgba(255,255,255,0.015); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('wiz-resources-content', this)"
+                                style="padding: 0.75rem 1.1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3 style="font-size: 0.85rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.6rem; color: #f1f5f9;">
+                                    <svg style="width: 15px; height: 15px; stroke: #00d2ff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9" rx="1"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/></svg>
+                                    <span>Resurs Limitləri (RAM & CPU)</span>
+                                </h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.75rem; font-weight: 500; background: rgba(255,255,255,0.06); padding: 0.25rem 0.65rem; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="wiz-resources-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.1rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">RAM Limiti (Məs: 512m, 1g)</label>
+                                        <input type="text" id="wiz-app-memory" placeholder="Limitsiz (Boş saxlayın)">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">CPU Limiti (Məs: 0.5, 1)</label>
+                                        <input type="number" step="0.1" min="0.1" id="wiz-app-cpu"
+                                            placeholder="Limitsiz (Boş saxlayın)">
+                                    </div>
+                                </div>
+                                <small style="color: var(--text-secondary); display: block; margin-top: 0.2rem; font-size: 0.75rem;">
+                                    Layihəni yaradarkən serverinizin "Server Stats" panelində olan boş limitlərini nəzərə alın.
+                                </small>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cloudflare Setup Modal -->
+    <div id="cloudflare-setup-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 500px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem;">☁️ Cloudflare Tünel Sazlamaları</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Ortaq tünel verilənlər
+                        bazası (KV) nizamlamaları</p>
+                </div>
+                <button onclick="closeModal('cloudflare-setup-modal')"
+                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+                    onmouseout="this.style.background='transparent'">✕</button>
+            </div>
+
+            <div id="cf-connection-status"
+                style="margin-bottom: 1.5rem; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--card-border); border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+                <div id="cf-connection-indicator" class="status-indicator"
+                    style="width: 10px; height: 10px; border-radius: 50%; background: #ffb86c;"></div>
+                <span id="cf-connection-text"
+                    style="font-size: 0.85rem; color: #ffb86c; font-weight: 500;">Yoxlanılır...</span>
+            </div>
+
+            <div class="form-group">
+                <label>Cloudflare API Token (Edit KV yetkisi olmalıdır)</label>
+                <input type="text" id="cf-api-token" required placeholder="Bearer Token..."
+                    style="font-family: monospace;">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Cloudflare Account ID</label>
+                <input type="text" id="cf-account-id" required placeholder="Account ID..."
+                    style="font-family: monospace;">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Cloudflare KV Namespace ID (TUNNEL_DB)</label>
+                <input type="text" id="cf-kv-id" required placeholder="KV ID..." style="font-family: monospace;">
+            </div>
+
+
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="closeModal('cloudflare-setup-modal')">Ləğv Et</button>
+                <button class="btn btn-primary" onclick="submitCloudflareSettings()">Yadda Saxla</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cloudflare Help Modal -->
+    <div id="cloudflare-help-modal" class="modal-backdrop">
+        <div class="modal-card"
+            style="max-width: 600px; width: 95%; max-height: 85vh; overflow-y: auto; padding: 25px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--card-border); padding-bottom: 12px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem; color: var(--accent-color);">📖 Cloudflare Worker & Tünel
+                        Quraşdırma Təlimatı</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Addım-addım tünelin
+                        sabit linkə bağlanması</p>
+                </div>
+                <button onclick="closeModal('cloudflare-help-modal')"
+                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+                    onmouseout="this.style.background='transparent'">✕</button>
+            </div>
+
+            <div
+                style="font-size: 0.9rem; line-height: 1.6; color: #cbd5e1; display: flex; flex-direction: column; gap: 15px;">
+                <div>
+                    <strong style="color: #fff; font-size: 0.95rem;">1. Cloudflare KV Yaradılması:</strong>
+                    <p style="margin: 4px 0 0 15px;">Cloudflare panelində <strong>Workers & Pages -> KV -> Create
+                            Namespace</strong> bölməsinə daxil olub <code>TUNNEL_DB</code> adında bir verilənlər bazası
+                        (KV) yaradın və ID-sini kopyalayıb panelimizin sazlamalarına yazın.</p>
+                </div>
+
+                <div>
+                    <strong style="color: #fff; font-size: 0.95rem;">2. Cloudflare Worker Yaradılması:</strong>
+                    <p style="margin: 4px 0 0 15px;"><strong>Workers & Pages -> Overview -> Create Application</strong>
+                        bölməsindən yeni Worker yaradın (məs: <code>yeni-test</code>) və aşağıdakı kodu kopyalayaraq
+                        daxilinə yapışdırın:</p>
+
+                    <div style="position: relative; margin-top: 10px;">
+                        <button onclick="copyWorkerCodeToClipboard(this)"
+                            style="position: absolute; right: 10px; top: 10px; background: var(--accent-color); color: #000; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: 0.2s;">📋
+                            Kopyala</button>
+                        <pre id="worker-code-template"
+                            style="background: #090a0f; border: 1px solid var(--card-border); padding: 12px; border-radius: 8px; font-family: monospace; font-size: 0.8rem; overflow-x: auto; max-height: 250px; color: #39ff14; white-space: pre;">export default {
+  async fetch(request, env, ctx) {
+    // Layihə adı DƏQİQ MasterDeploy panelindəki ilə eyni olmalıdır
+    const APP_NAME = "yeni-test"; 
+
+    // KV-dən canlı linki oxuyuruq
+    const liveUrl = await env.TUNNEL_DB.get(APP_NAME);
+
+    if (!liveUrl) {
+      return new Response(`[MasterDeploy] '${APP_NAME}' üçün aktiv tünel tapılmadı. Zəhmət olmasa panelinizdən tüneli başladın.`, {
+        status: 503,
+        headers: { "Content-Type": "text/plain; charset=UTF-8" }
+      });
+    }
+
+    // Sorğunu canlı linkə yönləndiririk
+    const url = new URL(request.url);
+    const targetUrl = url.href.replace(url.origin, liveUrl.trim());
+
+    const modifiedRequest = new Request(targetUrl, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      redirect: 'manual'
+    });
+
+    return fetch(modifiedRequest);
+  }
+}</pre>
+                    </div>
+                </div>
+
+                <div>
+                    <strong style="color: #fff; font-size: 0.95rem;">3. KV Binding (Ən Vacib Addım):</strong>
+                    <p style="margin: 4px 0 0 15px;">Yaratdığınız Worker-in <strong>Settings -> Variables -> KV
+                            Namespace Bindings</strong> bölməsinə daxil olun. <strong>Add Binding</strong> deyərək
+                        Variable Name hissəsinə DƏQİQ <code>TUNNEL_DB</code> yazın, KV Namespace olaraq isə yaratdığınız
+                        <code>TUNNEL_DB</code> bazasını seçib yadda saxlayın.</p>
+                </div>
+
+                <div>
+                    <strong style="color: #fff; font-size: 0.95rem;">4. Tüneli Başlatmaq:</strong>
+                    <p style="margin: 4px 0 0 15px;">Panelimizdən layihə üçün <strong>Tünel Al</strong> düyməsini
+                        sıxaraq tüneli başladın. 5-10 saniyə sonra Worker linkinizə daxil olduqda saytınız artıq
+                        internetdə canlı olaraq açılacaqdır!</p>
+                </div>
+            </div>
+
+            <div
+                style="display: flex; justify-content: flex-end; margin-top: 25px; border-top: 1px solid var(--card-border); padding-top: 15px;">
+                <button class="btn btn-primary" onclick="closeModal('cloudflare-help-modal')"
+                    style="padding: 8px 20px;">Bağladım, Hazırdır!</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Server Connection & Auto-Retry Settings Modal -->
+    <div id="server-conn-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 500px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">🔌 Server Bağlantı Və Avto-Bərpa Tənzimləmələri</h3>
+            </div>
+            <form id="server-conn-form" onsubmit="saveServerConnSettings(event)">
+                <input type="hidden" id="conn-server-id">
+                
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">🖥️ Seçilmiş Server:</label>
+                    <input type="text" id="conn-server-name" readonly style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #00d2ff; font-weight: 600;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">⏱️ Cəhd İntervalı (Saniyə):</label>
+                    <input type="number" id="conn-retry-sec" min="3" max="300" value="15" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Qoşulma qırıldıqda neçə saniyədən bir təkrar cəhd edilsin.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">🔄 Maksimum Cəhd Sayı:</label>
+                    <input type="number" id="conn-max-retries" min="1" max="10" value="3" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Fasiləyə keçməzdən əvvəl neçə cəhd edilsin.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.2rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">⏳ Fasilə Müddəti (Dəqiqə):</label>
+                    <input type="number" id="conn-pause-min" min="1" max="60" value="5" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Bütün cəhdlər uğursuz olduqdan sonra neçə dəqiqə gözlənilsin.</small>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-conn-modal')">Ləğv Et</button>
+                    <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none;">Yadda Saxla Və Bağlantını Yoxla</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- SSH Console Modal Window (Ekran Pəncərəsi) -->
+    <div id="server-console-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 820px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 15px 40px rgba(0,0,0,0.6);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    💻 SSH Konsolu (<span id="modal-console-server-name" style="color:#00d2ff;">--</span>)
+                </h3>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <button class="btn btn-secondary" onclick="copyServerConsoleModal(this)" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px;">📋 Kopyala</button>
+                    <button class="btn btn-secondary" onclick="clearServerConsoleModal()" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px;">🧹 Təmizlə</button>
+                </div>
+            </div>
+            <div id="modal-console-container" style="width: 100%; height: 350px; padding: 1rem; background: #07080d; border-radius: 8px; font-family: monospace; color: #4ade80; font-size: 0.88rem; overflow-x: auto; white-space: pre-wrap; border: 1px solid var(--card-border); overflow-y: auto;">
+                [Sistem] Konsol hazır.
+            </div>
+        </div>
+    </div>
+
+    <!-- Docker Volumes Modal Window (Ekran Pəncərəsi) -->
+    <div id="server-volumes-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 850px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 15px 40px rgba(0,0,0,0.6);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    💾 Docker Volumları & Disk (<span id="modal-volumes-server-name" style="color:#00d2ff;">--</span>)
+                </h3>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <button class="btn btn-secondary" onclick="reloadModalVolumes()" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">🔄 Yenilə</button>
+                </div>
+            </div>
+            <div id="modal-volumes-container" style="max-height: 400px; overflow-y: auto; font-size: 0.85rem;">
+                Yüklənir...
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Files -->

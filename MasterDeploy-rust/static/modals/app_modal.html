@@ -1,0 +1,209 @@
+<div id="app-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 650px; width: 95%;">
+            <h2>🚀 Yeni Layihə Əlavə Et</h2>
+            <form id="app-form" novalidate onsubmit="handleCreateApp(event)" style="display: flex; flex-direction: column; gap: 0.85rem;">
+                <div class="modal-body" style="padding: 0; display: flex; flex-direction: column; gap: 0.85rem;">
+                    
+                    <!-- Main Card -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.2rem;">
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-weight: 500;">Layihə Adı <span style="color: var(--danger-color);">*</span></label>
+                                <input type="text" id="app-name" placeholder="Məs: Rust API Backend">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-weight: 500;">Daxili Port <span style="color: var(--danger-color);">*</span></label>
+                                <input type="number" id="app-port" value="8080">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="font-weight: 500;">Hədəf Server <span style="color: var(--danger-color);">*</span></label>
+                                <select id="app-server"
+                                    onchange="updateServerStatsAdvisor('app-server', 'app-server-advisor', 'app-memory', 'app-cpu')">
+                                    <!-- Server list will load here -->
+                                </select>
+                            </div>
+                        </div>
+                        <div id="app-server-advisor"
+                            style="display: none; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 0.8rem; margin-top: 1rem; font-size: 0.82rem; color: #cbd5e1;">
+                            <!-- Advisor content dynamically loaded -->
+                        </div>
+                    </div>
+
+                    <!-- Accordion 1: Source -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="accordion-header" onclick="toggleAccordion('app-source-content', this)"
+                            style="padding: 0.85rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                            <h3 style="font-size: 0.92rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                📁 Mənbə və Yayım Növü (Source)
+                            </h3>
+                            <span class="accordion-icon toggle-text-btn"
+                                style="font-size: 0.8rem; background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                        </div>
+                        <div id="app-source-content" class="accordion-content"
+                            style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label>Yayım Növü (Deploy Type)</label>
+                                <select id="app-deploy-type" onchange="toggleDeployTypeFields('app')">
+                                    <option value="git">⚙️ Git Repository (Build edilsin)</option>
+                                    <option value="image">📦 Hazır Registry İmic (Pull edilsin)</option>
+                                </select>
+                            </div>
+
+                            <!-- Registry Image Inputs -->
+                            <div id="app-image-inputs" style="display: none;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>Docker Registry İmic Linki (Registry Image)</label>
+                                    <input type="text" id="app-registry-image" placeholder="Məs: ghcr.io/kral14/new-api:latest">
+                                </div>
+                            </div>
+
+                            <div id="app-git-section-wrapper">
+                                <div class="form-group">
+                                    <label>Repo Mənbəyi</label>
+                                    <div class="source-switcher">
+                                        <button type="button" class="source-btn active" id="src-manual-btn"
+                                            onclick="toggleRepoSource('manual')">✍️ Əl ilə</button>
+                                        <button type="button" class="source-btn" id="src-github-btn"
+                                            onclick="toggleRepoSource('github')">🐱 GitHub</button>
+                                    </div>
+                                </div>
+
+                                <!-- Manual Git Details -->
+                                <div id="git-manual-inputs">
+                                    <div class="form-group">
+                                        <label>Git Repo URL</label>
+                                        <input type="text" id="app-repo"
+                                            placeholder="Məs: https://github.com/user/repo.git">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label>Budaq (Branch)</label>
+                                        <input type="text" id="app-branch" value="main">
+                                    </div>
+                                </div>
+
+                                <!-- GitHub Auto Details -->
+                                <div id="git-github-inputs" style="display: none;">
+                                    <div class="form-group">
+                                        <label>Repozitoriya Seçin</label>
+                                        <select id="app-repo-select" onchange="handleRepoSelectChange()">
+                                            <option value="">Token quraşdırılmayıb</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label>Budaq Seçin (Branch)</label>
+                                        <select id="app-branch-select">
+                                            <option value="main">main</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Accordion 2: Environment Variables -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="accordion-header" onclick="toggleAccordion('app-env-content', this)"
+                            style="padding: 0.85rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                            <h3 style="font-size: 0.92rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                🔐 Mühit Dəyişənləri (ENV)
+                            </h3>
+                            <span class="accordion-icon toggle-text-btn"
+                                style="font-size: 0.8rem; background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                        </div>
+                        <div id="app-env-content" class="accordion-content"
+                            style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border);">
+                            <div id="env-vars-container"
+                                style="max-height: 180px; overflow-y: auto; margin-bottom: 0.8rem; padding-right: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                                <!-- Dynamic ENV rows will be added here via JS -->
+                            </div>
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvVarRow()"
+                                style="padding: 0.4rem 0.9rem; font-size: 0.8rem; border-radius: 6px; align-self: flex-start;">+ Əlavə Et</button>
+                        </div>
+                    </div>
+
+                    <!-- Accordion 3: Resource Limits -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="accordion-header" onclick="toggleAccordion('app-resources-content', this)"
+                            style="padding: 0.85rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                            <h3 style="font-size: 0.92rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                ⚙️ Resurs Limitləri (RAM & CPU)
+                            </h3>
+                            <span class="accordion-icon toggle-text-btn"
+                                style="font-size: 0.8rem; background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                        </div>
+                        <div id="app-resources-content" class="accordion-content"
+                            style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>RAM Limiti (Məs: 512m, 1g)</label>
+                                    <input type="text" id="app-memory" placeholder="Limitsiz (Boş saxlayın)">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>CPU Limiti (Məs: 0.5, 1)</label>
+                                    <input type="number" step="0.1" min="0.1" id="app-cpu" placeholder="Limitsiz (Boş saxlayın)">
+                                </div>
+                            </div>
+                            <small style="color: var(--text-secondary); display: block; margin-top: 0.2rem; font-size: 0.78rem;">
+                                Layihəni yaradarkən serverinizin "Server Stats" panelində olan boş limitlərini nəzərə alın.
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Accordion 4: Auto-Deploy Settings -->
+                    <div class="accordion-section"
+                        style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;">
+                        <div class="accordion-header" onclick="toggleAccordion('app-autodeploy-content', this)"
+                            style="padding: 0.85rem 1.2rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                            <h3 style="font-size: 0.92rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                                🔄 Ağıllı Auto-Deploy (Avtomatik Yenilənmə)
+                            </h3>
+                            <span class="accordion-icon toggle-text-btn"
+                                style="font-size: 0.8rem; background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 4px; transition: all 0.2s ease;">Göstər</span>
+                        </div>
+                        <div id="app-autodeploy-content" class="accordion-content"
+                            style="display: none; flex-direction: column; padding: 1.2rem; border-top: 1px solid var(--card-border); gap: 1rem;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1rem; background: rgba(255,255,255,0.02); border-radius: 10px; border: 1px solid rgba(255,255,255,0.05); gap: 1rem;">
+                                <div style="flex: 1;">
+                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                        <span style="font-weight: 600; font-size: 0.88rem; color: var(--text-primary);">Auto-Deploy Aktiv Olsun</span>
+                                        <span id="app-autodeploy-badge" style="font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 12px; background: rgba(148, 163, 184, 0.15); color: #94a3b8; font-weight: 500;">Sönülüdür</span>
+                                    </div>
+                                    <small style="display: block; color: var(--text-secondary); font-size: 0.76rem; margin-top: 2px;">Yeni commit və ya yeni docker registry imici aşkarlandıqda avtomatik yenilənsin.</small>
+                                </div>
+                                <label class="md-switch" title="Auto-Deploy Aktivləşdir / Söndür">
+                                    <input type="checkbox" id="app-autodeploy-enabled" onchange="const b = document.getElementById('app-autodeploy-badge'); if(b){ b.innerText = this.checked ? 'Aktivdir' : 'Sönülüdür'; b.style.color = this.checked ? '#38bdf8' : '#94a3b8'; b.style.background = this.checked ? 'rgba(56, 189, 248, 0.15)' : 'rgba(148, 163, 184, 0.15)'; }">
+                                    <span class="md-switch-slider"></span>
+                                </label>
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>Yoxlama İntervalı</label>
+                                    <select id="app-autodeploy-interval" style="width: 100%;">
+                                        <option value="5">Hər 5 dəqiqədən bir</option>
+                                        <option value="15" selected>Hər 15 dəqiqədən bir (Tövsiyə)</option>
+                                        <option value="30">Hər 30 dəqiqədən bir</option>
+                                        <option value="60">Hər 1 saatdan bir</option>
+                                        <option value="360">Hər 6 saatdan bir</option>
+                                        <option value="1440">Hər 24 saatdan bir</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label>Cavab Gözləmə Limiti (Saniyə)</label>
+                                    <input type="number" id="app-autodeploy-timeout" min="3" max="60" value="10" placeholder="10">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-actions" style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('app-modal')">Ləğv Et</button>
+                    <button type="submit" class="btn btn-primary" style="padding: 0.6rem 2rem; font-weight: 500;">Əlavə Et və Yadda Saxla</button>
+                </div>
+            </form>
+        </div>
+    </div>

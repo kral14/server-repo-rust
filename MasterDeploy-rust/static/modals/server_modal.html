@@ -1,0 +1,36 @@
+<div id="server-modal" class="modal-backdrop">
+        <div class="modal-card">
+            <h2>🖥️ Yeni Server Əlavə Et</h2>
+            <form id="server-form" novalidate onsubmit="handleCreateServer(event)">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Server Adı</label>
+                        <input type="text" id="srv-name" placeholder="Məs: Oracle Always Free">
+                    </div>
+                    <div class="form-group">
+                        <label>IP Ünvanı (Public IP)</label>
+                        <input type="text" id="srv-ip" placeholder="Məs: 79.72.95.173">
+                    </div>
+                    <div class="form-group">
+                        <label>SSH İstifadəçi Adı</label>
+                        <input type="text" id="srv-user" placeholder="Məs: ubuntu">
+                    </div>
+                    <div class="form-group">
+                        <label>Qlobal SSH Açarını Seçin</label>
+                        <select id="srv-key-id" onchange="handleServerKeySelect('srv-key-id', 'srv-key-wrapper')">
+                            <!-- SSH keys list loaded dynamically -->
+                        </select>
+                    </div>
+                    <div class="form-group" id="srv-key-wrapper">
+                        <label>Mətn olaraq SSH Private Key (Köhnə üsul)</label>
+                        <textarea id="srv-key" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-modal')">Ləğv
+                        Et</button>
+                    <button type="submit" class="btn btn-primary">Yadda Saxla</button>
+                </div>
+            </form>
+        </div>
+    </div>

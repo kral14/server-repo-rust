@@ -1,0 +1,16 @@
+<div id="server-console-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 820px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 15px 40px rgba(0,0,0,0.6);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    💻 SSH Konsolu (<span id="modal-console-server-name" style="color:#00d2ff;">--</span>)
+                </h3>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <button class="btn btn-secondary" onclick="copyServerConsoleModal(this)" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px;">📋 Kopyala</button>
+                    <button class="btn btn-secondary" onclick="clearServerConsoleModal()" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.06); border: 1px solid var(--card-border); color: var(--text-secondary); cursor: pointer; border-radius: 4px;">🧹 Təmizlə</button>
+                </div>
+            </div>
+            <div id="modal-console-container" style="width: 100%; height: 350px; padding: 1rem; background: #07080d; border-radius: 8px; font-family: monospace; color: #4ade80; font-size: 0.88rem; overflow-x: auto; white-space: pre-wrap; border: 1px solid var(--card-border); overflow-y: auto;">
+                [Sistem] Konsol hazır.
+            </div>
+        </div>
+    </div>

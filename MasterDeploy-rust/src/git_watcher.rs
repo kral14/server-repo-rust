@@ -40,6 +40,16 @@ pub async fn git_polling_loop(db: SqlitePool) {
                  WHERE cloudflare_url IS NOT NULL AND cloudflare_url != ''"
             ).fetch_all(&db).await {
                 for tapp in tunnel_apps {
+                    let is_disabled: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+                        .bind(format!("tunnel_watchdog_off_{}", tapp.id))
+                        .fetch_optional(&db)
+                        .await
+                        .unwrap_or_default();
+
+                    if is_disabled.as_deref() == Some("1") {
+                        continue;
+                    }
+
                     crate::plugins::cloudflare::verify_and_heal_tunnel(&db, &tapp).await;
                 }
             }

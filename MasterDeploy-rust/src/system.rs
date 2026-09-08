@@ -24,6 +24,8 @@ pub fn settings_router() -> Router<AppState> {
         .route("/background-services", get(get_background_services_settings).post(save_background_services_settings))
         .route("/background-services/clean-now", post(trigger_clean_now))
         .route("/background-services/tunnel-check-now", post(trigger_tunnel_check_now))
+        .route("/background-services/tunnel-watchdog-disabled", get(get_tunnel_watchdog_disabled_apps))
+        .route("/background-services/tunnel-watchdog-toggle/:app_id", post(toggle_app_tunnel_watchdog))
 }
 
 
@@ -236,6 +238,64 @@ pub async fn trigger_clean_now(
     Ok(Json(serde_json::json!({ "success": true, "deleted_count": affected })))
 }
 
+pub async fn get_tunnel_watchdog_disabled_apps(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<String>>, (StatusCode, String)> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT SUBSTR(key, 21) FROM settings WHERE key LIKE 'tunnel_watchdog_off_%' AND value = '1'"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let disabled_ids: Vec<String> = rows.into_iter().map(|(id,)| id).collect();
+    Ok(Json(disabled_ids))
+}
+
+pub async fn toggle_app_tunnel_watchdog(
+    State(state): State<AppState>,
+    axum::extract::Path(app_id): axum::extract::Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let key = format!("tunnel_watchdog_off_{}", app_id);
+    let current_status: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+        .bind(&key)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let new_disabled = match current_status.as_deref() {
+        Some("1") => {
+            let _ = sqlx::query("DELETE FROM settings WHERE key = ?").bind(&key).execute(&state.db).await;
+            false
+        },
+        _ => {
+            let _ = sqlx::query("INSERT INTO settings (key, value) VALUES (?, '1') ON CONFLICT(key) DO UPDATE SET value = '1'")
+                .bind(&key)
+                .execute(&state.db)
+                .await;
+            true
+        }
+    };
+
+    let log_msg = if new_disabled {
+        format!("'{}' tətbiqi üçün Cloudflare Tunel Watchdog nəzarəti DEAKTİV edildi.", app_id)
+    } else {
+        format!("'{}' tətbiqi üçün Cloudflare Tunel Watchdog nəzarəti AKTİV edildi.", app_id)
+    };
+
+    add_activity_log_pro(
+        &state.db,
+        &log_msg,
+        "info",
+        Some("Watchdog"),
+        Some("admin"),
+        Some(&app_id),
+        None
+    ).await;
+
+    Ok(Json(serde_json::json!({ "success": true, "disabled": new_disabled, "app_id": app_id })))
+}
+
 pub async fn trigger_tunnel_check_now(
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
@@ -254,6 +314,17 @@ pub async fn trigger_tunnel_check_now(
     let count = apps.len();
     let mut healed = 0;
     for app in apps {
+        // Layihənin tunel watchdog-u deaktiv edilibsə yoxlamanı ötür
+        let is_disabled: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+            .bind(format!("tunnel_watchdog_off_{}", app.id))
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or_default();
+
+        if is_disabled.as_deref() == Some("1") {
+            continue;
+        }
+
         if !crate::plugins::cloudflare::verify_and_heal_tunnel(&state.db, &app).await {
             healed += 1;
         }

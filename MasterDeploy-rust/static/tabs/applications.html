@@ -1,0 +1,21 @@
+<section id="tab-applications" class="tab-section">
+                <header class="tab-header-btn">
+                    <div>
+                        <h2>🚀 Layihələr (Applications)</h2>
+                        <p>Git-dən qoşulmuş tətbiqləriniz və API-ləriniz</p>
+                    </div>
+                    <div id="server-stats-banner"
+                        style="display: none; background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2); padding: 0.6rem 1rem; border-radius: 8px; flex-grow: 1; margin: 0 1rem; align-items: center; justify-content: space-around;">
+                        <span style="font-size: 0.85rem;"><span style="color:var(--text-secondary)">RAM:</span> <strong
+                                id="stat-ram" style="color:var(--accent-color)">-- / -- MB</strong></span>
+                        <span style="font-size: 0.85rem;"><span style="color:var(--text-secondary)">Nüvə (CPU):</span>
+                            <strong id="stat-cpu" style="color:var(--accent-color)">--</strong></span>
+                    </div>
+                    <button class="btn btn-primary" onclick="showCreateServiceTab()">+ Yeni Layihə</button>
+                </header>
+
+                <div id="apps-list" class="items-list">
+                    <!-- Applications will be listed here -->
+                    <div class="no-data">Hələ heç bir layihə əlavə edilməyib.</div>
+                </div>
+            </section>

@@ -1,0 +1,92 @@
+<div id="cloudflare-help-modal" class="modal-backdrop">
+        <div class="modal-card"
+            style="max-width: 600px; width: 95%; max-height: 85vh; overflow-y: auto; padding: 25px;">
+            <div
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid var(--card-border); padding-bottom: 12px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem; color: var(--accent-color);">📖 Cloudflare Worker & Tünel
+                        Quraşdırma Təlimatı</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Addım-addım tünelin
+                        sabit linkə bağlanması</p>
+                </div>
+                <button onclick="closeModal('cloudflare-help-modal')"
+                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+                    onmouseout="this.style.background='transparent'">✕</button>
+            </div>
+
+            <div
+                style="font-size: 0.9rem; line-height: 1.6; color: #cbd5e1; display: flex; flex-direction: column; gap: 15px;">
+                <div>
+                    <strong style="color: #fff; font-size: 0.95rem;">1. Cloudflare KV Yaradılması:</strong>
+                    <p style="margin: 4px 0 0 15px;">Cloudflare panelində <strong>Workers & Pages -> KV -> Create
+                            Namespace</strong> bölməsinə daxil olub <code>TUNNEL_DB</code> adında bir verilənlər bazası
+                        (KV) yaradın və ID-sini kopyalayıb panelimizin sazlamalarına yazın.</p>
+                </div>
+
+                <div>
+                    <strong style="color: #fff; font-size: 0.95rem;">2. Cloudflare Worker Yaradılması:</strong>
+                    <p style="margin: 4px 0 0 15px;"><strong>Workers & Pages -> Overview -> Create Application</strong>
+                        bölməsindən yeni Worker yaradın (məs: <code>yeni-test</code>) və aşağıdakı kodu kopyalayaraq
+                        daxilinə yapışdırın:</p>
+
+                    <div style="position: relative; margin-top: 10px;">
+                        <button onclick="copyWorkerCodeToClipboard(this)"
+                            style="position: absolute; right: 10px; top: 10px; background: var(--accent-color); color: #000; border: none; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; cursor: pointer; transition: 0.2s;">📋
+                            Kopyala</button>
+                        <pre id="worker-code-template"
+                            style="background: #090a0f; border: 1px solid var(--card-border); padding: 12px; border-radius: 8px; font-family: monospace; font-size: 0.8rem; overflow-x: auto; max-height: 250px; color: #39ff14; white-space: pre;">export default {
+  async fetch(request, env, ctx) {
+    // Layihə adı DƏQİQ MasterDeploy panelindəki ilə eyni olmalıdır
+    const APP_NAME = "yeni-test"; 
+
+    // KV-dən canlı linki oxuyuruq
+    const liveUrl = await env.TUNNEL_DB.get(APP_NAME);
+
+    if (!liveUrl) {
+      return new Response(`[MasterDeploy] '${APP_NAME}' üçün aktiv tünel tapılmadı. Zəhmət olmasa panelinizdən tüneli başladın.`, {
+        status: 503,
+        headers: { "Content-Type": "text/plain; charset=UTF-8" }
+      });
+    }
+
+    // Sorğunu canlı linkə yönləndiririk
+    const url = new URL(request.url);
+    const targetUrl = url.href.replace(url.origin, liveUrl.trim());
+
+    const modifiedRequest = new Request(targetUrl, {
+      method: request.method,
+      headers: request.headers,
+      body: request.body,
+      redirect: 'manual'
+    });
+
+    return fetch(modifiedRequest);
+  }
+}</pre>
+                    </div>
+                </div>
+
+                <div>
+                    <strong style="color: #fff; font-size: 0.95rem;">3. KV Binding (Ən Vacib Addım):</strong>
+                    <p style="margin: 4px 0 0 15px;">Yaratdığınız Worker-in <strong>Settings -> Variables -> KV
+                            Namespace Bindings</strong> bölməsinə daxil olun. <strong>Add Binding</strong> deyərək
+                        Variable Name hissəsinə DƏQİQ <code>TUNNEL_DB</code> yazın, KV Namespace olaraq isə yaratdığınız
+                        <code>TUNNEL_DB</code> bazasını seçib yadda saxlayın.</p>
+                </div>
+
+                <div>
+                    <strong style="color: #fff; font-size: 0.95rem;">4. Tüneli Başlatmaq:</strong>
+                    <p style="margin: 4px 0 0 15px;">Panelimizdən layihə üçün <strong>Tünel Al</strong> düyməsini
+                        sıxaraq tüneli başladın. 5-10 saniyə sonra Worker linkinizə daxil olduqda saytınız artıq
+                        internetdə canlı olaraq açılacaqdır!</p>
+                </div>
+            </div>
+
+            <div
+                style="display: flex; justify-content: flex-end; margin-top: 25px; border-top: 1px solid var(--card-border); padding-top: 15px;">
+                <button class="btn btn-primary" onclick="closeModal('cloudflare-help-modal')"
+                    style="padding: 8px 20px;">Bağladım, Hazırdır!</button>
+            </div>
+        </div>
+    </div>

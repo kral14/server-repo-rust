@@ -1,0 +1,44 @@
+<div id="cloudflare-setup-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 500px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <div>
+                    <h2 style="margin: 0; font-size: 1.3rem;">☁️ Cloudflare Tünel Sazlamaları</h2>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Ortaq tünel verilənlər
+                        bazası (KV) nizamlamaları</p>
+                </div>
+                <button onclick="closeModal('cloudflare-setup-modal')"
+                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+                    onmouseout="this.style.background='transparent'">✕</button>
+            </div>
+
+            <div id="cf-connection-status"
+                style="margin-bottom: 1.5rem; padding: 10px; background: rgba(255,255,255,0.02); border: 1px solid var(--card-border); border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+                <div id="cf-connection-indicator" class="status-indicator"
+                    style="width: 10px; height: 10px; border-radius: 50%; background: #ffb86c;"></div>
+                <span id="cf-connection-text"
+                    style="font-size: 0.85rem; color: #ffb86c; font-weight: 500;">Yoxlanılır...</span>
+            </div>
+
+            <div class="form-group">
+                <label>Cloudflare API Token (Edit KV yetkisi olmalıdır)</label>
+                <input type="text" id="cf-api-token" required placeholder="Bearer Token..."
+                    style="font-family: monospace;">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Cloudflare Account ID</label>
+                <input type="text" id="cf-account-id" required placeholder="Account ID..."
+                    style="font-family: monospace;">
+            </div>
+            <div class="form-group" style="margin-top: 1rem;">
+                <label>Cloudflare KV Namespace ID (TUNNEL_DB)</label>
+                <input type="text" id="cf-kv-id" required placeholder="KV ID..." style="font-family: monospace;">
+            </div>
+
+
+            <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-secondary" onclick="closeModal('cloudflare-setup-modal')">Ləğv Et</button>
+                <button class="btn btn-primary" onclick="submitCloudflareSettings()">Yadda Saxla</button>
+            </div>
+        </div>
+    </div>

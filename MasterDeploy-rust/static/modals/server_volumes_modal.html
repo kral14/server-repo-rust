@@ -1,0 +1,15 @@
+<div id="server-volumes-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 850px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 15px 40px rgba(0,0,0,0.6);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                    💾 Docker Volumları & Disk (<span id="modal-volumes-server-name" style="color:#00d2ff;">--</span>)
+                </h3>
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <button class="btn btn-secondary" onclick="reloadModalVolumes()" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">🔄 Yenilə</button>
+                </div>
+            </div>
+            <div id="modal-volumes-container" style="max-height: 400px; overflow-y: auto; font-size: 0.85rem;">
+                Yüklənir...
+            </div>
+        </div>
+    </div>

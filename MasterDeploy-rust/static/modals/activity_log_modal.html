@@ -1,0 +1,103 @@
+<div id="activity-log-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 950px; width: 95%; height: 85vh; display: flex; flex-direction: column;">
+            <div style="padding: 1.25rem 1.5rem 10px 1.5rem; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                <!-- Başlıq və Canlı Status Çubuğu -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 12px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+                            📋 Fəaliyyət Jurnalı & Live Debug
+                        </div>
+                        <span id="activity-live-badge" class="live-stream-badge" title="Canlı izləmə aktivdir">
+                            <span class="pulse-dot"></span> CANLI YAYIM
+                        </span>
+                        <span id="activity-last-update-time" style="font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">--:--</span>
+                    </div>
+
+                    <!-- İdarəetmə Düymələri (Sağ tərəf) -->
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button id="btn-activity-stream-toggle" class="btn btn-secondary" onclick="toggleActivityStream()" style="padding: 5px 10px; font-size: 0.78rem; display: flex; align-items: center; gap: 5px;" title="Canlı axını dondur və ya davam etdir">
+                            <span id="stream-toggle-icon">⏸️</span> <span id="stream-toggle-text">Dondur</span>
+                        </button>
+                        <div style="display: flex; background: var(--bg-card); border: 1px solid var(--card-border); border-radius: 6px; padding: 2px; gap: 2px;">
+                            <button id="btn-view-cards" class="activity-filter-pill active" onclick="setActivityViewMode('cards')" style="border: none; padding: 4px 8px; font-size: 0.75rem;">🗂️ Kartlar</button>
+                            <button id="btn-view-terminal" class="activity-filter-pill" onclick="setActivityViewMode('terminal')" style="border: none; padding: 4px 8px; font-size: 0.75rem;">💻 Terminal</button>
+                        </div>
+                        <button class="btn btn-secondary" onclick="renderActivityLogs()" style="padding: 5px 9px; font-size: 0.85rem;" title="Loqları dərhal yenilə">🔄</button>
+                    </div>
+                </div>
+
+                <!-- KPI İcmal Paneli -->
+                <div class="activity-kpi-container">
+                    <div class="activity-kpi-card">
+                        <span class="activity-kpi-label">Ümumi Hadisələr</span>
+                        <span id="stat-total-logs" class="activity-kpi-val">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #ff5252;">
+                        <span class="activity-kpi-label" style="color: #ff5252;">❌ Xətalar</span>
+                        <span id="stat-error-logs" class="activity-kpi-val" style="color: #ff5252;">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #ffb86c;">
+                        <span class="activity-kpi-label" style="color: #ffb86c;">⚠️ Xəbərdarlıq</span>
+                        <span id="stat-warn-logs" class="activity-kpi-val" style="color: #ffb86c;">0</span>
+                    </div>
+                    <div class="activity-kpi-card" style="border-left: 3px solid #69f0ae;">
+                        <span class="activity-kpi-label" style="color: #69f0ae;">✅ Uğurlu / Deploy</span>
+                        <span id="stat-success-logs" class="activity-kpi-val" style="color: #69f0ae;">0</span>
+                    </div>
+                </div>
+
+                <!-- Canlı Axtarış və Filtrlər -->
+                <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;">
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <div style="position: relative; flex: 1;">
+                            <input type="text" id="activity-search-input" placeholder="🔍 Layihə adı, port, server və ya xəta axtar..." oninput="handleActivitySearch()"
+                                style="width: 100%; padding: 7px 12px 7px 32px; font-size: 0.82rem; border-radius: 6px; border: 1px solid var(--card-border); background: var(--bg-card); color: var(--text-primary); outline: none;" />
+                            <span style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: 0.5; font-size: 0.85rem;">🔍</span>
+                        </div>
+                        <button id="btn-autoscroll-toggle" class="btn btn-secondary" onclick="toggleActivityAutoScroll()" style="padding: 7px 11px; font-size: 0.78rem; white-space: nowrap;" title="Son loqa avto-sürüşdürmə">
+                            ⬇️ <span id="autoscroll-text">Avto-Scroll: Açıq</span>
+                        </button>
+                    </div>
+
+                    <!-- Kateqoriya və Səviyyə Filtrləri -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <!-- Səviyyələr (Severity) -->
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="activity-filter-pill active" data-filter-type="level" data-filter-val="all" onclick="setActivityFilter('level', 'all')">Hamısı</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="error" onclick="setActivityFilter('level', 'error')" style="color: #ff5252;">❌ Xətalar</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="warning" onclick="setActivityFilter('level', 'warning')" style="color: #ffb86c;">⚠️ Xəbərdarlıq</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="success" onclick="setActivityFilter('level', 'success')" style="color: #69f0ae;">✅ Uğurlu</span>
+                            <span class="activity-filter-pill" data-filter-type="level" data-filter-val="info" onclick="setActivityFilter('level', 'info')" style="color: #40c4ff;">ℹ️ Məlumat</span>
+                        </div>
+                        <!-- Modullar (Modules) -->
+                        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="activity-filter-pill active" data-filter-type="module" data-filter-val="all" onclick="setActivityFilter('module', 'all')">Bütün Sahələr</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="apps" onclick="setActivityFilter('module', 'apps')">📦 Layihələr</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="servers" onclick="setActivityFilter('module', 'servers')">🖥️ Serverlər</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="deploy" onclick="setActivityFilter('module', 'deploy')">🚀 Deploy</span>
+                            <span class="activity-filter-pill" data-filter-type="module" data-filter-val="system" onclick="setActivityFilter('module', 'system')">⚙️ Sistem</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1. Vizuallaşdırılmış Kart Görünüşü -->
+                <div id="activity-cards-view" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; padding-bottom: 6px; min-height: 0;">
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); text-align: center; padding: 25px; opacity: 0.5;">Yüklənir...</div>
+                </div>
+
+                <!-- 2. Terminal / Live Debug Console Görünüşü -->
+                <div id="activity-terminal-view" class="activity-terminal-box" style="display: none;">
+                    <div style="color: #8b949e; margin-bottom: 8px;">// MasterDeploy Canlı Debug Konsolu aktivdir...</div>
+                </div>
+
+                <!-- Modal Alt Paneli -->
+                <div class="modal-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--card-border); margin-bottom: 0px;">
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" onclick="clearActivityLogs()" style="color: var(--danger-color) !important; font-size: 0.8rem;">🧹 Jurnalı Təmizlə</button>
+                        <button class="btn btn-secondary" onclick="copyCurrentSectionLogs()" style="font-size: 0.8rem;">📋 Loqları Kopyala</button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="closeModal('activity-log-modal')" style="font-size: 0.8rem;">Bağla</button>
+                </div>
+            </div>
+        </div>
+    </div>

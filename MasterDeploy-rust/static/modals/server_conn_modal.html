@@ -1,0 +1,38 @@
+<div id="server-conn-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 500px; border: 1px solid var(--card-border); background: var(--card-bg); border-radius: 12px; padding: 1.5rem; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.8rem;">
+                <h3 style="margin: 0; color: #fff; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">🔌 Server Bağlantı Və Avto-Bərpa Tənzimləmələri</h3>
+            </div>
+            <form id="server-conn-form" onsubmit="saveServerConnSettings(event)">
+                <input type="hidden" id="conn-server-id">
+                
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">🖥️ Seçilmiş Server:</label>
+                    <input type="text" id="conn-server-name" readonly style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #00d2ff; font-weight: 600;">
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">⏱️ Cəhd İntervalı (Saniyə):</label>
+                    <input type="number" id="conn-retry-sec" min="3" max="300" value="15" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Qoşulma qırıldıqda neçə saniyədən bir təkrar cəhd edilsin.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">🔄 Maksimum Cəhd Sayı:</label>
+                    <input type="number" id="conn-max-retries" min="1" max="10" value="3" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Fasiləyə keçməzdən əvvəl neçə cəhd edilsin.</small>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 1.2rem;">
+                    <label style="color: var(--text-secondary); font-size: 0.85rem; display: block; margin-bottom: 0.4rem;">⏳ Fasilə Müddəti (Dəqiqə):</label>
+                    <input type="number" id="conn-pause-min" min="1" max="60" value="5" required style="width: 100%; padding: 0.6rem; background: rgba(0,0,0,0.3); border: 1px solid var(--card-border); border-radius: 6px; color: #fff;">
+                    <small style="color: #aaa; font-size: 0.75rem;">Bütün cəhdlər uğursuz olduqdan sonra neçə dəqiqə gözlənilsin.</small>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.8rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('server-conn-modal')">Ləğv Et</button>
+                    <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none;">Yadda Saxla Və Bağlantını Yoxla</button>
+                </div>
+            </form>
+        </div>
+    </div>

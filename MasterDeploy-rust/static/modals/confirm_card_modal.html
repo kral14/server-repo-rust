@@ -1,0 +1,25 @@
+<div id="confirm-card-modal"
+        style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:9998; align-items:center; justify-content:center; backdrop-filter:blur(6px);">
+        <div
+            style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 16px; padding: 28px; max-width: 440px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+            <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 16px;">
+                <span id="confirm-card-icon" style="font-size:1.8rem;">🔄</span>
+                <div>
+                    <h3 id="confirm-card-title" style="margin:0; font-size:1.1rem; color: var(--text-primary);">
+                        Əminsiniz?</h3>
+                    <p id="confirm-card-subtitle"
+                        style="margin:4px 0 0; font-size:0.8rem; color: var(--text-secondary);"></p>
+                </div>
+            </div>
+            <div id="confirm-card-body"
+                style="font-size:0.85rem; color: var(--text-secondary); background: rgba(255,255,255,0.03); border: 1px solid var(--card-border); border-radius: 8px; padding: 12px; margin-bottom: 20px; line-height: 1.6;">
+            </div>
+            <div id="confirm-card-warning"
+                style="display:none; background: rgba(255,165,0,0.1); border: 1px solid rgba(255,165,0,0.3); border-radius: 8px; padding: 10px 12px; margin-bottom: 20px; font-size: 0.8rem; color: #ffaa00;">
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap: 10px;">
+                <button type="button" id="confirm-card-no" class="btn btn-secondary" style="padding: 8px 20px;">Ləğv Et</button>
+                <button type="button" id="confirm-card-yes" class="btn btn-primary" style="padding: 8px 20px;">Təsdiqlə</button>
+            </div>
+        </div>
+    </div>

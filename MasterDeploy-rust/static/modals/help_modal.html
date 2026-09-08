@@ -1,0 +1,37 @@
+<div id="help-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 800px; width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin: 0;">📚 Kömək Mərkəzi və Versiya Tarixçəsi</h2>
+                <button onclick="closeModal('help-modal')"
+                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
+            </div>
+            <div style="padding: 0;">
+                <div style="display: flex; border-bottom: 1px solid var(--card-border);">
+                    <button class="help-tab-btn active" onclick="switchHelpTab('help-changelog')"
+                        style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-primary); cursor: pointer; border-bottom: 2px solid var(--primary-color);">Yeniliklər
+                        (Changelog)</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-about')"
+                        style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Proqram
+                        Haqqında</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-external')"
+                        style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Xarici
+                        Server</button>
+                    <button class="help-tab-btn" onclick="switchHelpTab('help-local')"
+                        style="flex: 1; padding: 12px; background: transparent; border: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent;">Lokal
+                        Server</button>
+                </div>
+                <div style="padding: 20px; max-height: 500px; overflow-y: auto;">
+                    <div id="help-changelog" class="help-tab-content">Yüklənir...</div>
+                    <div id="help-about" class="help-tab-content"
+                        style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">
+                        Yüklənir...</div>
+                    <div id="help-external" class="help-tab-content"
+                        style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">
+                        Yüklənir...</div>
+                    <div id="help-local" class="help-tab-content"
+                        style="display: none; white-space: pre-wrap; line-height: 1.6; color: var(--text-secondary);">
+                        Yüklənir...</div>
+                </div>
+            </div>
+        </div>
+    </div>
