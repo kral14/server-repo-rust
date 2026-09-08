@@ -1,25 +1,31 @@
 <section id="tab-servers" class="tab-section">
                 <header class="tab-header-btn" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                     <div>
-                        <h2>🖥️ Serverlər (Servers)</h2>
+                        <h2 style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="server" style="width: 24px; height: 24px; color: #818cf8;"></i>
+                            <span>Serverlər (Servers)</span>
+                        </h2>
                         <p>Layihələrin yayına çıxarılacağı uzaqdakı serverlər</p>
                     </div>
 
                     <!-- Complete Unified Global Toolbar Container -->
                     <div id="global-server-toolbar" style="display: flex; align-items: center; gap: 0.4rem; background: rgba(10, 12, 20, 0.75); backdrop-filter: blur(10px); padding: 0.4rem 0.8rem; border-radius: 12px; border: 1px solid var(--card-border); box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
-                        <button class="toolbar-btn" onclick="executeGlobalServerAction('edit')" title="Redaktə Et (Seçilmiş Server)" style="background: transparent; border: none; color: #00d2ff; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(0,210,255,0.15)'" onmouseout="this.style.background='transparent'">✏️</button>
+                        <button class="toolbar-btn" onclick="executeGlobalServerAction('edit')" title="Redaktə Et (Seçilmiş Server)" style="background: transparent; border: none; color: #00d2ff; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='rgba(0,210,255,0.15)'" onmouseout="this.style.background='transparent'"><i data-lucide="edit-3" style="width: 16px; height: 16px;"></i></button>
                         
-                        <button class="toolbar-btn" onclick="executeGlobalServerAction('console')" title="SSH Konsolu" style="background: transparent; border: none; color: #4ade80; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.15)'" onmouseout="this.style.background='transparent'">💻</button>
+                        <button class="toolbar-btn" onclick="executeGlobalServerAction('console')" title="SSH Konsolu" style="background: transparent; border: none; color: #4ade80; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='rgba(74,222,128,0.15)'" onmouseout="this.style.background='transparent'"><i data-lucide="terminal" style="width: 16px; height: 16px;"></i></button>
                         
-                        <button class="toolbar-btn" onclick="executeGlobalServerAction('volumes')" title="Docker Volumları (Disk)" style="background: transparent; border: none; color: #38bdf8; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.15)'" onmouseout="this.style.background='transparent'">💾</button>
+                        <button class="toolbar-btn" onclick="executeGlobalServerAction('volumes')" title="Docker Volumları (Disk)" style="background: transparent; border: none; color: #38bdf8; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='rgba(56,189,248,0.15)'" onmouseout="this.style.background='transparent'"><i data-lucide="hard-drive" style="width: 16px; height: 16px;"></i></button>
                         
-                        <button class="toolbar-btn" onclick="openServerConnModal()" title="Bağlantı Və Avto-Bərpa Tənzimləmələri" style="background: transparent; border: none; color: #facc15; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(250,204,21,0.15)'" onmouseout="this.style.background='transparent'">🔌</button>
+                        <button class="toolbar-btn" onclick="openServerConnModal()" title="Bağlantı Və Avto-Bərpa Tənzimləmələri" style="background: transparent; border: none; color: #facc15; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='rgba(250,204,21,0.15)'" onmouseout="this.style.background='transparent'"><i data-lucide="sliders" style="width: 16px; height: 16px;"></i></button>
                         
-                        <button class="toolbar-btn" onclick="executeGlobalServerAction('delete')" title="Serveri Sil" style="background: transparent; border: none; color: #f87171; font-size: 1.15rem; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='transparent'">🗑️</button>
+                        <button class="toolbar-btn" onclick="executeGlobalServerAction('delete')" title="Serveri Sil" style="background: transparent; border: none; color: #f87171; padding: 0.35rem 0.6rem; cursor: pointer; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='rgba(248,113,113,0.15)'" onmouseout="this.style.background='transparent'"><i data-lucide="trash-2" style="width: 16px; height: 16px;"></i></button>
 
                         <div style="height: 20px; width: 1px; background: rgba(255,255,255,0.15); margin: 0 0.4rem;"></div>
 
-                        <button class="btn btn-primary" onclick="showModal('server-modal')" style="padding: 0.35rem 0.8rem; font-size: 0.82rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; border-radius: 6px; font-weight: 600; display: flex; align-items: center; gap: 0.3rem;">➕ Yeni Server</button>
+                        <button class="btn btn-primary" onclick="showModal('server-modal')" style="padding: 0.45rem 0.9rem; font-size: 0.82rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; border-radius: 6px; font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+                            <i data-lucide="plus" style="width: 15px; height: 15px;"></i>
+                            <span>Yeni Server</span>
+                        </button>
                     </div>
                 </header>
 

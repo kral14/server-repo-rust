@@ -43,11 +43,11 @@ async function loadServers() {
             <div class="list-item server-card ${selectedClass}" data-server-id="${s.id}" onclick="selectServer('${s.id}')" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 1rem; border-radius: 10px; cursor: pointer; transition: all 0.2s; background: var(--card-bg); border: 1px solid var(--card-border); flex-wrap: wrap;">
                 <!-- Left Section: Server Name, Badge & IP/User on 1 Line -->
                 <div class="item-info" style="display: flex; align-items: center; gap: 0.6rem; min-width: 220px;">
-                    <div style="width: 32px; height: 32px; background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;">🖥️</div>
+                    <div style="width: 32px; height: 32px; background: rgba(0, 210, 255, 0.1); border: 1px solid rgba(0, 210, 255, 0.2); border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><i data-lucide="server" style="width: 17px; height: 17px; color: #00d2ff;"></i></div>
                     <div>
                         <div style="display: flex; align-items: center; gap: 0.4rem;">
                             <strong style="font-size: 0.95rem; color: #fff; white-space: nowrap;">${s.name}</strong>
-                            <span id="status-${s.id}" class="server-status-badge" style="font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 10px; background: rgba(255,255,255,0.08); color: #aaa; cursor: pointer;" onclick="event.stopPropagation(); openServerConnModal('${s.id}')">🔌 Yoxla</span>
+                            <span id="status-${s.id}" class="server-status-badge" style="font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 10px; background: rgba(255,255,255,0.08); color: #aaa; cursor: pointer; display: inline-flex; align-items: center; gap: 3px;" onclick="event.stopPropagation(); openServerConnModal('${s.id}')"><i data-lucide="activity" style="width: 11px; height: 11px;"></i> Yoxla</span>
                         </div>
                         <div style="font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; margin-top: 0.1rem;">
                             <span><strong>IP:</strong> ${s.ip}</span> | <span><strong>İstifadəçi:</strong> ${s.ssh_user}</span>
@@ -60,7 +60,7 @@ async function loadServers() {
                     <!-- RAM -->
                     <div style="flex: 1; min-width: 110px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.6rem; border-radius: 6px;">
                         <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.15rem;">
-                            <span style="color: var(--text-secondary);">🧠 RAM</span>
+                            <span style="color: var(--text-secondary); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="database" style="width: 11px; height: 11px; color: #00d2ff;"></i> RAM</span>
                             <span id="ram-pct-${s.id}" style="color: #00d2ff; font-weight: 600;">--%</span>
                         </div>
                         <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 0.15rem;">
@@ -72,7 +72,7 @@ async function loadServers() {
                     <!-- SWAP -->
                     <div style="flex: 1; min-width: 110px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.6rem; border-radius: 6px;">
                         <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.15rem;">
-                            <span style="color: var(--text-secondary);">🔄 SWAP</span>
+                            <span style="color: var(--text-secondary); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="refresh-cw" style="width: 11px; height: 11px; color: #a78bfa;"></i> SWAP</span>
                             <span id="swap-pct-${s.id}" style="color: #a78bfa; font-weight: 600;">--%</span>
                         </div>
                         <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 0.15rem;">
@@ -84,7 +84,7 @@ async function loadServers() {
                     <!-- CPU -->
                     <div style="flex: 1; min-width: 100px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.6rem; border-radius: 6px;">
                         <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.15rem;">
-                            <span style="color: var(--text-secondary);">⚡ CPU</span>
+                            <span style="color: var(--text-secondary); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="cpu" style="width: 11px; height: 11px; color: #4ade80;"></i> CPU</span>
                             <span id="cpu-pct-${s.id}" style="color: #4ade80; font-weight: 600;">--%</span>
                         </div>
                         <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 0.15rem;">
@@ -96,7 +96,7 @@ async function loadServers() {
                     <!-- DISK -->
                     <div style="flex: 1; min-width: 120px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); padding: 0.35rem 0.6rem; border-radius: 6px;">
                         <div style="display: flex; justify-content: space-between; font-size: 0.7rem; margin-bottom: 0.15rem;">
-                            <span style="color: var(--text-secondary);">💾 DISK</span>
+                            <span style="color: var(--text-secondary); display: inline-flex; align-items: center; gap: 3px;"><i data-lucide="hard-drive" style="width: 11px; height: 11px; color: #facc15;"></i> DISK</span>
                             <span id="disk-pct-${s.id}" style="color: #facc15; font-weight: 600;">--%</span>
                         </div>
                         <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; margin-bottom: 0.15rem;">
@@ -107,6 +107,10 @@ async function loadServers() {
                 </div>
             </div>`;
         }).join('');
+        }
+
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+            lucide.createIcons();
         }
 
         // Automatically load metrics for each server card

@@ -83,8 +83,9 @@ async function loadApplications() {
             html += `
             <div class="server-group" data-server-id="${sid}">
                 <div class="server-group-header">
-                    <h3>
-                        🖥️ ${srvName} <span class="ip">(${srvIp})</span>
+                    <h3 style="display: flex; align-items: center;">
+                        <i data-lucide="server" style="width: 18px; height: 18px; color: #38bdf8; margin-right: 8px; flex-shrink: 0;"></i>
+                        <span>${srvName}</span> <span class="ip" style="margin-left: 6px;">(${srvIp})</span>
                     </h3>
                     <div class="server-group-header-info">
                         <span class="server-stats-badge" id="srv-stats-cpu-${sid}">
@@ -94,7 +95,9 @@ async function loadApplications() {
                             RAM: <strong>-- / -- MB</strong>
                         </span>
                         <div class="server-header-actions">
-                            <span class="server-action-link" onclick="goToServerSettings('${sid}')">⚙️ Sazlamalar</span>
+                            <span class="server-action-link" onclick="goToServerSettings('${sid}')" style="display: inline-flex; align-items: center; gap: 4px;">
+                                <i data-lucide="settings" style="width: 13px; height: 13px;"></i> Sazlamalar
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -123,8 +126,8 @@ async function loadApplications() {
                 }
 
                 const appStatsHtml = `
-                <span class="app-load-badge" data-app-name="${app.name}" id="app-load-${app.id}">
-                    ⚡ CPU: <strong>${cpuVal}</strong> | 💾 RAM: <strong>${memVal}</strong>
+                <span class="app-load-badge" data-app-name="${app.name}" id="app-load-${app.id}" style="display: inline-flex; align-items: center; gap: 4px;">
+                    <i data-lucide="cpu" style="width: 12px; height: 12px; vertical-align: -1px; color: #facc15;"></i> CPU: <strong>${cpuVal}</strong> | <i data-lucide="database" style="width: 12px; height: 12px; vertical-align: -1px; color: #a78bfa;"></i> RAM: <strong>${memVal}</strong>
                 </span>
                 `;
 
@@ -136,32 +139,40 @@ async function loadApplications() {
                     <div class="item-info" style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
                         <div style="flex: 1; min-width: 0;">
                             <h3 style="margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                                <span style="display: inline-block; width: 200px; min-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${app.name}">🚀 ${app.name}</span>
+                                <span style="display: inline-flex; align-items: center; gap: 6px; width: 200px; min-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${app.name}">
+                                    <i data-lucide="box" style="width: 16px; height: 16px; color: #38bdf8; flex-shrink: 0;"></i>
+                                    <span style="overflow: hidden; text-overflow: ellipsis;">${app.name}</span>
+                                </span>
                                 ${app.status === 'success' || app.status === 'running' ? `
                                 <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: var(--accent-color); text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 210, 255, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                    🔗 Lokal Keçid
+                                    <i data-lucide="external-link" style="width: 12px; height: 12px;"></i> Lokal Keçid
                                 </a>
                                 ${app.cloudflare_url ? `
                                 <a href="${app.cloudflare_url}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: #ff9800; text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(255, 152, 0, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;">
-                                    ☁️ Cloudflare Keçidi
+                                    <i data-lucide="cloud" style="width: 12px; height: 12px;"></i> Cloudflare Keçidi
                                 </a>
                                 ` : ''}
                                 ${app.cf_worker_url ? `
                                 <a href="${app.cf_worker_url}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.75rem; color: #00e676; text-decoration: none; padding: 0.2rem 0.5rem; background: rgba(0, 230, 118, 0.1); border-radius: 4px; display: inline-flex; align-items: center; gap: 0.3rem;" title="Sabit Worker Linki">
-                                    🟢 Worker Linki
+                                    <i data-lucide="globe" style="width: 12px; height: 12px;"></i> Worker Linki
                                 </a>
                                 ` : ''}
                                 ${isCfInstalled ? `
                                 <button onclick="generateCloudflareTunnel(event, '${app.id}')" style="font-size: 0.75rem; color: #fff; background: #e67e22; border: none; border-radius: 4px; padding: 0.2rem 0.5rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem;" title="Cloudflare Tunelini İşə Sal / Link Al">
-                                    🔄 ☁️ Tunnel Al
+                                    <i data-lucide="radio" style="width: 12px; height: 12px;"></i> Tunnel Al
                                 </button>
                                 ` : ''}
                                 ` : ''}
                                 ${appStatsHtml}
                             </h3>
                             <p style="margin: 0; font-size: 0.85rem; color: var(--text-secondary); display: flex; gap: 1rem; align-items: center;">
-                                <span style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${app.repo_url}">🐱 ${shortUrl} (${app.branch})</span>
-                                <span>🔌 Port: <strong>${app.port}</strong></span>
+                                <span style="max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-flex; align-items: center; gap: 4px;" title="${app.repo_url}">
+                                    <i data-lucide="git-branch" style="width: 13px; height: 13px; color: #818cf8; flex-shrink: 0;"></i>
+                                    <span>${shortUrl} (${app.branch})</span>
+                                </span>
+                                <span style="display: inline-flex; align-items: center; gap: 4px;">
+                                    <i data-lucide="network" style="width: 13px; height: 13px; color: #38bdf8;"></i> Port: <strong>${app.port}</strong>
+                                </span>
                             </p>
                         </div>
                         <div style="display:flex; align-items:center; gap:0.8rem;">
@@ -174,8 +185,12 @@ async function loadApplications() {
                             <div style="position: relative;">
                                 <button class="app-menu-btn" onclick="toggleAppMenu(event, '${app.id}')">⋮</button>
                                 <div id="app-menu-${app.id}" class="app-dropdown-menu">
-                                    <button onclick="event.stopPropagation(); openAppDetails('${app.id}')">👁️ Detallara Bax</button>
-                                    <button class="danger" onclick="handleDeleteAppClick(event, '${app.id}', '${encodeURIComponent(app.name || 'Adsız Layihə')}')">🗑️ Sil</button>
+                                    <button onclick="event.stopPropagation(); openAppDetails('${app.id}')" style="display: inline-flex; align-items: center; gap: 6px; width: 100%;">
+                                        <i data-lucide="eye" style="width: 14px; height: 14px;"></i> Detallara Bax
+                                    </button>
+                                    <button class="danger" onclick="handleDeleteAppClick(event, '${app.id}', '${encodeURIComponent(app.name || 'Adsız Layihə')}')" style="display: inline-flex; align-items: center; gap: 6px; width: 100%;">
+                                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Sil
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -194,6 +209,10 @@ async function loadApplications() {
         if (appsList && appsList.getAttribute('data-render-hash') !== renderHash) {
             appsList.setAttribute('data-render-hash', renderHash);
             appsList.innerHTML = html;
+        }
+
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+            lucide.createIcons();
         }
 
         // Immediately update stats UI with cache if populated

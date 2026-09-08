@@ -1,7 +1,10 @@
 <section id="tab-applications" class="tab-section">
                 <header class="tab-header-btn">
                     <div>
-                        <h2>🚀 Layihələr (Applications)</h2>
+                        <h2 style="display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="rocket" style="width: 24px; height: 24px; color: #f43f5e;"></i>
+                            <span>Layihələr (Applications)</span>
+                        </h2>
                         <p>Git-dən qoşulmuş tətbiqləriniz və API-ləriniz</p>
                     </div>
                     <div id="server-stats-banner"
@@ -11,7 +14,10 @@
                         <span style="font-size: 0.85rem;"><span style="color:var(--text-secondary)">Nüvə (CPU):</span>
                             <strong id="stat-cpu" style="color:var(--accent-color)">--</strong></span>
                     </div>
-                    <button class="btn btn-primary" onclick="showCreateServiceTab()">+ Yeni Layihə</button>
+                    <button class="btn btn-primary" onclick="showCreateServiceTab()" style="display: inline-flex; align-items: center; gap: 6px;">
+                        <i data-lucide="plus" style="width: 16px; height: 16px;"></i>
+                        <span>Yeni Layihə</span>
+                    </button>
                 </header>
 
                 <div id="apps-list" class="items-list">

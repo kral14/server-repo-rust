@@ -1,0 +1,2 @@
+# Ensure SQL migrations always use LF line endings across all platforms
+*.sql text eol=lf

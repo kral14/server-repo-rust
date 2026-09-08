@@ -2,7 +2,10 @@
     <!-- Əsas Başlıq -->
     <header class="tab-header-btn" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.2rem;">
         <div>
-            <h2 style="display: flex; align-items: center; gap: 8px;">🔄 Arxa Plan və Avtomatlaşdırma Mərkəzi</h2>
+            <h2 style="display: flex; align-items: center; gap: 8px;">
+                <i data-lucide="cpu" style="width: 24px; height: 24px; color: #00d2ff;"></i>
+                <span>Arxa Plan və Avtomatlaşdırma Mərkəzi</span>
+            </h2>
             <p style="margin: 0; color: var(--text-secondary); font-size: 0.88rem;">
                 Layihələrin avtomatik yenilənməsi (CI/CD Auto-Deploy) və sistemin arxa plan nəzarətçiləri (Watchdog, Disk təmizliyi)
             </p>
@@ -13,8 +16,8 @@
                 <span>Məlumatları Yenilə</span>
             </button>
             <button class="btn btn-primary" id="btn-bg-action-primary" onclick="triggerActiveBgAction(this)" style="display: flex; align-items: center; gap: 0.4rem; padding: 0.5rem 1.1rem; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; font-weight: 600;">
-                <i data-lucide="scan" style="width: 14px; height: 14px;"></i>
-                <span id="txt-bg-action-primary">⚡ Hamısını İndi Yoxla</span>
+                <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
+                <span id="txt-bg-action-primary">Hamısını İndi Yoxla</span>
             </button>
         </div>
     </header>

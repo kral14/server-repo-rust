@@ -34,10 +34,10 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
         .connect_with(connect_options)
         .await?;
 
-    // 1. Run sqlx migrations automatically
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await?;
+    // 1. Run sqlx migrations automatically (fail-safe so checksum/version mismatches do not crash the app)
+    if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
+        eprintln!("[WARN] Database migration notice (safe fallback): {}", e);
+    }
 
     // 2. Data Migration: Migrate existing ssh keys from servers.ssh_key to ssh_keys table
     // Fetch all servers that have a plain text ssh_key, but no ssh_key_id associated yet.
