@@ -340,6 +340,13 @@ async function openAppDetails(appId, autoSwitchToOverview = true) {
     localStorage.setItem('active_app_id', appId);
     currentAppDetailsId = appId;
     try {
+        // First, ensure app-details tab HTML is loaded and switched into view
+        if (typeof switchTab === 'function') {
+            await switchTab('app-details');
+        } else if (typeof ensureTabLoaded === 'function') {
+            await ensureTabLoaded('app-details');
+        }
+
         console.time("[FETCH] Application Details");
         const res = await fetch(`/api/applications/${appId}`);
         console.timeEnd("[FETCH] Application Details");
@@ -348,8 +355,13 @@ async function openAppDetails(appId, autoSwitchToOverview = true) {
         const app = await res.json();
         currentAppDetailsName = app.name;
 
+        const setSafeText = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val != null ? val : '-';
+        };
+
         // Populate Header
-        document.getElementById('detail-app-name').innerText = app.name;
+        setSafeText('detail-app-name', app.name);
 
         const statusColors = {
             'running': '#00e676', 'success': '#00e676',
@@ -359,10 +371,12 @@ async function openAppDetails(appId, autoSwitchToOverview = true) {
         };
         const sc = statusColors[app.status] || '#9aa0a6';
         const statBadge = document.getElementById('detail-app-status');
-        statBadge.innerText = app.status.toUpperCase();
-        statBadge.style.color = sc;
-        statBadge.style.background = sc + '20'; // transparent background
-        statBadge.style.border = `1px solid ${sc}50`;
+        if (statBadge) {
+            statBadge.innerText = (app.status || '').toUpperCase();
+            statBadge.style.color = sc;
+            statBadge.style.background = sc + '20'; // transparent background
+            statBadge.style.border = `1px solid ${sc}50`;
+        }
 
         // Check if there is an IP we can use to generate the link
         let serverIp = 'localhost';
@@ -372,25 +386,26 @@ async function openAppDetails(appId, autoSwitchToOverview = true) {
             if (srvRes.ok) {
                 const srv = await srvRes.json();
                 serverIp = srv.ip;
-                document.getElementById('detail-overview-server').innerText = srv.name + ' (' + srv.ip + ')';
+                setSafeText('detail-overview-server', srv.name + ' (' + srv.ip + ')');
             } else {
-                document.getElementById('detail-overview-server').innerText = app.server_id;
+                setSafeText('detail-overview-server', app.server_id);
             }
             console.timeEnd("[FETCH] Server Details");
         } catch (e) {
             console.timeEnd("[FETCH] Server Details");
-            document.getElementById('detail-overview-server').innerText = app.server_id;
+            setSafeText('detail-overview-server', app.server_id);
         }
 
         const resolvedIp = (serverIp === 'local' || serverIp === 'localhost') ? 'localhost' : serverIp;
         const appUrl = app.cf_worker_url ? app.cf_worker_url : `http://${resolvedIp}:${app.port}`;
-        document.getElementById('detail-app-url').innerText = appUrl;
-        document.getElementById('detail-app-link').href = appUrl;
+        setSafeText('detail-app-url', appUrl);
+        const linkEl = document.getElementById('detail-app-link');
+        if (linkEl) linkEl.href = appUrl;
 
         // Populate Overview
-        document.getElementById('detail-overview-repo').innerText = app.repo_url || '-';
-        document.getElementById('detail-overview-branch').innerText = app.branch || '-';
-        document.getElementById('detail-overview-port').innerText = app.port || '-';
+        setSafeText('detail-overview-repo', app.repo_url);
+        setSafeText('detail-overview-branch', app.branch);
+        setSafeText('detail-overview-port', app.port);
 
         // Populate Auto-Deploy Overview
         const adToggleEl = document.getElementById('overview-autodeploy-toggle');
@@ -421,20 +436,25 @@ async function openAppDetails(appId, autoSwitchToOverview = true) {
 
         // Populate Settings inputs using existing function but bypassing modal
         console.time("[CALL] openAppSettings");
-        openAppSettings(appId, false); // false = don't show modal
+        if (typeof openAppSettings === 'function') {
+            openAppSettings(appId, false); // false = don't show modal
+        }
         console.timeEnd("[CALL] openAppSettings");
 
         // Pending redeploy bayrağını yoxla
-        const hasPending = localStorage.getItem(`pending_redeploy_${appId}`) === 'true';
-        markRedeployPending(hasPending);
+        if (typeof markRedeployPending === 'function') {
+            const hasPending = localStorage.getItem(`pending_redeploy_${appId}`) === 'true';
+            markRedeployPending(hasPending);
+        }
 
         // Deployments tarixçəsini yüklə
         console.time("[CALL] loadAppDeployments");
-        loadAppDeployments(appId);
+        if (typeof loadAppDeployments === 'function') {
+            loadAppDeployments(appId);
+        }
         console.timeEnd("[CALL] loadAppDeployments");
 
-        switchTab('app-details');
-        if (autoSwitchToOverview) {
+        if (autoSwitchToOverview && typeof switchAppTab === 'function') {
             switchAppTab('overview');
         }
 
