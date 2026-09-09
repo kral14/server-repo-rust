@@ -60,37 +60,7 @@
                 <button class="topbar-nav-chip" data-topbar-tab="dashboard" onclick="openDesktopWindow('dashboard')">
                     <i data-lucide="layout-dashboard"></i>
                     <span>Dashboard</span>
-                    <svg class="chip-arrow" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
-                <div class="topbar-nav-dropdown">
-                    <div class="topbar-dropdown-header">
-                        <span>Dashboard Bölmələri</span>
-                        <span class="dropdown-count">3 Tab</span>
-                    </div>
-                    <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('dashboard')">
-                        <div class="dropdown-item-icon"><i data-lucide="bar-chart-3"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Əsas İcmal & Metriklər</span>
-                            <span class="dropdown-item-desc">Sistem və layihə statusları</span>
-                        </div>
-                        <span class="dropdown-item-badge badge-blue">İcmal</span>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('dashboard')">
-                        <div class="dropdown-item-icon"><i data-lucide="activity"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Serverlərin Statusu</span>
-                            <span class="dropdown-item-desc">CPU, RAM və Disk canlı qrafiki</span>
-                        </div>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('background-services', 'tunnels')">
-                        <div class="dropdown-item-icon"><i data-lucide="cloud"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Aktiv VM Tünelləri</span>
-                            <span class="dropdown-item-desc">Bütün canlı tünel linkləri</span>
-                        </div>
-                        <span class="dropdown-item-badge badge-green">Canlı</span>
-                    </button>
-                </div>
             </div>
 
             <!-- 2. Serverlər -->
@@ -103,7 +73,7 @@
                 <div class="topbar-nav-dropdown">
                     <div class="topbar-dropdown-header">
                         <span>Server İdarəetməsi</span>
-                        <span class="dropdown-count">4 Bölmə</span>
+                        <span class="dropdown-count">3 Bölmə</span>
                     </div>
                     <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('servers')">
                         <div class="dropdown-item-icon"><i data-lucide="server"></i></div>
@@ -113,7 +83,7 @@
                         </div>
                         <span class="dropdown-item-badge badge-blue">Siyahı</span>
                     </button>
-                    <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('servers', null, () => showModal('server-modal'))">
+                    <button class="topbar-dropdown-item" onclick="showModal('server-modal')">
                         <div class="dropdown-item-icon"><i data-lucide="plus-circle"></i></div>
                         <div class="dropdown-item-info">
                             <span class="dropdown-item-title">Yeni Server Qoş</span>
@@ -126,13 +96,6 @@
                         <div class="dropdown-item-info">
                             <span class="dropdown-item-title">Docker Volumları (Disk)</span>
                             <span class="dropdown-item-desc">Disk sahəsi və yaddaş təmizliyi</span>
-                        </div>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('servers', null, () => openServerConnModal())">
-                        <div class="dropdown-item-icon"><i data-lucide="network"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Bağlantı & Avto-Bərpa</span>
-                            <span class="dropdown-item-desc">Watchdog və təkrar qoşulma nizamları</span>
                         </div>
                     </button>
                 </div>
@@ -148,7 +111,7 @@
                 <div class="topbar-nav-dropdown">
                     <div class="topbar-dropdown-header">
                         <span>Layihələr Mərkəzi</span>
-                        <span class="dropdown-count">5 Bölmə</span>
+                        <span class="dropdown-count">2 Bölmə</span>
                     </div>
                     <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('applications')">
                         <div class="dropdown-item-icon"><i data-lucide="rocket"></i></div>
@@ -165,28 +128,6 @@
                             <span class="dropdown-item-desc">Git və ya Docker-dən yeni tətbiq qur</span>
                         </div>
                         <span class="dropdown-item-badge badge-green">+ Yeni</span>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('applications', 'overview')">
-                        <div class="dropdown-item-icon"><i data-lucide="layout"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Layihə İcmalı (Overview)</span>
-                            <span class="dropdown-item-desc">Tətbiq statusu və domen linki</span>
-                        </div>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('applications', 'settings')">
-                        <div class="dropdown-item-icon"><i data-lucide="sliders"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Sazlamalar (Settings)</span>
-                            <span class="dropdown-item-desc">Portlar, mühit dəyişənləri və konfiq</span>
-                        </div>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('applications', 'logs')">
-                        <div class="dropdown-item-icon"><i data-lucide="file-terminal"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Konteyner Loqları (Logs)</span>
-                            <span class="dropdown-item-desc">Canlı icra və runtime qeydləri</span>
-                        </div>
-                        <span class="dropdown-item-badge badge-amber">Loqlar</span>
                     </button>
                 </div>
             </div>
@@ -298,75 +239,6 @@
                     </button>
                 </div>
             </div>
-
-            <!-- 6. Jurnal -->
-            <div class="topbar-nav-wrapper">
-                <button class="topbar-nav-chip" onclick="showModal('activity-log-modal')">
-                    <i data-lucide="file-text"></i>
-                    <span>Jurnal</span>
-                    <svg class="chip-arrow" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                </button>
-                <div class="topbar-nav-dropdown">
-                    <div class="topbar-dropdown-header">
-                        <span>Fəaliyyət Jurnalı</span>
-                        <span class="dropdown-count">2 Rejim</span>
-                    </div>
-                    <button class="topbar-dropdown-item" onclick="showModal('activity-log-modal')">
-                        <div class="dropdown-item-icon"><i data-lucide="file-text"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Ümumi Hadisələr Jurnalı</span>
-                            <span class="dropdown-item-desc">Bütün əməliyyatların xronoloji arxivi</span>
-                        </div>
-                        <span class="dropdown-item-badge badge-blue">Arxiv</span>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="showModal('activity-log-modal'); if(typeof startLiveActivityMonitor==='function') startLiveActivityMonitor();">
-                        <div class="dropdown-item-icon"><i data-lucide="activity"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Canlı Əməliyyat İzləmə</span>
-                            <span class="dropdown-item-desc">Real-vaxtda fəaliyyət axını</span>
-                        </div>
-                        <span class="dropdown-item-badge badge-green">Canlı</span>
-                    </button>
-                </div>
-            </div>
-
-            <!-- 7. Modullar -->
-            <div class="topbar-nav-wrapper">
-                <button class="topbar-nav-chip" onclick="showModal('plugins-modal')">
-                    <i data-lucide="puzzle"></i>
-                    <span>Modullar</span>
-                    <svg class="chip-arrow" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
-                </button>
-                <div class="topbar-nav-dropdown">
-                    <div class="topbar-dropdown-header">
-                        <span>Modullar Mərkəzi</span>
-                        <span class="dropdown-count">3 Modul</span>
-                    </div>
-                    <button class="topbar-dropdown-item" onclick="showModal('plugins-modal')">
-                        <div class="dropdown-item-icon"><i data-lucide="puzzle"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Modullar Kataloqu</span>
-                            <span class="dropdown-item-desc">Serverlər üçün əlavə xidmətlər</span>
-                        </div>
-                        <span class="dropdown-item-badge badge-purple">Kataloq</span>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="showModal('plugins-modal')">
-                        <div class="dropdown-item-icon"><i data-lucide="cloud"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Cloudflare Tünel Modulu</span>
-                            <span class="dropdown-item-desc">Sabit və dinamik tünel xidməti</span>
-                        </div>
-                        <span class="dropdown-item-badge badge-blue">KV Sync</span>
-                    </button>
-                    <button class="topbar-dropdown-item" onclick="showModal('plugins-modal')">
-                        <div class="dropdown-item-icon"><i data-lucide="zap"></i></div>
-                        <div class="dropdown-item-info">
-                            <span class="dropdown-item-title">Sccache Sürətləndirici</span>
-                            <span class="dropdown-item-desc">Kompilyasiya və qurma keşi</span>
-                        </div>
-                    </button>
-                </div>
-            </div>
         </nav>
 
         <!-- Universal Header Contextual Search (100% Autofill Immune) -->
@@ -379,14 +251,6 @@
         </div>
 
         <div class="topbar-right">
-            <button class="topbar-action-btn primary" onclick="showCreateServiceTab()" title="Yeni Layihə Əlavə Et">
-                <i data-lucide="plus"></i>
-                <span>Yeni Layihə</span>
-            </button>
-            <button class="topbar-action-btn" onclick="showModal('server-modal')" title="Yeni Server Əlavə Et">
-                <i data-lucide="server"></i>
-                <span>+ Server</span>
-            </button>
             <button id="theme-toggle-btn" class="topbar-action-btn icon-only" title="Temanı Dəyiş">
                 <span id="theme-icon" style="display: inline-flex; align-items: center; justify-content: center;"><i data-lucide="sun" style="width: 14px; height: 14px; color: #fbbf24;"></i></span>
             </button>

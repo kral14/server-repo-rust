@@ -307,12 +307,56 @@
                                     <div class="form-group" style="margin-bottom: 0;">
                                         <label style="font-size: 0.8rem;">CPU Limiti (Məs: 0.5, 1)</label>
                                         <input type="number" step="0.1" min="0.1" id="wiz-app-cpu"
-                                            placeholder="Limitsiz (Boş saxlayın)">
+                                             placeholder="Limitsiz (Boş saxlayın)">
                                     </div>
                                 </div>
                                 <small style="color: var(--text-secondary); display: block; margin-top: 0.2rem; font-size: 0.75rem;">
                                     Layihəni yaradarkən serverinizin "Server Stats" panelində olan boş limitlərini nəzərə alın.
                                 </small>
+                            </div>
+                        </div>
+
+                        <!-- Accordion 4: Cloudflare Tunnel & External Access -->
+                        <div class="accordion-section"
+                            style="background: rgba(255,255,255,0.015); border: 1px solid var(--card-border); border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="accordion-header" onclick="toggleAccordion('wiz-tunnel-content', this)"
+                                style="padding: 0.75rem 1.1rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02); transition: background 0.2s;">
+                                <h3 style="font-size: 0.85rem; font-weight: 500; margin: 0; display: flex; align-items: center; gap: 0.6rem; color: #f1f5f9;">
+                                    <svg style="width: 15px; height: 15px; stroke: #00d2ff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+                                    <span>Xarici Tünel və İctimai Giriş (Cloudflare Tunnel)</span>
+                                </h3>
+                                <span class="accordion-icon toggle-text-btn"
+                                    style="font-size: 0.75rem; font-weight: 500; background: rgba(255,255,255,0.06); padding: 0.25rem 0.65rem; border-radius: 6px; color: var(--text-secondary); transition: all 0.2s ease;">Göstər</span>
+                            </div>
+                            <div id="wiz-tunnel-content" class="accordion-content"
+                                style="display: none; flex-direction: column; padding: 1.1rem; border-top: 1px solid var(--card-border); gap: 0.8rem;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label style="font-size: 0.8rem;">Tünel Seçimi</label>
+                                    <select id="wiz-tunnel-mode" onchange="toggleWizardTunnelMode()" style="background: #12141e;">
+                                        <option value="none">Tünel aktiv edilməsin (Yalnız daxili port)</option>
+                                        <option value="shared">Mövcud Tünelə Qoş (Ortaq / Shared Tünel)</option>
+                                        <option value="dedicated">Yeni Dedicated Tünel Yarat</option>
+                                    </select>
+                                </div>
+
+                                <div id="wiz-existing-tunnel-group" style="display: none;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Mövcud Tünellər</label>
+                                        <select id="wiz-selected-tunnel" style="background: #12141e;">
+                                            <option value="">-- Tünellər yüklənir... --</option>
+                                        </select>
+                                        <small style="color: var(--text-secondary); display: block; margin-top: 4px; font-size: 0.75rem;">
+                                            Seçilmiş serverdə çalışan ortaq tünellər.
+                                        </small>
+                                    </div>
+                                </div>
+
+                                <div id="wiz-new-tunnel-group" style="display: none;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Yeni Tünel Adı</label>
+                                        <input type="text" id="wiz-new-tunnel-name" placeholder="Məs: tunnel-prod və ya my-app-tunnel">
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </form>

@@ -18,6 +18,7 @@ pub fn tunnels_router() -> Router<AppState> {
         .route("/history", get(list_all_tunnel_history))
         .route("/history/:app_id", get(list_app_tunnel_history))
         .route("/server/:server_id", get(list_server_tunnels).post(create_tunnel))
+        .route("/server/:server_id/sync-remote", post(sync_server_tunnels_to_remote))
         .route("/:tunnel_id", get(get_tunnel).delete(delete_tunnel))
         .route("/:tunnel_id/attach", post(attach_route))
         .route("/:tunnel_id/routes/:route_id", delete(detach_route))
@@ -289,6 +290,184 @@ async fn list_tunnel_routes(
     Ok(Json(routes))
 }
 
+// Static scripts for remote daemon deployment
+static DAEMON_SCRIPT: &str = include_str!("../scripts/remote_tunnel_daemon.py");
+static SERVICE_FILE: &str = include_str!("../scripts/md-tunnel.service");
+
+pub fn base64_encode(data: &[u8]) -> String {
+    const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut result = String::with_capacity((data.len() + 2) / 3 * 4);
+    for chunk in data.chunks(3) {
+        let b0 = chunk[0];
+        let b1 = chunk.get(1).copied().unwrap_or(0);
+        let b2 = chunk.get(2).copied().unwrap_or(0);
+        result.push(CHARSET[(b0 >> 2) as usize] as char);
+        result.push(CHARSET[(((b0 & 3) << 4) | (b1 >> 4)) as usize] as char);
+        if chunk.len() > 1 {
+            result.push(CHARSET[(((b1 & 15) << 2) | (b2 >> 6)) as usize] as char);
+        } else {
+            result.push('=');
+        }
+        if chunk.len() > 2 {
+            result.push(CHARSET[(b2 & 63) as usize] as char);
+        } else {
+            result.push('=');
+        }
+    }
+    result
+}
+
+async fn build_server_tunnels_config(
+    db: &sqlx::SqlitePool,
+    server_id: &str,
+) -> Result<serde_json::Value, String> {
+    let tunnels = sqlx::query_as::<_, Tunnel>("SELECT * FROM tunnels WHERE server_id = ? ORDER BY created_at ASC")
+        .bind(server_id)
+        .fetch_all(db)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let api_token: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'cf_api_token'")
+        .fetch_optional(db)
+        .await
+        .unwrap_or_default();
+    let account_id: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'cf_account_id'")
+        .fetch_optional(db)
+        .await
+        .unwrap_or_default();
+    let kv_id: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'cf_kv_id'")
+        .fetch_optional(db)
+        .await
+        .unwrap_or_default();
+
+    let mut tunnel_items = Vec::new();
+    for t in &tunnels {
+        let routes = sqlx::query_as::<_, TunnelRoute>("SELECT * FROM tunnel_routes WHERE tunnel_id = ?")
+            .bind(&t.id)
+            .fetch_all(db)
+            .await
+            .unwrap_or_default();
+
+        let mut app_keys = vec![t.name.clone()];
+        for r in &routes {
+            if let Ok(Some(app)) = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
+                .bind(&r.app_id)
+                .fetch_optional(db)
+                .await
+            {
+                if !app_keys.contains(&app.name) {
+                    app_keys.push(app.name);
+                }
+            }
+        }
+
+        let target_port = routes.first().map(|r| r.target_port).unwrap_or(8080);
+        tunnel_items.push(serde_json::json!({
+            "id": t.id,
+            "name": t.name,
+            "tunnel_type": t.tunnel_type,
+            "target_port": target_port,
+            "app_keys": app_keys
+        }));
+    }
+
+    Ok(serde_json::json!({
+        "cloudflare": {
+            "api_token": api_token.unwrap_or_default(),
+            "account_id": account_id.unwrap_or_default(),
+            "kv_id": kv_id.unwrap_or_default()
+        },
+        "tunnels": tunnel_items
+    }))
+}
+
+async fn execute_remote_tunnel_sync(
+    state: &AppState,
+    server: &Server,
+    tunnels_config: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    if server.ip == "local" || server.ip == "127.0.0.1" {
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::fs::create_dir_all("/etc/masterdeploy");
+            let _ = std::fs::write("/etc/masterdeploy/tunnels.json", tunnels_config.to_string());
+        }
+        return Ok(serde_json::json!({
+            "is_local": true,
+            "success": true,
+            "message": "Yerli server üçün konfiqurasiya saxlanıldı"
+        }));
+    }
+
+    let key_content = if let Some(ref kid) = server.ssh_key_id {
+        let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+            .bind(kid)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+        db_key.map(|r| r.0).unwrap_or_else(|| server.ssh_key.clone())
+    } else {
+        server.ssh_key.clone()
+    };
+
+    let key_data = if key_content.contains("BEGIN ") {
+        key_content.clone()
+    } else {
+        std::fs::read_to_string(key_content.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+    };
+
+    let temp_key_path = crate::ssh::write_temp_ssh_key(&format!("tunnel_{}", server.id), &key_data)?;
+
+    let daemon_b64 = base64_encode(DAEMON_SCRIPT.as_bytes());
+    let service_b64 = base64_encode(SERVICE_FILE.as_bytes());
+    let config_str = tunnels_config.to_string();
+    let config_b64 = base64_encode(config_str.as_bytes());
+
+    let remote_cmd = format!(
+        "sudo mkdir -p /etc/masterdeploy && \
+         echo '{daemon_b64}' | base64 -d | sudo tee /etc/masterdeploy/remote_tunnel_daemon.py > /dev/null && \
+         echo '{service_b64}' | base64 -d | sudo tee /etc/systemd/system/md-tunnel.service > /dev/null && \
+         echo '{config_b64}' | base64 -d | sudo tee /etc/masterdeploy/tunnels.json > /dev/null && \
+         sudo chmod +x /etc/masterdeploy/remote_tunnel_daemon.py && \
+         (command -v cloudflared >/dev/null 2>&1 || (curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /tmp/cloudflared && sudo install -m 755 /tmp/cloudflared /usr/local/bin/cloudflared && rm -f /tmp/cloudflared) || true) && \
+         sudo systemctl daemon-reload && \
+         sudo systemctl enable md-tunnel.service && \
+         sudo systemctl restart md-tunnel.service"
+    );
+
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+
+    let res = tokio::process::Command::new(ssh_bin)
+        .args(&[
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=/dev/null",
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=15",
+            "-i", &temp_key_path,
+            &format!("{}@{}", server.ssh_user, server.ip),
+            &remote_cmd,
+        ])
+        .output()
+        .await;
+
+    let _ = std::fs::remove_file(&temp_key_path);
+
+    match res {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let success = out.status.success();
+            Ok(serde_json::json!({
+                "executed": true,
+                "success": success,
+                "stdout": stdout,
+                "stderr": stderr
+            }))
+        }
+        Err(e) => Err(format!("SSH əmri icra edilə bilmədi: {}", e)),
+    }
+}
+
 // 9. Uzaq VM-ə tünel konfiqurasiyasını sinxronizasiya et və Watchdog Daemon-u təmin et
 async fn sync_tunnel_to_remote(
     State(state): State<AppState>,
@@ -308,49 +487,64 @@ async fn sync_tunnel_to_remote(
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
         .ok_or((StatusCode::NOT_FOUND, "Server tapılmadı".to_string()))?;
 
-    let routes = sqlx::query_as::<_, TunnelRoute>("SELECT * FROM tunnel_routes WHERE tunnel_id = ?")
-        .bind(&tunnel_id)
-        .fetch_all(&state.db)
+    let tunnels_config = build_server_tunnels_config(&state.db, &server.id)
         .await
-        .unwrap_or_default();
-
-    // Cloudflare parametrlərini götürürük
-    let api_token: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'cf_api_token'").fetch_optional(&state.db).await.unwrap_or_default();
-    let account_id: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'cf_account_id'").fetch_optional(&state.db).await.unwrap_or_default();
-    let kv_id: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'cf_kv_id'").fetch_optional(&state.db).await.unwrap_or_default();
-
-    // Hər marşrutun tətbiq adlarını toplayırıq
-    let mut app_keys = vec![tunnel.name.clone()];
-    for r in &routes {
-        if let Ok(Some(app)) = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?").bind(&r.app_id).fetch_optional(&state.db).await {
-            app_keys.push(app.name);
-        }
-    }
-
-    let target_port = routes.first().map(|r| r.target_port).unwrap_or(8080);
-
-    let tunnels_config = serde_json::json!({
-        "cloudflare": {
-            "api_token": api_token.unwrap_or_default(),
-            "account_id": account_id.unwrap_or_default(),
-            "kv_id": kv_id.unwrap_or_default()
-        },
-        "tunnels": [
-            {
-                "id": tunnel.id,
-                "name": tunnel.name,
-                "tunnel_type": tunnel.tunnel_type,
-                "target_port": target_port,
-                "app_keys": app_keys
-            }
-        ]
-    });
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
 
     println!("[TUNNEL SYNC] Server: {} üçün tünel konfiqurasiyası hazırlandı: {}", server.name, tunnel.name);
+
+    let remote_res = execute_remote_tunnel_sync(&state, &server, &tunnels_config)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    // Tünellərin statusunu aktivləşdiririk
+    let _ = sqlx::query("UPDATE tunnels SET status = 'active' WHERE server_id = ?")
+        .bind(&server.id)
+        .execute(&state.db)
+        .await;
 
     Ok(Json(serde_json::json!({
         "success": true,
         "tunnel_id": tunnel.id,
+        "server_id": server.id,
+        "server_name": server.name,
+        "remote_sync": remote_res,
+        "config": tunnels_config
+    })))
+}
+
+// 10. Müəyyən bir serverin bütün tünellərini uzaq VM-ə sinxronizasiya et
+async fn sync_server_tunnels_to_remote(
+    State(state): State<AppState>,
+    AxumPath(server_id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Server tapılmadı".to_string()))?;
+
+    let tunnels_config = build_server_tunnels_config(&state.db, &server.id)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    println!("[TUNNEL SYNC] Server: {} üzrə bütün tünellər sinxronizasiya edilir", server.name);
+
+    let remote_res = execute_remote_tunnel_sync(&state, &server, &tunnels_config)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e))?;
+
+    let _ = sqlx::query("UPDATE tunnels SET status = 'active' WHERE server_id = ?")
+        .bind(&server.id)
+        .execute(&state.db)
+        .await;
+
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "server_id": server.id,
+        "server_name": server.name,
+        "remote_sync": remote_res,
         "config": tunnels_config
     })))
 }
@@ -385,4 +579,23 @@ async fn list_app_tunnel_history(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     Ok(Json(history))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_base64_encode() {
+        assert_eq!(base64_encode(b"hello"), "aGVsbG8=");
+        assert_eq!(base64_encode(b"MasterDeploy Multi-Node"), "TWFzdGVyRGVwbG95IE11bHRpLU5vZGU=");
+        assert_eq!(base64_encode(b""), "");
+    }
+
+    #[test]
+    fn test_daemon_and_service_embedded_assets() {
+        assert!(DAEMON_SCRIPT.contains("MasterDeploy Multi-Tunnel Watchdog Daemon"));
+        assert!(DAEMON_SCRIPT.contains("update_cloudflare_kv"));
+        assert!(SERVICE_FILE.contains("ExecStart=/usr/bin/python3 /etc/masterdeploy/remote_tunnel_daemon.py"));
+    }
 }

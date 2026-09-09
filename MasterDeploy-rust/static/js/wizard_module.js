@@ -22,6 +22,12 @@ function showCreateServiceTab() {
     const wizRegImg = document.getElementById('wiz-registry-image');
     if (wizRegImg) wizRegImg.value = '';
 
+    const tunnelModeEl = document.getElementById('wiz-tunnel-mode');
+    if (tunnelModeEl) {
+        tunnelModeEl.value = 'none';
+        toggleWizardTunnelMode();
+    }
+
     loadWizServers();
     loadWizGithubRepos();
     goToStep(1);
@@ -228,14 +234,66 @@ async function loadWizServers() {
         }
 
         const optionsHtml = servers.map(s => `<option value="${s.id}">${s.name} (${s.ip})</option>`).join('');
-        if (serverSelect) serverSelect.innerHTML = optionsHtml;
+        if (serverSelect) {
+            serverSelect.innerHTML = optionsHtml;
+            updateServerStatsAdvisor('wiz-app-server', 'wiz-server-advisor', 'wiz-app-memory', 'wiz-app-cpu');
+            loadWizServerTunnels(serverSelect.value);
+            serverSelect.onchange = () => {
+                updateServerStatsAdvisor('wiz-app-server', 'wiz-server-advisor', 'wiz-app-memory', 'wiz-app-cpu');
+                loadWizServerTunnels(serverSelect.value);
+            };
+        }
         if (appServerSelect) appServerSelect.innerHTML = optionsHtml;
-        
-        if (serverSelect) updateServerStatsAdvisor('wiz-app-server', 'wiz-server-advisor', 'wiz-app-memory', 'wiz-app-cpu');
     } catch (e) {
         console.error("loadWizServers error:", e);
     }
 }
+
+function toggleWizardTunnelMode() {
+    const mode = document.getElementById('wiz-tunnel-mode')?.value || 'none';
+    const existingGroup = document.getElementById('wiz-existing-tunnel-group');
+    const newGroup = document.getElementById('wiz-new-tunnel-group');
+    if (existingGroup) existingGroup.style.display = mode === 'shared' ? 'block' : 'none';
+    if (newGroup) newGroup.style.display = mode === 'dedicated' ? 'block' : 'none';
+    
+    if (mode === 'shared') {
+        const serverId = document.getElementById('wiz-app-server')?.value;
+        if (serverId) {
+            loadWizServerTunnels(serverId);
+        }
+    }
+}
+window.toggleWizardTunnelMode = toggleWizardTunnelMode;
+
+async function loadWizServerTunnels(serverId) {
+    const tunnelSelect = document.getElementById('wiz-selected-tunnel');
+    if (!tunnelSelect) return;
+    if (!serverId) {
+        tunnelSelect.innerHTML = '<option value="">Əvvəlcə server seçin</option>';
+        return;
+    }
+    try {
+        const res = await fetch(`/api/tunnels/server/${serverId}`);
+        if (res.ok) {
+            const tunnels = await res.json();
+            if (!tunnels || tunnels.length === 0) {
+                tunnelSelect.innerHTML = '<option value="">Bu serverdə tünel tapılmadı (Yeni yaradın)</option>';
+            } else {
+                tunnelSelect.innerHTML = tunnels.map(t => {
+                    const routeCount = t.routes ? t.routes.length : 0;
+                    const typeLabel = t.tunnel_type === 'shared' ? 'Ortaq' : 'Dedicated';
+                    return `<option value="${t.id}">${t.name} (${typeLabel} - ${routeCount} marşrut)</option>`;
+                }).join('');
+            }
+        } else {
+            tunnelSelect.innerHTML = '<option value="">Tünellər yüklənə bilmədi</option>';
+        }
+    } catch (e) {
+        console.error("loadWizServerTunnels error:", e);
+        tunnelSelect.innerHTML = '<option value="">Xəta baş verdi</option>';
+    }
+}
+window.loadWizServerTunnels = loadWizServerTunnels;
 
 let wizGithubReposCache = [];
 
@@ -547,6 +605,61 @@ async function handleWizardDeploy(event) {
         if (res.ok) {
             const app = await res.json();
             addActivityLog(`Yeni tətbiq yaradıldı (Wizard): '${payload.name}' (Port: ${payload.port})`, 'app');
+
+            // Tunnel integration (Shared or Dedicated)
+            const tunnelMode = document.getElementById('wiz-tunnel-mode')?.value || 'none';
+            if (tunnelMode === 'shared') {
+                const selectedTunnelId = document.getElementById('wiz-selected-tunnel')?.value;
+                if (selectedTunnelId) {
+                    try {
+                        await fetch(`/api/tunnels/${selectedTunnelId}/attach`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                app_id: app.id,
+                                target_port: payload.port,
+                                route_path: '/'
+                            })
+                        });
+                        // Trigger remote VM sync in background
+                        fetch(`/api/tunnels/${selectedTunnelId}/sync-remote`, { method: 'POST' }).catch(() => {});
+                        addActivityLog(`Tətbiq ortaq tünelə bağlandı: '${app.name}'`, 'tunnel');
+                    } catch (tErr) {
+                        console.error("Tünel bağlama xətası:", tErr);
+                    }
+                }
+            } else if (tunnelMode === 'dedicated') {
+                let tName = document.getElementById('wiz-new-tunnel-name')?.value?.trim();
+                if (!tName) tName = `${app.name}-tunnel`;
+                try {
+                    const createTunRes = await fetch(`/api/tunnels/server/${serverId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            name: tName,
+                            tunnel_type: 'dedicated'
+                        })
+                    });
+                    if (createTunRes.ok) {
+                        const newTun = await createTunRes.json();
+                        await fetch(`/api/tunnels/${newTun.id}/attach`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                app_id: app.id,
+                                target_port: payload.port,
+                                route_path: '/'
+                            })
+                        });
+                        // Trigger remote VM sync in background
+                        fetch(`/api/tunnels/${newTun.id}/sync-remote`, { method: 'POST' }).catch(() => {});
+                        addActivityLog(`Yeni dedicated tünel yaradıldı və qoşuldu: '${tName}'`, 'tunnel');
+                    }
+                } catch (tErr) {
+                    console.error("Dedicated tünel yaratma xətası:", tErr);
+                }
+            }
+
             closeModal('create-service-modal');
             await loadApplications();
             if (submitBtn) {

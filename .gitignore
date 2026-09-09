@@ -15,4 +15,5 @@ temp_*
 **/*.db-wal
 local_data/
 **/local_data/
+archive_unused/
 
