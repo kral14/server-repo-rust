@@ -26,12 +26,14 @@ function resolveLogLevel(log) {
 function resolveLogModule(log) {
     if (log.module) {
         const mod = log.module.toLowerCase();
+        if (mod.includes('tunnel') || mod.includes('tünel')) return 'tunnels';
         if (mod.includes('app') || mod.includes('layihə')) return 'apps';
         if (mod.includes('server')) return 'servers';
         if (mod.includes('deploy')) return 'deploy';
         if (mod.includes('system') || mod.includes('sistem')) return 'system';
     }
     const m = (log.message || '').toLowerCase();
+    if (m.includes('tünel') || m.includes('tunnel') || m.includes('trycloudflare') || m.includes('keçid')) return 'tunnels';
     if (m.includes('server') || m.includes('ssh') || m.includes('host')) return 'servers';
     if (m.includes('deploy') || m.includes('yayım') || m.includes('build') || m.includes('qurulum')) return 'deploy';
     if (m.includes('masterdeploy') || m.includes('sistem') || m.includes('update') || m.includes('token')) return 'system';
@@ -126,6 +128,67 @@ function setActivityFilter(type, val) {
     filterAndRenderActivityLogs();
 }
 
+function handleActivityProjectFilter() {
+    const sel = document.getElementById('activity-project-filter');
+    activityLogsState.projectFilter = sel ? sel.value : 'all';
+    filterAndRenderActivityLogs();
+}
+
+function populateActivityProjectFilter(logs) {
+    const sel = document.getElementById('activity-project-filter');
+    if (!sel) return;
+
+    const currentVal = sel.value || activityLogsState.projectFilter || 'all';
+    const projectNames = new Set();
+
+    // 1. API-dən bütün qeydiyyatda olan layihələri əlavə et
+    if (window._cachedAppList && Array.isArray(window._cachedAppList)) {
+        window._cachedAppList.forEach(a => {
+            if (a.name) projectNames.add(a.name);
+        });
+    } else if (!window._isFetchingApps) {
+        window._isFetchingApps = true;
+        fetch('/api/applications').then(r => r.json()).then(apps => {
+            window._cachedAppList = apps || [];
+            window._isFetchingApps = false;
+            populateActivityProjectFilter(activityLogsState.allLogs);
+        }).catch(() => { window._isFetchingApps = false; });
+    }
+
+    // 2. Loqlardan layihə adlarını çıxar
+    if (Array.isArray(logs)) {
+        logs.forEach(l => {
+            const match = l.message ? l.message.match(/'([^']+)'/) : null;
+            if (match && match[1] && !match[1].includes(' ') && match[1].length < 35) {
+                projectNames.add(match[1]);
+            }
+            if (l.target_id && l.target_id.length < 35 && !l.target_id.includes(' ')) {
+                projectNames.add(l.target_id);
+            }
+        });
+    }
+
+    // 3. DOM-da hazır olan layihə adlarını çıxar
+    document.querySelectorAll('.tunnel-app-row, [data-app-name], .app-card').forEach(el => {
+        const name = el.querySelector('strong')?.textContent?.trim() || el.getAttribute('data-app-name');
+        if (name && name.length < 35) projectNames.add(name);
+    });
+
+    const sortedNames = Array.from(projectNames).sort();
+    let optionsHtml = '<option value="all">🚀 Bütün Layihələr</option>';
+    sortedNames.forEach(pName => {
+        optionsHtml += `<option value="${escapeHtml(pName)}">📦 ${escapeHtml(pName)}</option>`;
+    });
+
+    // Əgər dəyişiklik varsa DOM-u yenilə
+    if (sel.options.length !== sortedNames.length + 1) {
+        sel.innerHTML = optionsHtml;
+        if (currentVal && (currentVal === 'all' || projectNames.has(currentVal))) {
+            sel.value = currentVal;
+        }
+    }
+}
+
 function handleActivitySearch() {
     const input = document.getElementById('activity-search-input');
     activityLogsState.searchQuery = input ? input.value.trim().toLowerCase() : '';
@@ -149,6 +212,9 @@ async function fetchAndRenderActivityLogs() {
             const logs = await res.json();
             const hash = JSON.stringify(logs.slice(0, 5));
             activityLogsState.allLogs = logs;
+
+            // Layihə seçim dropdown-unu doldur
+            populateActivityProjectFilter(logs);
 
             // Update KPI badges
             updateActivityKPIs(logs);
@@ -198,7 +264,7 @@ function updateActivityKPIs(logs) {
 }
 
 function filterAndRenderActivityLogs() {
-    const { allLogs, levelFilter, moduleFilter, searchQuery } = activityLogsState;
+    const { allLogs, levelFilter, moduleFilter, projectFilter, searchQuery } = activityLogsState;
 
     activityLogsState.filteredLogs = allLogs.filter(log => {
         const lvl = resolveLogLevel(log);
@@ -206,6 +272,15 @@ function filterAndRenderActivityLogs() {
 
         if (levelFilter !== 'all' && lvl !== levelFilter) return false;
         if (moduleFilter !== 'all' && mod !== moduleFilter) return false;
+
+        // Layihə süzgəci
+        if (projectFilter && projectFilter !== 'all') {
+            const pLower = projectFilter.toLowerCase();
+            const msgLower = (log.message || '').toLowerCase();
+            const targetLower = (log.target_id || '').toLowerCase();
+            const matchesProject = msgLower.includes(`'${pLower}'`) || msgLower.includes(pLower) || targetLower === pLower;
+            if (!matchesProject) return false;
+        }
 
         if (searchQuery) {
             const haystack = `${log.message} ${log.module || ''} ${log.operator_name || ''} ${lvl} ${mod}`.toLowerCase();
@@ -291,11 +366,17 @@ function renderActivityLogsDOM() {
                     </div>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-                    <button onclick="copySingleLog(event, '${escapedMessage}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:0.95rem; padding:4px 6px; border-radius:4px; transition:color 0.2s;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='var(--text-secondary)'" title="Kopyala">📋</button>
+                    <button onclick="copySingleLog(event, '${escapedMessage}')" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:0.95rem; padding:4px 6px; border-radius:4px; transition:color 0.2s; display:inline-flex; align-items:center;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='var(--text-secondary)'" title="Kopyala">
+                        <i data-lucide="copy" style="width: 13px; height: 13px;"></i>
+                    </button>
                     <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace; opacity:0.85;">${timeStr}</span>
                 </div>
             </div>`;
         }).join('');
+
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+            lucide.createIcons();
+        }
 
         if (autoScroll) {
             cardsView.scrollTop = 0; // top is newest in cards view

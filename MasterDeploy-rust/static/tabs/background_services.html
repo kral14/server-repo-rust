@@ -32,18 +32,23 @@
             <i data-lucide="shield-check" style="width: 16px; height: 16px;"></i>
             <span>2. Sistem Servisləri & Nəzarətçilər (Watchdog & Təmizlik)</span>
         </button>
+        <button id="bg-subtab-btn-tunnels" class="subtab-btn" onclick="switchBgSubTab('tunnels')">
+            <i data-lucide="cloud" style="width: 16px; height: 16px;"></i>
+            <span>3. Multi-Node Tünellər & VM Nəzarəti</span>
+        </button>
         <button id="bg-subtab-btn-logs" class="subtab-btn" onclick="switchBgSubTab('logs')">
             <i data-lucide="activity" style="width: 16px; height: 16px;"></i>
-            <span>3. Arxa Plan Canlı Fəaliyyət Loqları</span>
+            <span>4. Arxa Plan Canlı Fəaliyyət Loqları</span>
         </button>
     </div>
+
 
     <!-- ================= SUBTAB 1: AUTO-DEPLOY (CI/CD) ================= -->
     <div id="bg-content-autodeploy" class="bg-subtab-content" style="display: block;">
         
         <!-- İzah Kartı: Bu bölmə nə edir? -->
         <div style="background: rgba(0, 210, 255, 0.04); border: 1px solid rgba(0, 210, 255, 0.15); border-radius: 8px; padding: 0.45rem 0.85rem; margin-bottom: 0.55rem; display: flex; align-items: center; gap: 0.6rem;">
-            <span style="font-size: 1.1rem;">💡</span>
+            <i data-lucide="lightbulb" style="width: 18px; height: 18px; color: #00d2ff; flex-shrink: 0;"></i>
             <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.35;">
                 <strong style="color: #00d2ff;">Bu bölmə nə işə yarayır?</strong> 
                 GitHub və ya Docker Reyestrindəki tətbiqləriniz daimi izlənilir. Yeni imic və ya kod aşkar edildikdə avtomatik olaraq layihəni çəkib yenidən yayına çıxarır (Auto-Deploy).
@@ -71,6 +76,13 @@
                     Aktivdir (30s dövrü)
                 </div>
             </div>
+            <div class="section-card" onclick="switchBgSubTab('tunnels')" style="margin: 0; padding: 0.45rem 0.75rem; border-left: 2px solid #00d2ff; border-radius: 8px; cursor: pointer; transition: transform 0.2s;" title="Bütün VM Tünellərini idarə etmək üçün klikləyin">
+                <span style="font-size: 0.65rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 600; letter-spacing: 0.03em; display: flex; align-items: center; gap: 4px;">
+                    <span>Aktiv VM Tünelləri</span>
+                    <i data-lucide="cloud" style="width: 12px; height: 12px; color: #00d2ff;"></i>
+                </span>
+                <div style="font-size: 1.15rem; font-weight: 700; color: #00d2ff; margin-top: 0.1rem;" id="ad-stat-tunnels">Oxunur...</div>
+            </div>
         </div>
 
         <!-- MasterDeploy Core Avto-Update Kartı -->
@@ -86,10 +98,14 @@
                             <span style="font-size: 0.65rem; padding: 1px 6px; border-radius: 8px; background: rgba(0, 210, 255, 0.18); color: #38bdf8; font-weight: 700; border: 1px solid rgba(0, 210, 255, 0.25);">Sistem Nüvəsi</span>
                             <span id="ad-core-version-badge" style="font-size: 0.68rem; color: #a5b4fc; font-family: monospace; font-weight: 600;">v1.0.170</span>
                         </div>
-                        <div style="font-size: 0.73rem; color: var(--text-secondary);">
-                            GitHub Reyestri: <code style="color: #cbd5e1;">ghcr.io/kral14/server-repo-rust</code>
-                            <span style="margin: 0 4px; opacity: 0.5;">•</span>
-                            Status: <span id="ad-core-status-text" style="color: #38bdf8; font-weight: 600;">Mövcud ən son versiyadadır ✅</span>
+                        <div style="font-size: 0.73rem; color: var(--text-secondary); display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
+                            <span>GitHub Reyestri: <code style="color: #cbd5e1;">ghcr.io/kral14/server-repo-rust</code></span>
+                            <span style="opacity: 0.5;">•</span>
+                            <span>Status:</span>
+                            <span id="ad-core-status-text" style="color: #38bdf8; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+                                <span>Mövcud ən son versiyadadır</span>
+                                <i data-lucide="check-circle-2" style="width: 13px; height: 13px; color: #22c55e;"></i>
+                            </span>
                         </div>
                     </div>
                 </div>
@@ -116,8 +132,14 @@
             </div>
             <div style="display: flex; gap: 0.4rem;">
                 <button class="hbtn ad-filter-btn active" onclick="setAutoDeployFilter('all', this)" style="padding: 0.3rem 0.65rem; font-size: 0.75rem; height: 32px;">Hamısı</button>
-                <button class="hbtn ad-filter-btn" onclick="setAutoDeployFilter('active', this)" style="padding: 0.3rem 0.65rem; font-size: 0.75rem; height: 32px;">🟢 Aktivlər</button>
-                <button class="hbtn ad-filter-btn" onclick="setAutoDeployFilter('inactive', this)" style="padding: 0.3rem 0.65rem; font-size: 0.75rem; height: 32px;">⚪ Deaktivlər</button>
+                <button class="hbtn ad-filter-btn" onclick="setAutoDeployFilter('active', this)" style="padding: 0.3rem 0.65rem; font-size: 0.75rem; height: 32px; display: inline-flex; align-items: center; gap: 5px;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #22c55e; display: inline-block;"></span>
+                    <span>Aktivlər</span>
+                </button>
+                <button class="hbtn ad-filter-btn" onclick="setAutoDeployFilter('inactive', this)" style="padding: 0.3rem 0.65rem; font-size: 0.75rem; height: 32px; display: inline-flex; align-items: center; gap: 5px;">
+                    <span style="width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; display: inline-block;"></span>
+                    <span>Deaktivlər</span>
+                </button>
             </div>
         </div>
 
@@ -250,7 +272,7 @@
         <div class="card" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 1.2rem;">📋</span>
+                    <i data-lucide="layout-list" style="width: 18px; height: 18px; color: #00d2ff;"></i>
                     <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Canlı Layihələrin Vəziyyəti və Tunel Əlaqələri</h3>
                 </div>
                 <span style="font-size: 0.78rem; color: var(--text-secondary);">Cloudflare tunellərinin vəziyyəti</span>
@@ -282,12 +304,46 @@
         </div>
     </div>
 
-    <!-- ================= SUBTAB 3: CANLI LOQLAR ================= -->
+    <!-- ================= SUBTAB 3: MULTI-NODE TÜNELLƏR & VM NƏZARƏTİ ================= -->
+    <div id="bg-content-tunnels" class="bg-subtab-content" style="display: none;">
+        <!-- İzah Kartı -->
+        <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 8px; padding: 0.6rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.8rem;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(245, 158, 11, 0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <i data-lucide="cloud" style="width: 18px; height: 18px; color: #f59e0b;"></i>
+                </div>
+                <div>
+                    <strong style="color: #f59e0b; font-size: 0.9rem;">Multi-Node Server Tünelləri Mərkəzi</strong>
+                    <div style="font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px;">
+                        Hər bir VM-də qurulmuş müstəqil tünelləri (Tunel A, Tunel B), canlı linkləri və bağlı layihələri buradan izləyin və idarə edin.
+                    </div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button class="btn btn-secondary btn-sm" onclick="loadMultiNodeTunnelsOverview()" style="font-size: 0.76rem; padding: 4px 10px; display: inline-flex; align-items: center; gap: 5px;">
+                    <i data-lucide="refresh-cw" style="width: 12px; height: 12px;"></i>
+                    <span>Tünelləri Yenilə</span>
+                </button>
+                <button class="btn btn-primary btn-sm" onclick="installPlugin('cloudflare')" style="font-size: 0.76rem; padding: 4px 12px; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; display: inline-flex; align-items: center; gap: 5px;">
+                    <i data-lucide="plus" style="width: 12px; height: 12px;"></i>
+                    <span>Yeni Serverə Qur</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Serverlər üzrə Tünel Kartları Şəbəkəsi -->
+        <div id="bg-multi-node-tunnels-grid" style="display: flex; flex-direction: column; gap: 1rem;">
+            <div class="no-data">Tünel məlumatları oxunur...</div>
+        </div>
+    </div>
+
+    <!-- ================= SUBTAB 4: CANLI LOQLAR ================= -->
     <div id="bg-content-logs" class="bg-subtab-content" style="display: none;">
+
         <div class="card" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 1.25rem;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.8rem; flex-wrap: wrap; gap: 0.5rem;">
                 <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 1.2rem;">📡</span>
+                    <i data-lucide="activity" style="width: 18px; height: 18px; color: #00d2ff;"></i>
                     <h3 style="margin: 0; font-size: 0.98rem; font-weight: 600;">Arxa Plan Nəzarət və Watchdog Loqları</h3>
                 </div>
                 <button class="btn btn-secondary btn-sm" onclick="loadBackgroundActivityLogs()" style="display: inline-flex; align-items: center; gap: 5px;">

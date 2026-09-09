@@ -22,6 +22,8 @@ function showCreateServiceTab() {
     const wizRegImg = document.getElementById('wiz-registry-image');
     if (wizRegImg) wizRegImg.value = '';
 
+    loadWizServers();
+    loadWizGithubRepos();
     goToStep(1);
     showModal('create-service-modal');
 }
@@ -39,6 +41,12 @@ function goToStep(step) {
     // Toggle buildpack vs dockerfile config visibility when going to step 3
     if (step === 3) {
         selectBuildOption(wizSelectedBuildOption || 'buildpack');
+    }
+
+    // When going to step 4, ensure servers and GitHub repos are loaded
+    if (step === 4) {
+        loadWizServers();
+        loadWizGithubRepos();
     }
 
     if (document.body.classList.contains('debug-mode')) {
@@ -229,6 +237,93 @@ async function loadWizServers() {
     }
 }
 
+let wizGithubReposCache = [];
+
+async function loadWizGithubRepos(forceRefresh = false) {
+    const repoSelect = document.getElementById('wiz-repo-select');
+    if (!repoSelect) return;
+
+    if (!forceRefresh && wizGithubReposCache && wizGithubReposCache.length > 0) {
+        populateWizRepoDropdown(wizGithubReposCache);
+        return;
+    }
+
+    repoSelect.innerHTML = '<option value="">🐱 GitHub Repozitoriyaları yüklənir...</option>';
+
+    try {
+        let token = typeof githubToken !== 'undefined' ? githubToken : '';
+        if (!token) {
+            const tokenRes = await fetch('/api/settings/github-token');
+            if (tokenRes.ok) {
+                const tokenData = await tokenRes.json();
+                token = tokenData.token || '';
+                if (typeof githubToken !== 'undefined') githubToken = token;
+            }
+        }
+
+        if (!token) {
+            repoSelect.innerHTML = '<option value="">⚠️ GitHub Token tapılmadı (Açarlar və Tokenlər bölməsindən əlavə edin)</option>';
+            return;
+        }
+
+        const res = await fetch('https://api.github.com/user/repos?per_page=100&sort=updated', {
+            headers: { 'Authorization': `token ${token}` }
+        });
+
+        if (res.ok) {
+            wizGithubReposCache = await res.json();
+            populateWizRepoDropdown(wizGithubReposCache);
+        } else {
+            repoSelect.innerHTML = '<option value="">❌ Repozitoriyaları almaq olmadı (Token icazələrini yoxlayın)</option>';
+        }
+    } catch (e) {
+        repoSelect.innerHTML = `<option value="">❌ Bağlantı xətası: ${e.message}</option>`;
+    }
+}
+
+function populateWizRepoDropdown(repos) {
+    const repoSelect = document.getElementById('wiz-repo-select');
+    if (!repoSelect) return;
+
+    if (!Array.isArray(repos) || repos.length === 0) {
+        repoSelect.innerHTML = '<option value="">Heç bir repozitoriya tapılmadı</option>';
+        return;
+    }
+
+    const currentUrl = document.getElementById('wiz-app-repo')?.value || '';
+
+    repoSelect.innerHTML = `<option value="">-- GitHub Repozitoriyasını Seçin (${repos.length} Repo) --</option>` +
+        repos.map(r => {
+            const cloneUrl = r.clone_url || `https://github.com/${r.full_name}.git`;
+            const isSelected = currentUrl && (currentUrl === cloneUrl || currentUrl.includes(r.full_name));
+            const icon = r.private ? '🔒' : '🌐';
+            return `<option value="${cloneUrl}" data-name="${r.name}" data-branch="${r.default_branch || 'main'}" ${isSelected ? 'selected' : ''}>${icon} ${r.full_name}</option>`;
+        }).join('');
+}
+
+function handleWizRepoSelectChange(selectEl) {
+    const url = selectEl.value;
+    if (!url) return;
+
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const repoName = opt.getAttribute('data-name') || '';
+    const defaultBranch = opt.getAttribute('data-branch') || 'main';
+
+    const repoUrlInput = document.getElementById('wiz-app-repo');
+    if (repoUrlInput) repoUrlInput.value = url;
+
+    const branchInput = document.getElementById('wiz-app-branch');
+    if (branchInput) branchInput.value = defaultBranch;
+
+    const nameInput = document.getElementById('wiz-app-name');
+    if (nameInput && (!nameInput.value || nameInput.value === 'my-docker-service' || nameInput.value === 'my-web-app')) {
+        nameInput.value = repoName;
+    }
+}
+
+window.loadWizGithubRepos = loadWizGithubRepos;
+window.handleWizRepoSelectChange = handleWizRepoSelectChange;
+
 function goBackFromConfig() {
     if (wizSelectedSource === 'docker') {
         goToStep(1);
@@ -312,20 +407,30 @@ async function handleWizardDeploy(event) {
         const branchVal = appBranchInput ? appBranchInput.value.trim() : 'main';
 
         let repoUrl = "";
-        let branch = branchVal || "main";
+        let branch = branchVal || "";
 
         if (deployType === 'git') {
+            const repoSelect = document.getElementById('wiz-repo-select');
             if (repoUrlVal) {
                 repoUrl = repoUrlVal;
+            } else if (repoSelect && repoSelect.value) {
+                repoUrl = repoSelect.value;
+                if (!branch && repoSelect.selectedOptions?.[0]?.getAttribute('data-branch')) {
+                    branch = repoSelect.selectedOptions[0].getAttribute('data-branch');
+                }
             } else if (typeof wizSelectedRepo !== 'undefined' && wizSelectedRepo && wizSelectedRepo.manualUrl) {
                 repoUrl = wizSelectedRepo.manualUrl;
-            } else if (typeof wizSelectedRepo !== 'undefined' && wizSelectedRepo && wizSelectedRepo.full_name) {
+            } else if (typeof wizSelectedRepo !== 'undefined' && wizSelectedRepo && wizSelectedRepo.full_name && !wizSelectedRepo.isDocker) {
                 const token = typeof githubToken !== 'undefined' ? githubToken : '';
                 if (wizSelectedRepo.private && token) {
                     repoUrl = `https://${token}@github.com/${wizSelectedRepo.full_name}.git`;
                 } else {
                     repoUrl = `https://github.com/${wizSelectedRepo.full_name}.git`;
                 }
+            }
+
+            if (!branch) {
+                branch = "main";
             }
 
             if (!repoUrl) {

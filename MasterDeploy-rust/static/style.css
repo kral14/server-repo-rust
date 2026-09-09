@@ -126,20 +126,28 @@ body::-webkit-scrollbar,
     font-weight: 500;
 }
 
-/* Sürətli Keçid Bölmələri */
+/* Sürətli Keçid Bölmələri və Alt-Tab Hover Menuları */
 .topbar-quick-nav {
     display: flex;
     align-items: center;
     gap: 0.35rem;
-    overflow-x: auto;
+    overflow: visible !important;
     padding: 0 0.5rem;
+    height: 100%;
+}
+
+.topbar-nav-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
 }
 
 .topbar-nav-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 0.32rem 0.75rem;
+    gap: 5px;
+    padding: 0.32rem 0.68rem;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 8px;
@@ -157,10 +165,25 @@ body::-webkit-scrollbar,
     height: 13px;
 }
 
-.topbar-nav-chip:hover {
+.topbar-nav-chip .chip-arrow {
+    width: 10px;
+    height: 10px;
+    opacity: 0.45;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    margin-left: 1px;
+}
+
+.topbar-nav-wrapper:hover .topbar-nav-chip {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(0, 210, 255, 0.3);
+    box-shadow: 0 0 12px rgba(0, 210, 255, 0.12);
+}
+
+.topbar-nav-wrapper:hover .topbar-nav-chip .chip-arrow {
+    opacity: 1;
+    transform: rotate(180deg);
+    color: #00d2ff;
 }
 
 .topbar-nav-chip.active {
@@ -169,6 +192,176 @@ body::-webkit-scrollbar,
     border-color: rgba(0, 210, 255, 0.35);
     box-shadow: 0 0 10px rgba(0, 210, 255, 0.15);
 }
+
+/* Hover Dropdown Popover */
+.topbar-nav-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    transform: translateX(-50%) translateY(-6px);
+    min-width: 275px;
+    background: rgba(15, 20, 32, 0.96);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.75), 0 0 1px 1px rgba(0, 210, 255, 0.2);
+    padding: 6px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.18s;
+    z-index: 1000000;
+}
+
+/* Mouse Körpüsü */
+.topbar-nav-dropdown::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 0;
+    right: 0;
+    height: 8px;
+}
+
+.topbar-nav-wrapper:hover .topbar-nav-dropdown {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+}
+
+.topbar-nav-wrapper:first-child .topbar-nav-dropdown {
+    left: 0;
+    transform: translateX(0) translateY(-6px);
+}
+.topbar-nav-wrapper:first-child:hover .topbar-nav-dropdown {
+    transform: translateX(0) translateY(0);
+}
+
+.topbar-nav-wrapper:last-child .topbar-nav-dropdown {
+    left: auto;
+    right: 0;
+    transform: translateX(0) translateY(-6px);
+}
+.topbar-nav-wrapper:last-child:hover .topbar-nav-dropdown {
+    transform: translateX(0) translateY(0);
+}
+
+.topbar-dropdown-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px 8px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 4px;
+}
+.topbar-dropdown-header span {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #94a3b8;
+}
+.topbar-dropdown-header .dropdown-count {
+    font-size: 0.65rem;
+    background: rgba(0, 210, 255, 0.12);
+    color: #00d2ff;
+    padding: 1px 6px;
+    border-radius: 10px;
+    font-weight: 600;
+}
+
+.topbar-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 7px 10px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: #e2e8f0;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+    font-family: inherit;
+}
+
+.topbar-dropdown-item:hover {
+    background: rgba(0, 210, 255, 0.09);
+    border-color: rgba(0, 210, 255, 0.22);
+    color: #fff;
+    transform: translateX(3px);
+}
+
+.dropdown-item-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+}
+
+.topbar-dropdown-item:hover .dropdown-item-icon {
+    background: rgba(0, 210, 255, 0.18);
+    border-color: rgba(0, 210, 255, 0.4);
+    color: #00d2ff;
+    box-shadow: 0 0 10px rgba(0, 210, 255, 0.25);
+}
+
+.dropdown-item-icon i, .dropdown-item-icon svg {
+    width: 14px;
+    height: 14px;
+}
+
+.dropdown-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
+}
+
+.dropdown-item-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.topbar-dropdown-item:hover .dropdown-item-title {
+    color: #00d2ff;
+}
+
+.dropdown-item-desc {
+    font-size: 0.68rem;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dropdown-item-badge {
+    font-size: 0.62rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+.badge-blue { background: rgba(0, 210, 255, 0.15); color: #38bdf8; border: 1px solid rgba(0, 210, 255, 0.25); }
+.badge-green { background: rgba(46, 204, 113, 0.15); color: #2ecc71; border: 1px solid rgba(46, 204, 113, 0.25); }
+.badge-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.25); }
+.badge-amber { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }
 
 .topbar-right { display: flex; align-items: center; gap: 0.5rem; }
 .topbar-action-btn {
@@ -213,6 +406,43 @@ body::-webkit-scrollbar,
     color: #ffb86c !important;
     box-shadow: 0 0 10px rgba(255, 184, 108, 0.25) !important;
 }
+
+/* Header Kontekstual Axtarış Qutusu (Brauzer şifrə autofill-inə 100% qarşı toxunulmaz) */
+.topbar-search-box {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 5px 28px 5px 32px;
+    font-size: 0.8rem;
+    color: #fff;
+    width: 180px;
+    min-height: 28px;
+    height: 28px;
+    line-height: 18px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    outline: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: text;
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    user-select: text;
+}
+.topbar-search-box:focus {
+    width: 250px;
+    border-color: #38bdf8;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.22);
+}
+.topbar-search-box:empty:before {
+    content: attr(data-placeholder);
+    color: #94a3b8;
+    pointer-events: none;
+    font-style: normal;
+}
+
 
 .app-container {
     display: flex;
@@ -901,6 +1131,18 @@ input:focus, select:focus { outline: 1px solid var(--accent-color); box-shadow: 
     flex-direction: column !important;
     flex: 1 !important;
     min-height: 0 !important;
+}
+
+/* Pəncərə sistemində məzmun daxilindəki təkrar başlıq bağlama (X) düymələrini gizlət */
+.win-body .close-btn,
+.win-body button.close-btn,
+.win-body .modal-card > div:first-child > button[onclick*="closeModal"],
+.win-body > div:first-child > button[onclick*="closeModal"],
+.win-body div[style*="justify-content: space-between"] > button[onclick*="closeModal"],
+.win-body div[style*="justify-content:space-between"] > button[onclick*="closeModal"],
+.win-body div[style*="justify-content: space-between"] > button[onclick*="appHideOverlay"],
+.win-body div[style*="justify-content:space-between"] > button[onclick*="appHideOverlay"] {
+    display: none !important;
 }
 
 /* Windows 11 style Snap Layout Menu */
@@ -1817,4 +2059,118 @@ input:focus, select:focus { outline: 1px solid var(--accent-color); box-shadow: 
 .nav-btn.active svg {
     stroke: var(--accent-color) !important;
     filter: drop-shadow(0 0 6px rgba(0, 210, 255, 0.6));
-}
+}
+
+/* Global Custom Confirm/Alert Modal Animations */
+@keyframes confirmCardPop {
+    0% {
+        opacity: 0;
+        transform: scale(0.92) translateY(12px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+.confirm-card-box {
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ==========================================================================
+   Desktop Tab Windows System (Floating Multi-Window Workspace)
+   ========================================================================== */
+.modal-backdrop.desktop-tab-window {
+    pointer-events: none !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+}
+
+.modal-backdrop.desktop-tab-window .modal-card.desktop-tab-card {
+    background: rgba(15, 18, 28, 0.94) !important;
+    backdrop-filter: blur(24px) !important;
+    -webkit-backdrop-filter: blur(24px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(0, 210, 255, 0.12) !important;
+    overflow: hidden !important;
+}
+
+.modal-backdrop.desktop-tab-window .win-body {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 12px 18px 16px 18px !important;
+    margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+}
+
+.modal-backdrop.desktop-tab-window .tab-section {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+/* Duplicate H2 başlıqlarını pəncərə daxilində gizlətmək və təsviri incəltmək */
+.modal-backdrop.desktop-tab-window .tab-header,
+.modal-backdrop.desktop-tab-window .tab-header-btn {
+    margin-bottom: 0.8rem !important;
+    padding-bottom: 0.6rem !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+}
+
+.modal-backdrop.desktop-tab-window .tab-header h2,
+.modal-backdrop.desktop-tab-window .tab-header-btn h2 {
+    display: none !important;
+}
+
+.modal-backdrop.desktop-tab-window .tab-header p,
+.modal-backdrop.desktop-tab-window .tab-header-btn p {
+    font-size: 0.82rem !important;
+    color: var(--text-secondary) !important;
+    margin: 0 !important;
+}
+
+/* Light Theme dəstəyi */
+[data-theme="light"] .modal-backdrop.desktop-tab-window .modal-card.desktop-tab-card {
+    background: rgba(245, 248, 255, 0.96) !important;
+    border-color: rgba(0, 0, 0, 0.12) !important;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25) !important;
+}
+
+[data-theme="light"] .modal-backdrop.desktop-tab-window .tab-header,
+[data-theme="light"] .modal-backdrop.desktop-tab-window .tab-header-btn {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Pəncərə diqqət animasiyası (Window focus pulse) */
+.win-focus-pulse {
+    animation: winFocusPulseAnim 0.45s ease-out !important;
+}
+@keyframes winFocusPulseAnim {
+    0% { transform: scale(1); box-shadow: 0 0 0 rgba(0, 210, 255, 0); }
+    50% { transform: scale(1.012); box-shadow: 0 0 35px rgba(0, 210, 255, 0.7); }
+    100% { transform: scale(1); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65); }
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+.spin-animation {
+    animation: spin 1.2s linear infinite;
+    display: inline-block;
+}
+
+

@@ -665,6 +665,33 @@
                             yaradarkən serverinizin yuxarıdakı "Server Stats" panelində olan boş limitlərini nəzərə
                             alın.</small>
                     </div>
+                    <div class="form-group" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--card-border); padding: 12px; border-radius: 8px; margin-top: 1rem;">
+                        <label style="display: flex; align-items: center; justify-content: space-between;">
+                            <span>🌐 Xarici Tünel Bağlantısı (Cloudflare)</span>
+                            <input type="checkbox" id="app-enable-tunnel" onchange="toggleTunnelSelectionFields()" style="width: auto;">
+                        </label>
+                        <div id="app-tunnel-options" style="display: none; margin-top: 10px;">
+                            <div class="form-group" style="margin-bottom: 8px;">
+                                <label style="font-size: 0.8rem;">Tünel Rejimi</label>
+                                <select id="app-tunnel-mode" onchange="handleTunnelModeChange()" style="font-size: 0.85rem;">
+                                    <option value="shared">🔗 Mövcud Tünelə Qoş (Resurs Qənaəti)</option>
+                                    <option value="new">✨ Yeni Müstəqil Tünel Yarat</option>
+                                    <option value="none">❌ Tünelsiz (Yalnız lokal/daxili port)</option>
+                                </select>
+                            </div>
+                            <div id="app-existing-tunnel-group" class="form-group" style="margin-bottom: 8px;">
+                                <label style="font-size: 0.8rem;">Mövcud Tünel Seçin</label>
+                                <select id="app-existing-tunnel-select" style="font-size: 0.85rem;">
+                                    <option value="">Server seçildikdə yüklənəcək...</option>
+                                </select>
+                            </div>
+                            <div id="app-new-tunnel-group" class="form-group" style="display: none; margin-bottom: 8px;">
+                                <label style="font-size: 0.8rem;">Yeni Tünelin Adı</label>
+                                <input type="text" id="app-new-tunnel-name" placeholder="Məs: Tunel-Mezuniyyet" style="font-size: 0.85rem;">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Mühit Dəyişənləri (ENV)</label>
                         <div id="env-vars-container"
@@ -675,6 +702,7 @@
                             style="padding: 0.5rem 1rem; font-size: 0.8rem; border-radius: 6px;">+ Əlavə Et</button>
                     </div>
                 </div>
+
                 <div class="item-actions">
                     <button class="btn btn-primary" onclick="deployApp('${app.id}')">Yayına Al (Deploy)</button>
                     <button class="btn btn-secondary" onclick="viewLogs('${app.id}')">Loqlar</button>
@@ -903,11 +931,22 @@
                         </div>
 
                         <div id="wiz-git-section-wrapper">
+                            <div class="form-group">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <label style="font-size: 0.8rem; font-weight: 600; color: #38bdf8;">🐱 GitHub Repozitoriyası Seçin</label>
+                                    <button type="button" class="btn btn-secondary btn-xs" onclick="loadWizGithubRepos(true)" style="padding: 2px 8px; font-size: 0.72rem; cursor: pointer; border-radius: 4px;">🔄 Yenilə</button>
+                                </div>
+                                <select id="wiz-repo-select" onchange="handleWizRepoSelectChange(this)" style="background: #12141e; color: #fff; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%; font-size: 0.85rem;">
+                                    <option value="">Repozitoriyalar yüklənir...</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Git Repo URL</label>
+                                <input type="text" id="wiz-app-repo" placeholder="Məs: https://github.com/kral14/repo.git">
+                            </div>
                             <div class="form-group" id="wiz-branch-group">
                                 <label>Branch (Budaq)</label>
-                                <select id="wiz-app-branch" class="form-control" style="background: #12141e;">
-                                    <option value="main">main</option>
-                                </select>
+                                <input type="text" id="wiz-app-branch" value="main" placeholder="main">
                             </div>
                         </div>
                         <div class="form-group">
@@ -965,10 +1004,6 @@
                     <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Ortaq tünel verilənlər
                         bazası (KV) nizamlamaları</p>
                 </div>
-                <button onclick="appHideOverlay('cf-setup-overlay')"
-                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
-                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
-                    onmouseout="this.style.background='transparent'">✕</button>
             </div>
 
             <div id="cf-connection-status"
@@ -1013,10 +1048,6 @@
                     <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Addım-addım tünelin
                         sabit linkə bağlanması</p>
                 </div>
-                <button onclick="appHideOverlay('cf-help-overlay')"
-                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
-                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
-                    onmouseout="this.style.background='transparent'">✕</button>
             </div>
 
             <div

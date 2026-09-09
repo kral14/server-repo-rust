@@ -1,15 +1,59 @@
 <div id="plugins-modal" class="modal-backdrop">
-        <div class="modal-card" style="max-width: 600px; width: 95%;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <div>
-                    <h2 style="margin: 0; font-size: 1.3rem;">🧩 Modullar Mərkəzi</h2>
-                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Əlavə imkanları buradan
-                        yükləyin və aktivləşdirin</p>
+    <div class="modal-card" style="max-width: 650px; width: 95%;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div>
+                <h2 style="margin: 0; font-size: 1.3rem;">🧩 Modullar Mərkəzi</h2>
+                <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Serverləriniz üçün modulları buradan seçib quraşdırın</p>
+            </div>
+        </div>
+        <div id="plugins-list" style="max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px;">
+            <!-- Dinamik yüklənən modullar bura gələcək -->
+        </div>
+    </div>
+</div>
+
+<!-- Modul Quraşdırmaq Üçün Server Seçim və Canlı Terminal Pəncərəsi -->
+<div id="plugin-server-select-modal" class="modal-backdrop">
+    <div class="modal-card" style="width: 900px; max-width: 95%;">
+        <div class="modal-body" style="padding: 1.2rem; display: flex; flex-direction: column; gap: 12px;">
+            <div style="margin-bottom: 6px;">
+                <p id="plugin-select-subtitle" style="margin: 0; font-size: 0.8rem; color: var(--text-secondary);">Hədəf VM seçin və real vaxtlı quraşdırma loqlarını izləyin</p>
+            </div>
+
+            <!-- 2 Sütunlu Struktur: Sol Serverlər, Sağ Terminal -->
+            <div style="display: grid; grid-template-columns: 360px 1fr; gap: 14px; height: 380px;">
+                <!-- Sol Panel: Serverlər -->
+                <div style="display: flex; flex-direction: column; background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); border-radius: 8px; padding: 10px;">
+                    <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 8px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center;">
+                        <span>🖥️ Mövcud Serverlər</span>
+                        <button class="btn btn-secondary btn-sm" onclick="installPluginAllServers()" style="font-size: 0.72rem; padding: 2px 8px; color: #93c5fd;">🚀 Hamısına Qur</button>
+                    </div>
+                    <div id="plugin-servers-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px;">
+                        <!-- Serverlərin siyahısı bura gələcək -->
+                    </div>
+                </div>
+
+                <!-- Sağ Panel: Canlı Terminal Loqları -->
+                <div style="display: flex; flex-direction: column; background: #07080d; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); padding: 8px 12px; border-bottom: 1px solid var(--card-border);">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span id="plugin-terminal-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #4ade80;"></span>
+                            <span style="font-size: 0.8rem; font-family: monospace; color: #e2e8f0; font-weight: 600;">📟 Quraşdırma Terminalı</span>
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="clearPluginTerminal()" style="padding: 2px 8px; font-size: 0.72rem;">🧹 Təmizlə</button>
+                    </div>
+                    <div id="plugin-terminal-body" style="flex: 1; padding: 12px; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82rem; color: #4ade80; line-height: 1.5; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">
+                        <span style="color: #64748b;">[SİSTEM] Quraşdırma loqları üçün server seçin və ya 'Quraşdır' düyməsinə klikləyin...</span>
+                    </div>
                 </div>
             </div>
-            <div id="plugins-list"
-                style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px;">
-                <!-- Dinamik yüklənən modullar bura gələcək -->
+
+            <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--card-border);">
+                <button class="btn btn-secondary" onclick="closeModal('plugin-server-select-modal')" style="padding: 6px 16px;">Bağla</button>
             </div>
         </div>
     </div>
+</div>
+
+
+

@@ -78,6 +78,11 @@ document.addEventListener('click', (e) => {
 });
 
 function switchCoolifySubTab(tab) {
+    if (!tab) tab = localStorage.getItem('active_keys_subtab') || 'ssh';
+    try {
+        localStorage.setItem('active_keys_subtab', tab);
+    } catch (e) {}
+
     ['ssh', 'system-key', 'api', 'cloud'].forEach(t => {
         const btn = document.getElementById('subtab-btn-' + t);
         const content = document.getElementById('coolify-content-' + t);
@@ -546,5 +551,6 @@ async function initKeysTokens() {
     await loadSshKeys();
     await loadLocalSshKey();
     await loadGithubTokenStatus();
-    switchCoolifySubTab('ssh');
+    const savedKeysSubTab = localStorage.getItem('active_keys_subtab') || 'ssh';
+    switchCoolifySubTab(savedKeysSubTab);
 }

@@ -136,6 +136,9 @@ function toggleAccordion(contentId, headerElement) {
         } else {
             icon.style.transform = 'rotate(180deg)';
         }
+        if (contentId === 'wiz-source-content' && typeof loadWizGithubRepos === 'function') {
+            loadWizGithubRepos();
+        }
     }
 }
 
@@ -755,6 +758,10 @@ async function saveAppSettings() {
         return;
     }
     const payload = buildSettingsPayload();
+    if (payload.deploy_type === 'git' && !payload.repo_url) {
+        alert("⚠️ Zəhmət olmasa Git Repo URL daxil edin!");
+        return;
+    }
     try {
         const res = await fetch(`/api/applications/${appId}`, {
             method: 'PUT',
@@ -1125,7 +1132,19 @@ async function verifyGithubToken(token) {
 }
 
 async function loadGithubRepos() {
-    const token = githubToken;
+    let token = typeof githubToken !== 'undefined' ? githubToken : '';
+    if (!token) {
+        try {
+            const tokenRes = await fetch('/api/settings/github-token');
+            if (tokenRes.ok) {
+                const tokenData = await tokenRes.json();
+                token = tokenData.token || '';
+                if (typeof githubToken !== 'undefined') githubToken = token;
+            }
+        } catch (e) {
+            console.error("loadGithubRepos token fetch error:", e);
+        }
+    }
     const repoSelect = document.getElementById('app-repo-select');
     const settingsRepoSelect = document.getElementById('settings-repo-select');
     const wizardReposList = document.getElementById('github-repos-list');

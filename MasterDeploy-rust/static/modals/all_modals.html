@@ -328,28 +328,71 @@
 
     <!-- Modullar Modalı -->
     <div id="plugins-modal" class="modal-backdrop">
-        <div class="modal-card" style="max-width: 600px; width: 95%;">
+        <div class="modal-card" style="max-width: 650px; width: 95%;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <div>
                     <h2 style="margin: 0; font-size: 1.3rem;">🧩 Modullar Mərkəzi</h2>
-                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Əlavə imkanları buradan
-                        yükləyin və aktivləşdirin</p>
+                    <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Serverləriniz üçün modulları buradan seçib quraşdırın</p>
                 </div>
             </div>
             <div id="plugins-list"
-                style="max-height: 400px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px;">
+                style="max-height: 420px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px;">
                 <!-- Dinamik yüklənən modullar bura gələcək -->
             </div>
         </div>
     </div>
+
+    <!-- Modul Quraşdırmaq Üçün Server Seçim və Canlı Terminal Pəncərəsi -->
+    <div id="plugin-server-select-modal" class="modal-backdrop">
+        <div class="modal-card" style="width: 900px; max-width: 95%;">
+            <div class="modal-body" style="padding: 1.2rem; display: flex; flex-direction: column; gap: 12px;">
+                <div style="margin-bottom: 6px;">
+                    <p id="plugin-select-subtitle" style="margin: 0; font-size: 0.8rem; color: var(--text-secondary);">Hədəf VM seçin və real vaxtlı quraşdırma loqlarını izləyin</p>
+                </div>
+
+                <!-- 2 Sütunlu Struktur: Sol Serverlər, Sağ Terminal -->
+                <div style="display: grid; grid-template-columns: 360px 1fr; gap: 14px; height: 380px;">
+                    <!-- Sol Panel: Serverlər -->
+                    <div style="display: flex; flex-direction: column; background: rgba(0,0,0,0.25); border: 1px solid var(--card-border); border-radius: 8px; padding: 10px;">
+                        <div style="font-weight: 600; font-size: 0.85rem; margin-bottom: 8px; color: var(--text-secondary); display: flex; justify-content: space-between; align-items: center;">
+                            <span>🖥️ Mövcud Serverlər</span>
+                            <button class="btn btn-secondary btn-sm" onclick="installPluginAllServers()" style="font-size: 0.72rem; padding: 2px 8px; color: #93c5fd;">🚀 Hamısına Qur</button>
+                        </div>
+                        <div id="plugin-servers-list" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px;">
+                            <!-- Serverlərin siyahısı bura gələcək -->
+                        </div>
+                    </div>
+
+                    <!-- Sağ Panel: Canlı Terminal Loqları -->
+                    <div style="display: flex; flex-direction: column; background: #07080d; border: 1px solid var(--card-border); border-radius: 8px; overflow: hidden;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.04); padding: 8px 12px; border-bottom: 1px solid var(--card-border);">
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <span id="plugin-terminal-dot" style="width: 8px; height: 8px; border-radius: 50%; background: #4ade80;"></span>
+                                <span style="font-size: 0.8rem; font-family: monospace; color: #e2e8f0; font-weight: 600;">📟 Quraşdırma Terminalı</span>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="clearPluginTerminal()" style="padding: 2px 8px; font-size: 0.72rem;">🧹 Təmizlə</button>
+                        </div>
+                        <div id="plugin-terminal-body" style="flex: 1; padding: 12px; font-family: 'Consolas', 'Courier New', monospace; font-size: 0.82rem; color: #4ade80; line-height: 1.5; overflow-y: auto; white-space: pre-wrap; word-break: break-all;">
+                            <span style="color: #64748b;">[SİSTEM] Quraşdırma loqları üçün server seçin və ya 'Quraşdır' düyməsinə klikləyin...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; align-items: center; margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--card-border);">
+                    <button class="btn btn-secondary" onclick="closeModal('plugin-server-select-modal')" style="padding: 6px 16px;">Bağla</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
 
     <!-- Help Center Modal -->
     <div id="help-modal" class="modal-backdrop">
         <div class="modal-card" style="max-width: 800px; width: 95%;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h2 style="margin: 0;">📚 Kömək Mərkəzi və Versiya Tarixçəsi</h2>
-                <button onclick="closeModal('help-modal')"
-                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem;">✕</button>
             </div>
             <div style="padding: 0;">
                 <div style="display: flex; border-bottom: 1px solid var(--card-border);">
@@ -417,10 +460,6 @@
                     <h2 style="margin: 0; font-size: 1.25rem; color: #fff;">🔄 Sistem Versiyaları</h2>
                     <p style="margin: 4px 0 0; font-size: 0.82rem; color: var(--text-secondary);">Yeni versiyaya keç və ya köhnəyə qayıt</p>
                 </div>
-                <button onclick="closeModal('system-update-modal')"
-                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
-                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
-                    onmouseout="this.style.background='transparent'">✕</button>
             </div>
             <div id="version-cards-list"
                 style="max-height: 52vh; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 6px;">
@@ -823,7 +862,16 @@
 
                                 <div id="wiz-git-section-wrapper" style="display: flex; flex-direction: column; gap: 0.8rem;">
                                     <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="font-size: 0.8rem;">Git Repo URL</label>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                            <label style="font-size: 0.8rem; font-weight: 600; color: #38bdf8;">🐱 GitHub Repozitoriyalarınız</label>
+                                            <button type="button" class="btn btn-secondary btn-xs" onclick="loadWizGithubRepos(true)" style="padding: 2px 8px; font-size: 0.72rem; cursor: pointer; border-radius: 4px;">🔄 Yenilə</button>
+                                        </div>
+                                        <select id="wiz-repo-select" onchange="handleWizRepoSelectChange(this)" style="background: var(--bg-dark); color: #fff; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%; font-size: 0.85rem;">
+                                            <option value="">Repozitoriyalar yüklənir...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Git Repo URL (Avtomatik və ya Əl ilə)</label>
                                         <input type="text" id="wiz-app-repo" placeholder="Məs: https://github.com/kral14/repo.git">
                                     </div>
                                     <div class="form-group" id="wiz-branch-group" style="margin-bottom: 0;">
@@ -905,10 +953,6 @@
                     <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Ortaq tünel verilənlər
                         bazası (KV) nizamlamaları</p>
                 </div>
-                <button onclick="closeModal('cloudflare-setup-modal')"
-                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
-                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
-                    onmouseout="this.style.background='transparent'">✕</button>
             </div>
 
             <div id="cf-connection-status"
@@ -954,10 +998,6 @@
                     <p style="margin: 4px 0 0; font-size: 0.8rem; color: var(--text-secondary);">Addım-addım tünelin
                         sabit linkə bağlanması</p>
                 </div>
-                <button onclick="closeModal('cloudflare-help-modal')"
-                    style="background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"
-                    onmouseover="this.style.background='rgba(255,255,255,0.1)'"
-                    onmouseout="this.style.background='transparent'">✕</button>
             </div>
 
             <div
@@ -1203,5 +1243,75 @@
                     <span>🧹 Təmizləməyə Başla</span>
                 </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Create Tunnel Modal -->
+    <div id="create-tunnel-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 520px;">
+            <h2>🌐 Yeni Tünel Yarat</h2>
+            <form id="create-tunnel-form" novalidate onsubmit="handleCreateTunnelSubmit(event)">
+                <input type="hidden" id="tun-server-id">
+                <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="form-group">
+                        <label style="font-size: 0.85rem; font-weight: 600;">Hədəf Server (VM)</label>
+                        <input type="text" id="tun-server-display" readonly style="background: rgba(255,255,255,0.05); color: #94a3b8; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 0.85rem; font-weight: 600;">Tünel Adı</label>
+                        <input type="text" id="tun-name" placeholder="Məs: Tunel-B və ya Api-Tuneli" required style="background: var(--bg-dark); color: #fff; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%;">
+                        <small style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 4px; display: block;">Bu VM daxilində unikal ad daxil edin (məs: Tunel-B, Xidmet-Tuneli).</small>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 0.85rem; font-weight: 600;">Tünel Rejimi</label>
+                        <select id="tun-type" style="background: var(--bg-dark); color: #fff; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%;">
+                            <option value="shared">🔗 Ortaq Tünel (Shared - Tövsiyə olunur, RAM-a qənaət edir)</option>
+                            <option value="dedicated">✨ Ayrı Tünel (Dedicated - Yalnız xüsusi layihə üçün izolyasiya)</option>
+                        </select>
+                        <small style="color: var(--text-secondary); font-size: 0.75rem; margin-top: 4px; display: block;">
+                            Ortaq rejimdə bir VM daxilində birdən çox layihə eyni tuneli və portları paylaşa bilər.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.2rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('create-tunnel-modal')">Ləğv Et</button>
+                    <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; font-weight: 600; padding: 0.55rem 1.4rem;">
+                        🚀 Tüneli Yarat
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Attach Route Modal -->
+    <div id="attach-route-modal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 520px;">
+            <h2>🔗 Tünelə Layihə Qoş</h2>
+            <form id="attach-route-form" novalidate onsubmit="handleAttachRouteSubmit(event)">
+                <input type="hidden" id="attach-tunnel-id">
+                <input type="hidden" id="attach-server-id">
+                <div class="modal-body" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="form-group">
+                        <label style="font-size: 0.85rem; font-weight: 600;">Seçilmiş Tünel</label>
+                        <input type="text" id="attach-tunnel-name" readonly style="background: rgba(255,255,255,0.05); color: #38bdf8; font-weight: 600; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%;">
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 0.85rem; font-weight: 600;">Bu Serverdəki Layihə</label>
+                        <select id="attach-app-select" onchange="updateAttachTargetPort(this)" style="background: var(--bg-dark); color: #fff; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%;">
+                            <!-- Dinamik doldurulacaq -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 0.85rem; font-weight: 600;">Daxili Port (Target Port)</label>
+                        <input type="number" id="attach-target-port" value="8080" placeholder="8080" required style="background: var(--bg-dark); color: #fff; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%;">
+                    </div>
+                </div>
+                <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 1.2rem; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('attach-route-modal')">Ləğv Et</button>
+                    <button type="submit" class="btn btn-primary" style="background: linear-gradient(135deg, #10b981, #06b6d4); border: none; font-weight: 600; padding: 0.55rem 1.4rem;">
+                        Bağla & Aktivləşdir
+                    </button>
+                </div>
+            </form>
         </div>
     </div>

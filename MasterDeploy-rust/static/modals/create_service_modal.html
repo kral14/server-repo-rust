@@ -239,7 +239,16 @@
 
                                 <div id="wiz-git-section-wrapper" style="display: flex; flex-direction: column; gap: 0.8rem;">
                                     <div class="form-group" style="margin-bottom: 0;">
-                                        <label style="font-size: 0.8rem;">Git Repo URL</label>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                            <label style="font-size: 0.8rem; font-weight: 600; color: #38bdf8;">🐱 GitHub Repozitoriyalarınız</label>
+                                            <button type="button" class="btn btn-secondary btn-xs" onclick="loadWizGithubRepos(true)" style="padding: 2px 8px; font-size: 0.72rem; cursor: pointer; border-radius: 4px;">🔄 Yenilə</button>
+                                        </div>
+                                        <select id="wiz-repo-select" onchange="handleWizRepoSelectChange(this)" style="background: var(--bg-dark); color: #fff; border: 1px solid var(--card-border); padding: 8px 12px; border-radius: 6px; width: 100%; font-size: 0.85rem;">
+                                            <option value="">Repozitoriyalar yüklənir...</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Git Repo URL (Avtomatik və ya Əl ilə)</label>
                                         <input type="text" id="wiz-app-repo" placeholder="Məs: https://github.com/kral14/repo.git">
                                     </div>
                                     <div class="form-group" id="wiz-branch-group" style="margin-bottom: 0;">

@@ -34,10 +34,151 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
         .connect_with(connect_options)
         .await?;
 
-    // 1. Run sqlx migrations automatically (fail-safe so checksum/version mismatches do not crash the app)
-    if let Err(e) = sqlx::migrate!("./migrations").run(&pool).await {
-        eprintln!("[WARN] Database migration notice (safe fallback): {}", e);
+    // 1. Run sqlx migrations automatically with detailed logging
+    println!("[INFO] 🔍 Verilənlər bazası miqrasiyaları yoxlanılır...");
+    match sqlx::migrate!("./migrations").run(&pool).await {
+        Ok(_) => {
+            println!("[SUCCESS] ✅ Bütün SQL miqrasiyaları uğurla tətbiq edildi (Multi-node plugins və Tunnels aktivdir).");
+        }
+        Err(e) => {
+            eprintln!("[WARN] ⚠️ Verilənlər bazası miqrasiya bildirişi (safe fallback): {}", e);
+        }
     }
+
+    // 1.1 Təhlükəsiz fallback: Əgər miqrasiya faylı checksum xətası ilə atlansa belə cədvəllərin mövcudluğunu zəmanətə alırıq
+    let _ = sqlx::query(
+        "CREATE TABLE IF NOT EXISTS server_plugins (
+            id TEXT PRIMARY KEY,
+            server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+            plugin_name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'installed',
+            config_json TEXT,
+            installed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(server_id, plugin_name)
+        );"
+    ).execute(&pool).await;
+
+    let _ = sqlx::query(
+        "CREATE TABLE IF NOT EXISTS tunnels (
+            id TEXT PRIMARY KEY,
+            server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            tunnel_type TEXT NOT NULL DEFAULT 'dedicated',
+            public_url TEXT,
+            status TEXT NOT NULL DEFAULT 'stopped',
+            last_error TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(server_id, name)
+        );"
+    ).execute(&pool).await;
+
+    let _ = sqlx::query(
+        "CREATE TABLE IF NOT EXISTS tunnel_routes (
+            id TEXT PRIMARY KEY,
+            tunnel_id TEXT NOT NULL REFERENCES tunnels(id) ON DELETE CASCADE,
+            app_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+            target_port INTEGER NOT NULL,
+            route_path TEXT NOT NULL DEFAULT '/',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(tunnel_id, app_id)
+        );"
+    ).execute(&pool).await;
+
+    let _ = sqlx::query(
+        "CREATE TABLE IF NOT EXISTS tunnel_link_history (
+            id TEXT PRIMARY KEY,
+            app_id TEXT NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+            app_name TEXT NOT NULL,
+            tunnel_id TEXT,
+            previous_url TEXT,
+            new_url TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'active',
+            assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            expired_at DATETIME
+        );"
+    ).execute(&pool).await;
+
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_tunnel_history_app ON tunnel_link_history(app_id)").execute(&pool).await;
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_tunnel_history_assigned ON tunnel_link_history(assigned_at DESC)").execute(&pool).await;
+
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN tunnel_id TEXT").execute(&pool).await;
+
+    // Mövcud aktiv cloudflare_url-ləri ilkin tarixçə kimi qeyd edirik
+    let _ = sqlx::query(
+        "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, previous_url, new_url, status, assigned_at) \
+         SELECT lower(hex(randomblob(16))), a.id, a.name, a.tunnel_id, NULL, a.cloudflare_url, 'active', a.created_at \
+         FROM applications a \
+         WHERE a.cloudflare_url IS NOT NULL AND a.cloudflare_url != '' \
+         AND NOT EXISTS (SELECT 1 FROM tunnel_link_history h WHERE h.app_id = a.id)"
+    ).execute(&pool).await;
+
+    println!("[INFO] 🌐 'server_plugins', 'tunnels', 'tunnel_routes', 'tunnel_link_history' sxemləri təsdiqləndi.");
+
+    // Avtomatik sinxronizasiya: cloudflare_url olan amma tunnel_id olmayan tətbiqləri tünellər cədvəlinə daxil edirik
+    if let Ok(unlinked_apps) = sqlx::query_as::<_, (String, String, String, i64, String)>(
+        "SELECT id, name, server_id, port, cloudflare_url FROM applications WHERE cloudflare_url IS NOT NULL AND (tunnel_id IS NULL OR tunnel_id = '')"
+    )
+    .fetch_all(&pool)
+    .await {
+        for (a_id, a_name, s_id, port, cf_url) in unlinked_apps {
+            let tunnel_name = format!("Tunel-{} (Dedicated)", a_name);
+            let existing_tid: Option<String> = match sqlx::query_as::<_, (String,)>(
+                "SELECT id FROM tunnels WHERE server_id = ? AND name = ?"
+            )
+            .bind(&s_id)
+            .bind(&tunnel_name)
+            .fetch_optional(&pool)
+            .await {
+                Ok(Some((tid,))) => {
+                    let _ = sqlx::query("UPDATE tunnels SET public_url = ?, status = 'active' WHERE id = ?")
+                        .bind(&cf_url)
+                        .bind(&tid)
+                        .execute(&pool)
+                        .await;
+                    Some(tid)
+                }
+                _ => None,
+            };
+
+            let tid = match existing_tid {
+                Some(t) => t,
+                None => {
+                    let new_id = Uuid::new_v4().to_string();
+                    let _ = sqlx::query(
+                        "INSERT INTO tunnels (id, server_id, name, tunnel_type, public_url, status) VALUES (?, ?, ?, 'dedicated', ?, 'active')"
+                    )
+                    .bind(&new_id)
+                    .bind(&s_id)
+                    .bind(&tunnel_name)
+                    .bind(&cf_url)
+                    .execute(&pool)
+                    .await;
+                    new_id
+                }
+            };
+
+            let route_id = Uuid::new_v4().to_string();
+            let _ = sqlx::query(
+                "INSERT INTO tunnel_routes (id, tunnel_id, app_id, target_port, route_path) VALUES (?, ?, ?, ?, '/') \
+                 ON CONFLICT(tunnel_id, app_id) DO UPDATE SET target_port = excluded.target_port"
+            )
+            .bind(&route_id)
+            .bind(&tid)
+            .bind(&a_id)
+            .bind(port)
+            .execute(&pool)
+            .await;
+
+            let _ = sqlx::query("UPDATE applications SET tunnel_id = ? WHERE id = ?")
+                .bind(&tid)
+                .bind(&a_id)
+                .execute(&pool)
+                .await;
+        }
+    }
+
 
     // 2. Data Migration: Migrate existing ssh keys from servers.ssh_key to ssh_keys table
     // Fetch all servers that have a plain text ssh_key, but no ssh_key_id associated yet.

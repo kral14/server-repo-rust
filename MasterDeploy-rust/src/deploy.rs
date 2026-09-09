@@ -291,9 +291,25 @@ pub async fn trigger_deployment_impl(
                 }
             }
         } else {
+            let branch = if app.branch.trim().is_empty() {
+                "main".to_string()
+            } else {
+                app.branch.trim().to_string()
+            };
+
+            let clean_repo_url = app.repo_url.trim();
+            if clean_repo_url.is_empty() {
+                let mut lock = logs.lock().await;
+                lock.push_str("[ERROR] Git Repository URL boşdur! Zəhmət olmasa tətbiq sazlamalarından düzgün Git Repo URL qeyd edin.\n");
+                update_logs_helper(&db_clone, &deploy_id, &lock).await;
+                let _ = std::fs::remove_file(&temp_key_path);
+                finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+                return;
+            }
+
             {
                 let mut lock = logs.lock().await;
-                lock.push_str(&format!("[2/5] Git repository klonlanır (Branch: {})...\n", app.branch));
+                lock.push_str(&format!("[2/5] Git repository klonlanır (Branch: {})...\n", branch));
                 update_logs_helper(&db_clone, &deploy_id, &lock).await;
             }
             
@@ -302,11 +318,11 @@ pub async fn trigger_deployment_impl(
                 .await
                 .unwrap_or_default();
             let token_str = gh_token.as_ref().map(|t| t.0.as_str());
-            let repo_clone_url = crate::utils::format_github_repo_url(&app.repo_url, token_str);
+            let repo_clone_url = crate::utils::format_github_repo_url(clean_repo_url, token_str);
 
             let git_cmd = format!(
-                "if [ -d \"/data/masterdeploy/apps/{}\" ]; then cd /data/masterdeploy/apps/{} && git remote set-url origin {} && git fetch --all && git reset --hard origin/{}; else git clone -b {} {} /data/masterdeploy/apps/{}; fi",
-                app.name, app.name, repo_clone_url, app.branch, app.branch, repo_clone_url, app.name
+                "if [ -d \"/data/masterdeploy/apps/{}/.git\" ]; then cd \"/data/masterdeploy/apps/{}\" && git remote set-url origin \"{}\" && git fetch --all && git reset --hard origin/\"{}\"; else rm -rf \"/data/masterdeploy/apps/{}\" && git clone -b \"{}\" \"{}\" \"/data/masterdeploy/apps/{}\"; fi",
+                app.name, app.name, repo_clone_url, branch, app.name, branch, repo_clone_url, app.name
             );
             
             match run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), git_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await {

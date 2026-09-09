@@ -1,39 +1,654 @@
-// ══════════════════════════════════════════════════════════════════
-// AĞILLI AUTO-DEPLOY VƏ ARXA PLAN TƏTBİQLƏRİNİN İDARƏETMƏ MƏRKƏZİ
-// ══════════════════════════════════════════════════════════════════
+// Arxa Plan və Auto-Deploy İdarəetmə Mərkəzi
+let currentBgSubTab = localStorage.getItem('active_bg_subtab') || 'autodeploy';
 let autoDeployAppsList = [];
 let autoDeployCurrentFilter = 'all';
 
-function formatTimeAgo(date) {
-    if (!date || isNaN(date.getTime())) return '<span style="color: #64748b;">Yoxlanmayıb</span>';
-    const now = new Date();
-    const diffSec = Math.floor((now - date) / 1000);
-    if (diffSec < 10) return '<span style="color: #34d399;">İndicə</span>';
-    if (diffSec < 60) return `${diffSec} san əvvəl`;
-    const diffMin = Math.floor(diffSec / 60);
-    if (diffMin < 60) return `${diffMin} dəq əvvəl`;
-    const diffHour = Math.floor(diffMin / 60);
-    if (diffHour < 24) return `${diffHour} saat əvvəl`;
-    const diffDay = Math.floor(diffHour / 24);
-    return `${diffDay} gün əvvəl`;
+// Canlı Tünel Avto-Sinxronizasiya (Real-Time Smart Polling)
+let tunnelsAutoSyncTimer = null;
+let lastTunnelsDataHash = '';
+let pendingTunnelsMap = new Set();
+
+function startTunnelAutoSync(isFast = false) {
+    if (tunnelsAutoSyncTimer) {
+        clearTimeout(tunnelsAutoSyncTimer);
+        tunnelsAutoSyncTimer = null;
+    }
+
+    const activeTab = localStorage.getItem('active_tab') || 'dashboard';
+    const bgSub = localStorage.getItem('active_bg_subtab') || currentBgSubTab || 'autodeploy';
+
+    if (activeTab !== 'background-services' || bgSub !== 'tunnels') {
+        return;
+    }
+
+    // Əgər keçidi gözlənilən layihə varsa hər 2 saniyədən bir, yoxdursa hər 6 saniyədən bir yoxlayırıq
+    const delay = isFast ? 2000 : 6000;
+    tunnelsAutoSyncTimer = setTimeout(async () => {
+        if (!document.hidden) {
+            await loadMultiNodeTunnelsOverview(true);
+        } else {
+            startTunnelAutoSync(isFast);
+        }
+    }, delay);
 }
 
-async function loadAutoDeployCenter() {
+function stopTunnelAutoSync() {
+    if (tunnelsAutoSyncTimer) {
+        clearTimeout(tunnelsAutoSyncTimer);
+        tunnelsAutoSyncTimer = null;
+    }
+}
+
+function switchBgSubTab(tab) {
+    if (!tab) {
+        tab = localStorage.getItem('active_bg_subtab') || 'autodeploy';
+    }
+    currentBgSubTab = tab;
+    try {
+        localStorage.setItem('active_bg_subtab', tab);
+    } catch (e) {}
+    const tabs = ['autodeploy', 'watchdog', 'tunnels', 'logs'];
+    tabs.forEach(t => {
+        const btn = document.getElementById(`bg-subtab-btn-${t}`);
+        const content = document.getElementById(`bg-content-${t}`);
+        if (btn) {
+            btn.classList.toggle('active', t === tab);
+        }
+        if (content) {
+            content.style.display = (t === tab) ? 'block' : 'none';
+        }
+    });
+
+    const primaryBtn = document.getElementById('btn-bg-action-primary');
+    const primaryTxt = document.getElementById('txt-bg-action-primary');
+
+    if (tab === 'autodeploy') {
+        stopTunnelAutoSync();
+        if (primaryBtn) {
+            primaryBtn.style.display = 'flex';
+            primaryBtn.innerHTML = '<i data-lucide="zap" style="width: 14px; height: 14px;"></i><span id="txt-bg-action-primary">Hamısını İndi Yoxla</span>';
+        }
+        loadAutoDeployCenter();
+    } else if (tab === 'watchdog') {
+        stopTunnelAutoSync();
+        if (primaryBtn) {
+            primaryBtn.style.display = 'flex';
+            primaryBtn.innerHTML = '<i data-lucide="save" style="width: 14px; height: 14px;"></i><span id="txt-bg-action-primary">Ayarları Saxla</span>';
+        }
+        loadBackgroundServicesSettings();
+        loadBackgroundAppsOverview();
+    } else if (tab === 'tunnels') {
+        if (primaryBtn) {
+            primaryBtn.style.display = 'flex';
+            primaryBtn.innerHTML = '<i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i><span id="txt-bg-action-primary">Tünelləri Yenilə</span>';
+        }
+        loadMultiNodeTunnelsOverview();
+        startTunnelAutoSync(false);
+    } else if (tab === 'logs') {
+        stopTunnelAutoSync();
+        if (primaryBtn) primaryBtn.style.display = 'none';
+        loadBackgroundActivityLogs();
+    }
+
+    if (typeof updateHeaderSearchPlaceholder === 'function') {
+        updateHeaderSearchPlaceholder('background-services');
+    }
+    const curSearchVal = document.getElementById('topbar-context-search')?.value;
+    if (curSearchVal && typeof onHeaderContextSearch === 'function') {
+        setTimeout(() => onHeaderContextSearch(curSearchVal), 150);
+    }
+
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+    }
+}
+
+async function loadMultiNodeTunnelsOverview(isSilent = false) {
+    const container = document.getElementById('bg-multi-node-tunnels-grid');
+    if (!container) return;
+
+    // Səhifənin hazırkı scroll vəziyyətini qeyd edirik ki, istifadəçi aşağı baxanda səhifə yuxarı atmasın
+    const scrollParent = document.getElementById('tab-background-services') || document.querySelector('.tab-section.active');
+    const savedScroll = scrollParent ? scrollParent.scrollTop : 0;
+
+    // Yalnız ilk dəfə və içi tam boş olanda loading göstəririk
+    const isAlreadyRendered = container.children.length > 0 && !container.querySelector('.no-data');
+    if (!isSilent && !isAlreadyRendered) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                <div style="display: inline-block; animation: spin 1s linear infinite; margin-bottom: 0.5rem;">🔄</div>
+                <div>Bütün VM-lər üzrə aktiv tünellər oxunur...</div>
+            </div>
+        `;
+    }
+
+    try {
+        const [srvRes, tunRes] = await Promise.all([
+            fetch('/api/servers'),
+            fetch('/api/tunnels')
+        ]);
+
+        const servers = await srvRes.json();
+        const tunnels = await tunRes.json();
+
+        // Update KPI Card if present
+        const kpiTunnels = document.getElementById('ad-stat-tunnels');
+        if (kpiTunnels && Array.isArray(tunnels)) {
+            const activeCount = tunnels.filter(t => t.status === 'active' || t.status === 'running').length;
+            kpiTunnels.textContent = `${activeCount} Aktiv (${servers.length} VM)`;
+        }
+
+        if (!Array.isArray(servers) || servers.length === 0) {
+            container.innerHTML = `<div class="no-data">Heç bir server tapılmadı.</div>`;
+            return;
+        }
+
+        // Bütün marşrutları və statusları təhlil edirik (Keçidi gözlənilən layihələri tapırıq)
+        let hasPendingRoutes = false;
+        const currentPendingIds = new Set();
+        const newlyReadyApps = [];
+        const routesFlat = [];
+
+        (Array.isArray(tunnels) ? tunnels : []).forEach(t => {
+            (t.routes || []).forEach(r => {
+                const link = r.cf_worker_url || r.cloudflare_url || '';
+                routesFlat.push({
+                    tId: t.id,
+                    rId: r.route_id,
+                    appId: r.app_id,
+                    appName: r.app_name,
+                    port: r.target_port,
+                    link: link
+                });
+                if (!link) {
+                    hasPendingRoutes = true;
+                    currentPendingIds.add(r.app_id);
+                } else if (pendingTunnelsMap.has(r.app_id)) {
+                    // Əvvəlki dövrdə keçidi hazır deyildi, indi keçid linki gəldi!
+                    newlyReadyApps.push(r.app_name || 'Layihə');
+                }
+            });
+        });
+
+        const newHash = JSON.stringify({
+            servers: (servers || []).map(s => `${s.id}_${s.name}_${s.ip}`),
+            tunnels: (tunnels || []).map(t => `${t.id}_${t.status}_${t.public_url}`),
+            routes: routesFlat
+        });
+
+        // Əgər dəyişiklik yoxdursa və səssiz polling rejimindəyiksə, DOM-a toxunmuruq (titrəmənin qarşısını alırıq)
+        if (isSilent && newHash === lastTunnelsDataHash) {
+            startTunnelAutoSync(hasPendingRoutes);
+            return;
+        }
+
+        lastTunnelsDataHash = newHash;
+        pendingTunnelsMap = currentPendingIds;
+
+        // Əgər yenicə linki hazır olan layihə varsa, istifadəçiyə canlı bildiriş veririk
+        if (newlyReadyApps.length > 0) {
+            newlyReadyApps.forEach(name => {
+                showToast(`🚀 "${name}" üçün keçid linki hazır oldu və aktivləşdirildi!`, 'success');
+            });
+            if (typeof loadApplications === 'function') loadApplications();
+        }
+
+        container.innerHTML = servers.map(srv => {
+            const srvTunnels = (Array.isArray(tunnels) ? tunnels : []).filter(t => t.server_id === srv.id);
+            const hasTunnels = srvTunnels.length > 0;
+            const srvNameLower = (srv.name || '').toLowerCase();
+            const srvIpLower = (srv.ip || '').toLowerCase();
+
+            return `
+            <div class="card tunnel-vm-card" data-vm-name="${srvNameLower}" data-vm-ip="${srvIpLower}" style="background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 9px; padding: 0.65rem 0.9rem; margin-bottom: 0.65rem; border-left: 3px solid ${hasTunnels ? '#00d2ff' : '#64748b'};">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 6px; background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2);">
+                            <i data-lucide="server" style="width: 15px; height: 15px; color: #38bdf8;"></i>
+                        </span>
+                        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                            <h3 style="margin: 0; font-size: 0.92rem; color: #fff; font-weight: 600;">
+                                ${srv.name}
+                                <span style="font-size: 0.72rem; color: var(--text-secondary); font-family: monospace; font-weight: normal; margin-left: 4px;">(${srv.ip})</span>
+                            </h3>
+                            <span style="font-size: 0.7rem; color: #38bdf8; background: rgba(0, 210, 255, 0.08); padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(0, 210, 255, 0.2);">
+                                ${srvTunnels.length} tünel
+                            </span>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button class="btn btn-primary btn-xs" onclick="openCreateTunnelModal('${srv.id}', '${srv.name} (${srv.ip})')" style="font-size: 0.72rem; padding: 3px 9px; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; font-weight: 600; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px;">
+                            <i data-lucide="plus" style="width: 11px; height: 11px;"></i>
+                            <span>Yeni Tünel</span>
+                        </button>
+                        <button class="btn btn-secondary btn-xs" onclick="installPluginToServer('cloudflare', '${srv.id}')" style="font-size: 0.72rem; padding: 3px 8px; border-radius: 5px; display: inline-flex; align-items: center; gap: 4px;" title="Cloudflare Daemon-u yoxla və bərpa et">
+                            <i data-lucide="settings" style="width: 11px; height: 11px; color: #94a3b8;"></i>
+                            <span>Daemon</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tünellərin Siyahısı -->
+                <div style="display: flex; flex-direction: column; gap: 6px;">
+                    ${hasTunnels ? srvTunnels.map(t => {
+                        const isShared = t.tunnel_type === 'shared';
+                        const isRunning = t.status === 'active' || t.status === 'running';
+                        const liveUrl = t.public_url || '';
+                        const routes = Array.isArray(t.routes) ? t.routes : [];
+                        const tNameLower = (t.name || '').toLowerCase();
+
+                        return `
+                        <div class="tunnel-card-item" data-tunnel-name="${tNameLower}" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 7px 10px; display: flex; flex-direction: column; gap: 5px;">
+                            <!-- Tünel Başlıq Sətri -->
+                            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                    <span style="width: 8px; height: 8px; border-radius: 50%; background: ${isRunning ? '#4ade80' : '#f59e0b'}; box-shadow: 0 0 6px ${isRunning ? '#4ade80' : '#f59e0b'};"></span>
+                                    <strong style="font-size: 0.86rem; color: #fff;">${t.name}</strong>
+                                    <span style="font-size: 0.66rem; padding: 1px 5px; border-radius: 3px; background: ${isShared ? 'rgba(56, 189, 248, 0.12)' : 'rgba(168, 85, 247, 0.12)'}; color: ${isShared ? '#38bdf8' : '#c084fc'}; border: 1px solid ${isShared ? 'rgba(56, 189, 248, 0.25)' : 'rgba(168, 85, 247, 0.25)'};">
+                                        ${isShared ? 'Ortaq' : 'Ayrı'}
+                                    </span>
+                                    ${liveUrl ? `
+                                        <a href="${liveUrl}" target="_blank" style="color: #38bdf8; font-size: 0.72rem; font-family: monospace; text-decoration: none; display: inline-flex; align-items: center; gap: 4px; background: rgba(0,210,255,0.06); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(0,210,255,0.15);" title="Əsas Tünel Linki">
+                                            <i data-lucide="external-link" style="width: 11px; height: 11px; color: #00d2ff; flex-shrink: 0;"></i>
+                                            <span>${liveUrl}</span>
+                                        </a>
+                                        <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${liveUrl}'); showToast('Tünel linki kopyalandı!', 'info');" style="padding: 2px 6px; font-size: 0.65rem; display: inline-flex; align-items: center;" title="Kopyala">
+                                            <i data-lucide="copy" style="width: 11px; height: 11px;"></i>
+                                        </button>
+                                    ` : `
+                                        <span style="color: #eab308; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 5px;">
+                                            <span style="width: 6px; height: 6px; border-radius: 50%; background: #eab308; display: inline-block;"></span>
+                                            <span>Gözlənilir...</span>
+                                        </span>
+                                    `}
+                                </div>
+
+                                <div style="display: flex; align-items: center; gap: 4px;">
+                                    <button class="btn btn-secondary btn-xs" onclick="openAttachRouteModal('${t.id}', '${t.name}', '${srv.id}')" style="font-size: 0.7rem; padding: 2px 7px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.25); display: inline-flex; align-items: center; gap: 3px;">
+                                        <i data-lucide="plus" style="width: 11px; height: 11px;"></i>
+                                        <span>Layihə Qoş</span>
+                                    </button>
+                                    <button class="btn btn-secondary btn-xs" onclick="syncTunnelRemote('${t.id}')" style="font-size: 0.7rem; padding: 2px 7px; display: inline-flex; align-items: center; gap: 3px;" title="Tüneli yenidən sinxronlaşdır">
+                                        <i data-lucide="refresh-cw" style="width: 11px; height: 11px;"></i>
+                                        <span>Sinxron</span>
+                                    </button>
+                                    <button class="btn btn-secondary btn-xs" onclick="deleteTunnelDirect('${t.id}')" style="font-size: 0.7rem; padding: 2px 6px; color: #ff5555 !important; border-color: rgba(255, 85, 85, 0.25); display: inline-flex; align-items: center;" title="Tüneli Sil">
+                                        <i data-lucide="trash-2" style="width: 12px; height: 12px;"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Bağlı Layihələr (Yığcam Siyahı) -->
+                            <div style="padding-top: 2px;">
+                                ${routes.length > 0 ? `
+                                    <div class="tunnel-routes-list" style="display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; padding-right: 2px;">
+                                        ${routes.map(r => {
+                                            const appLink = r.cf_worker_url || r.cloudflare_url || '';
+                                            const searchKey = `${(r.app_name || '').toLowerCase()} ${r.target_port} ${appLink.toLowerCase()} ${tNameLower} ${srvNameLower} ${srvIpLower}`;
+
+                                            return `
+                                            <div class="tunnel-app-row" data-search-key="${searchKey}" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 5px; padding: 3px 8px; font-size: 0.76rem;">
+                                                <!-- Sol: Layihə Adı və Port -->
+                                                <div style="display: flex; align-items: center; gap: 6px; min-width: 150px; flex-shrink: 0;">
+                                                    <i data-lucide="box" style="width: 13px; height: 13px; color: #38bdf8; flex-shrink: 0;"></i>
+                                                    <strong style="color: #f1f5f9; font-size: 0.79rem;">${r.app_name}</strong>
+                                                    <span style="color: #38bdf8; font-size: 0.7rem; font-family: monospace; background: rgba(56, 189, 248, 0.1); padding: 0 4px; border-radius: 3px;">:${r.target_port}</span>
+                                                </div>
+
+                                                <!-- Orta: Fərdi Keçid Linki -->
+                                                <div style="display: flex; align-items: center; gap: 5px; flex: 1; min-width: 180px;">
+                                                    ${appLink ? `
+                                                        <div style="display: flex; align-items: center; gap: 5px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,210,255,0.15); border-radius: 4px; padding: 1px 6px; width: 100%; max-width: 440px;">
+                                                            <span style="color: #00d2ff; font-size: 0.65rem; font-weight: 700; flex-shrink: 0;">${r.cf_worker_url ? 'WORKER' : 'KEÇİD'}:</span>
+                                                            <a href="${appLink}" target="_blank" style="color: #38bdf8; font-size: 0.72rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${appLink}">
+                                                                ${appLink}
+                                                            </a>
+                                                            <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${appLink}'); showToast('Layihə linki kopyalandı!', 'info');" style="padding: 1px 5px; font-size: 0.65rem; border-radius: 3px; flex-shrink: 0; display: inline-flex; align-items: center;" title="Linki kopyala">
+                                                                <i data-lucide="copy" style="width: 10px; height: 10px;"></i>
+                                                            </button>
+                                                        </div>
+                                                    ` : `
+                                                        <span style="color: #eab308; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 5px; font-style: italic; background: rgba(234, 179, 8, 0.08); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(234, 179, 8, 0.2);">
+                                                            <i data-lucide="loader-2" style="width: 11px; height: 11px; animation: spin 1.5s linear infinite;"></i>
+                                                            <span>Keçid hazırlanır (canlı izlənilir)...</span>
+                                                        </span>
+                                                    `}
+                                                </div>
+
+                                                <!-- Sağ: Düymələr (Tarixçə, Loq, Dayandır, Ayır) -->
+                                                <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+                                                    <button class="btn btn-secondary btn-xs" onclick="openTunnelLinkHistoryModal('${r.app_id}', '${r.app_name}')" style="padding: 2px 7px; font-size: 0.68rem; border-radius: 4px; color: #38bdf8; border-color: rgba(56,189,248,0.25); background: rgba(56,189,248,0.06); display: inline-flex; align-items: center; gap: 3px;" title="Link Tarixçəsi və Vaxtlar">
+                                                        <i data-lucide="clock" style="width: 11px; height: 11px;"></i>
+                                                        <span>Tarixçə</span>
+                                                    </button>
+                                                    <button class="btn btn-secondary btn-xs" onclick="generateCloudflareTunnel(event, '${r.app_id}', '${r.app_name}')" style="padding: 2px 7px; font-size: 0.68rem; border-radius: 4px; color: #f97316; border-color: rgba(249,115,22,0.25); background: rgba(249,115,22,0.06); display: inline-flex; align-items: center; gap: 3px;" title="Terminal və Canlı Loqlar">
+                                                        <i data-lucide="terminal" style="width: 11px; height: 11px;"></i>
+                                                        <span>Loq</span>
+                                                    </button>
+                                                    <button class="btn btn-secondary btn-xs" onclick="stopTunnelForRoute('${r.app_id}', '${r.app_name}')" style="padding: 2px 7px; font-size: 0.68rem; border-radius: 4px; color: #ef4444; border-color: rgba(239,68,68,0.25); background: rgba(239,68,68,0.06); display: inline-flex; align-items: center; gap: 3px;" title="Bu layihənin tünel prosesini dayandır">
+                                                        <i data-lucide="square" style="width: 10px; height: 10px;"></i>
+                                                        <span>Dayandır</span>
+                                                    </button>
+                                                    <button class="btn btn-secondary btn-xs" onclick="detachTunnelRouteDirect('${t.id}', '${r.route_id}', '${r.app_name}')" style="color: #94a3b8 !important; border-color: rgba(255,255,255,0.12); font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 3px;" title="Layihəni tüneldən ayır">
+                                                        <i data-lucide="unlink" style="width: 10px; height: 10px;"></i>
+                                                        <span>Ayır</span>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+                                ` : `
+                                    <div style="color: #64748b; font-size: 0.72rem; padding: 2px 4px; font-style: italic;">Heç bir layihə bağlanmayıb. "+ Layihə Qoş" ilə əlavə edin.</div>
+                                `}
+                            </div>
+                        </div>
+                        `;
+                    }).join('') : `
+                        <div style="padding: 10px; border: 1px dashed rgba(255,255,255,0.08); border-radius: 6px; text-align: center; color: var(--text-secondary); font-size: 0.78rem;">
+                            Bu server üçün tünel qeydiyyatda deyil.
+                            <button class="btn btn-primary btn-xs" onclick="openCreateTunnelModal('${srv.id}', '${srv.name} (${srv.ip})')" style="margin-left: 8px; font-size: 0.72rem; padding: 2px 8px; background: linear-gradient(135deg, #7c3aed, #00d2ff); border: none; display: inline-flex; align-items: center; gap: 4px;">
+                                <i data-lucide="plus" style="width: 11px; height: 11px;"></i>
+                                <span>İlk Tüneli Yarat</span>
+                            </button>
+                        </div>
+                    `}
+                </div>
+            </div>
+            `;
+        }).join('');
+
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+            lucide.createIcons();
+        }
+
+        // Əgər istifadəçi səhifəni aşağı çəkibsə, həmin mövqeyi dərhal bərpa edirik (yuxarı atmanın qarşısını alırıq)
+        if (scrollParent && savedScroll > 0) {
+            scrollParent.scrollTop = savedScroll;
+            requestAnimationFrame(() => {
+                if (scrollParent) scrollParent.scrollTop = savedScroll;
+            });
+        }
+
+        // Əgər axtarış sahəsində filtr varsa, yenidən tətbiq edirik
+        const curSearchVal = document.getElementById('topbar-context-search')?.value;
+        if (curSearchVal && typeof onHeaderContextSearch === 'function') {
+            onHeaderContextSearch(curSearchVal);
+        }
+
+        // Növbəti avtomatik yoxlamanı planlaşdırırıq (Keçid gözlənilirsə hər 2 saniyə, yoxdursa hər 6 saniyə)
+        startTunnelAutoSync(hasPendingRoutes);
+
+    } catch (e) {
+        container.innerHTML = `<div style="color: #ff5252; padding: 1rem;">Tünellər oxunarkən xəta: ${e.message}</div>`;
+        startTunnelAutoSync(false);
+    }
+}
+
+async function openCreateTunnelModal(serverId, serverDisplay) {
+    if (typeof ensureModalsLoaded === 'function') {
+        await ensureModalsLoaded();
+    }
+    if (typeof showModal === 'function') {
+        await showModal('create-tunnel-modal');
+    }
+
+    const srvIdInput = document.getElementById('tun-server-id');
+    const srvDispInput = document.getElementById('tun-server-display');
+    const nameInput = document.getElementById('tun-name');
+    const typeInput = document.getElementById('tun-type');
+
+    if (srvIdInput) srvIdInput.value = serverId;
+    if (srvDispInput) srvDispInput.value = serverDisplay || serverId;
+    if (nameInput) nameInput.value = 'Tunel-B';
+    if (typeInput) typeInput.value = 'shared';
+}
+
+async function handleCreateTunnelSubmit(e) {
+    e.preventDefault();
+    const serverId = document.getElementById('tun-server-id').value;
+    const name = document.getElementById('tun-name').value.trim();
+    const tunnelType = document.getElementById('tun-type').value;
+
+    if (!name) {
+        showToast('Tünel adı daxil edilməlidir', 'warning');
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/tunnels/server/${serverId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ server_id: serverId, name, tunnel_type: tunnelType })
+        });
+        if (res.ok) {
+            showToast(`'${name}' tüneli uğurla yaradıldı! 🎉`, 'success');
+            if (typeof closeModal === 'function') closeModal('create-tunnel-modal');
+            loadMultiNodeTunnelsOverview();
+        } else {
+            const err = await res.text();
+            showToast('Xəta: ' + err, 'error');
+        }
+    } catch (err) {
+        showToast('Şəbəkə xətası: ' + err.message, 'error');
+    }
+}
+
+async function openAttachRouteModal(tunnelId, tunnelName, serverId) {
+    if (typeof ensureModalsLoaded === 'function') {
+        await ensureModalsLoaded();
+    }
+    if (typeof showModal === 'function') {
+        await showModal('attach-route-modal');
+    }
+
+    const tunIdInput = document.getElementById('attach-tunnel-id');
+    const srvIdInput = document.getElementById('attach-server-id');
+    const tunNameInput = document.getElementById('attach-tunnel-name');
+    const select = document.getElementById('attach-app-select');
+
+    if (tunIdInput) tunIdInput.value = tunnelId;
+    if (srvIdInput) srvIdInput.value = serverId;
+    if (tunNameInput) tunNameInput.value = tunnelName;
+    if (select) select.innerHTML = '<option value="">⏳ Layihələr oxunur...</option>';
+
+    try {
+        const res = await fetch('/api/applications');
+        const allApps = await res.json();
+        const serverApps = (Array.isArray(allApps) ? allApps : []).filter(a => a.server_id === serverId);
+
+        const curSelect = document.getElementById('attach-app-select');
+        if (!curSelect) return;
+
+        if (serverApps.length === 0) {
+            curSelect.innerHTML = '<option value="">Bu serverdə heç bir layihə tapılmadı</option>';
+            return;
+        }
+
+        curSelect.innerHTML = serverApps.map(a => `
+            <option value="${a.id}" data-port="${a.port || 8080}">${a.name} (Daxili Port: ${a.port || 8080})</option>
+        `).join('');
+
+        if (serverApps[0]) {
+            const portInput = document.getElementById('attach-target-port');
+            if (portInput) portInput.value = serverApps[0].port || 8080;
+        }
+    } catch (e) {
+        const curSelect = document.getElementById('attach-app-select');
+        if (curSelect) curSelect.innerHTML = `<option value="">Xəta: ${e.message}</option>`;
+    }
+}
+
+function updateAttachTargetPort(selectEl) {
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (opt && opt.dataset.port) {
+        const portInput = document.getElementById('attach-target-port');
+        if (portInput) portInput.value = opt.dataset.port;
+    }
+}
+
+async function handleAttachRouteSubmit(e) {
+    e.preventDefault();
+    const tunnelId = document.getElementById('attach-tunnel-id').value;
+    const appId = document.getElementById('attach-app-select').value;
+    const targetPort = parseInt(document.getElementById('attach-target-port').value, 10) || 8080;
+
+    if (!appId) {
+        showToast('Layihə seçilməlidir', 'warning');
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/tunnels/${tunnelId}/attach`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tunnel_id: tunnelId, app_id: appId, target_port: targetPort, route_path: '/' })
+        });
+        if (res.ok) {
+            showToast('Layihə tünelə qoşuldu və serverdə tünel işə salınır... ⚡', 'info');
+            if (typeof closeModal === 'function') closeModal('attach-route-modal');
+            loadMultiNodeTunnelsOverview(true);
+            startTunnelAutoSync(true);
+            if (typeof loadApplications === 'function') loadApplications();
+        } else {
+            const err = await res.text();
+            showToast('Xəta: ' + err, 'error');
+        }
+    } catch (err) {
+        showToast('Şəbəkə xətası: ' + err.message, 'error');
+    }
+}
+
+async function stopTunnelForRoute(appId, appName) {
+    const displayName = appName ? `'${appName}'` : 'Bu';
+    const confirmed = await showConfirmModal({
+        title: 'Tüneli Dayandır',
+        subtitle: displayName,
+        message: `${displayName} layihəsinin tünel bağlantısını dayandırmaq istədiyinizə əminsiniz?`,
+        warning: 'Dayandırıldıqda layihənin xarici Cloudflare keçidi müvəqqəti bağlanacaq.',
+        confirmText: 'Dayandır',
+        type: 'warning',
+        icon: '🛑'
+    });
+    if (!confirmed) return;
+    try {
+        const res = await fetch(`/api/plugins/cloudflare/stop/${appId}`, { method: 'POST' });
+        if (res.ok) {
+            showToast('Tünel dayandırıldı və link çıxarıldı.', 'warning');
+            loadMultiNodeTunnelsOverview();
+            if (typeof loadApplications === 'function') loadApplications();
+        } else {
+            const err = await res.text();
+            showToast('Xəta: ' + err, 'error');
+        }
+    } catch (e) {
+        showToast('Xəta: ' + e.message, 'error');
+    }
+}
+
+async function detachTunnelRouteDirect(tunnelId, routeId, appName) {
+    const displayName = appName ? `'${appName}'` : 'Bu layihəni';
+    const confirmed = await showConfirmModal({
+        title: 'Tüneldən Ayır',
+        subtitle: displayName,
+        message: `${displayName} layihəsini tüneldən ayırmaq istədiyinizə əminsiniz?`,
+        warning: 'Layihənin tünel bağlantısı və xarici keçidi də sistemdən tam çıxarılacaq.',
+        confirmText: 'Tüneldən Ayır',
+        type: 'danger',
+        icon: '🔗'
+    });
+    if (!confirmed) return;
+    try {
+        const res = await fetch(`/api/tunnels/${tunnelId}/routes/${routeId}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Layihə tüneldən ayrıldı və keçidi təmizləndi! 🔗', 'success');
+            loadMultiNodeTunnelsOverview();
+            if (typeof loadApplications === 'function') loadApplications();
+        } else {
+            const err = await res.text();
+            showToast('Xəta: ' + err, 'error');
+        }
+    } catch (e) {
+        showToast('Xəta: ' + e.message, 'error');
+    }
+}
+
+async function syncTunnelRemote(tunnelId) {
+    try {
+        const res = await fetch(`/api/tunnels/${tunnelId}/sync-remote`, { method: 'POST' });
+        if (res.ok) {
+            showToast('Tünel konfiqurasiyası VM ilə sinxronlaşdırıldı! ⚡', 'success');
+            loadMultiNodeTunnelsOverview();
+            if (typeof loadApplications === 'function') loadApplications();
+        }
+    } catch (e) {
+        showToast('Sinxronizasiya xətası: ' + e.message, 'error');
+    }
+}
+
+async function deleteTunnelDirect(tunnelId) {
+    const confirmed = await showConfirmModal({
+        title: 'Tüneli Sil',
+        message: 'Bu tüneli tamamilə silmək istədiyinizə əminsiniz?',
+        warning: 'Bu tünelə bağlı bütün layihələrin xarici bağlantısı dayandırılacaq.',
+        confirmText: 'Tüneli Sil',
+        type: 'danger',
+        icon: '🗑️'
+    });
+    if (!confirmed) return;
+    try {
+        const res = await fetch(`/api/tunnels/${tunnelId}`, { method: 'DELETE' });
+        if (res.ok) {
+            showToast('Tünel silindi!', 'success');
+            loadMultiNodeTunnelsOverview();
+            if (typeof loadApplications === 'function') loadApplications();
+        }
+    } catch (e) {
+        showToast('Silinmə xətası: ' + e.message, 'error');
+    }
+}
+
+
+async function loadAutoDeployCenter(isSilent = false) {
     const container = document.getElementById('autodeploy-cards-container');
     if (!container) return;
 
-    container.innerHTML = `
-        <div style="text-align: center; padding: 2.5rem; color: var(--text-secondary);">
-            <div style="display: inline-block; animation: spin 1s linear infinite; margin-bottom: 0.5rem;">🔄</div>
-            <div>Bütün layihələrin və arxa plan servislərinin statusları oxunur...</div>
-        </div>
-    `;
+    const scrollParent = document.getElementById('tab-background-services') || document.querySelector('.tab-section.active');
+    const savedScroll = scrollParent ? scrollParent.scrollTop : 0;
+
+    const isAlreadyRendered = container.children.length > 0;
+    if (!isSilent && !isAlreadyRendered) {
+        container.innerHTML = `
+            <div style="text-align: center; padding: 2.5rem; color: var(--text-secondary);">
+                <div style="display: inline-block; animation: spin 1s linear infinite; margin-bottom: 0.5rem;">🔄</div>
+                <div>Bütün layihələrin və arxa plan servislərinin statusları oxunur...</div>
+            </div>
+        `;
+    }
 
     try {
         const res = await fetch('/api/applications/autodeploy-list');
         if (!res.ok) throw new Error('Məlumatları almaq mümkün olmadı');
         autoDeployAppsList = await res.json();
         renderAutoDeployCenter();
+
+        if (scrollParent && savedScroll > 0) {
+            scrollParent.scrollTop = savedScroll;
+            requestAnimationFrame(() => {
+                if (scrollParent) scrollParent.scrollTop = savedScroll;
+            });
+        }
+
+        fetch('/api/tunnels')
+            .then(r => r.json())
+            .then(tuns => {
+                const kpiTunnels = document.getElementById('ad-stat-tunnels');
+                if (kpiTunnels && Array.isArray(tuns)) {
+                    const activeCount = tuns.filter(t => t.status === 'active' || t.status === 'running').length;
+                    kpiTunnels.textContent = `${activeCount} Aktiv`;
+                }
+            })
+            .catch(() => {});
     } catch (e) {
         container.innerHTML = `
             <div style="text-align: center; padding: 2.5rem; color: #ff5252;">
@@ -912,47 +1527,14 @@ async function loadBackgroundActivityLogs() {
         container.innerHTML = `<div style="color: #ef4444;">Loqları oxumaq mümkün olmadı: ${e.message}</div>`;
     }
 }
-
-// --- Vahid Arxa Plan və Avtomatlaşdırma Mərkəzi Alt-Tab İdarəsi ---
-let currentBgSubTab = 'autodeploy';
-
-function switchBgSubTab(tabName) {
-    currentBgSubTab = tabName;
-    
-    // Düymələrin aktivliyini yenilə
-    ['autodeploy', 'watchdog', 'logs'].forEach(t => {
-        const btn = document.getElementById(`bg-subtab-btn-${t}`);
-        const content = document.getElementById(`bg-content-${t}`);
-        if (btn) btn.classList.toggle('active', t === tabName);
-        if (content) content.style.display = (t === tabName) ? 'block' : 'none';
-    });
-
-    const primaryBtn = document.getElementById('btn-bg-action-primary');
-    const primaryTxt = document.getElementById('txt-bg-action-primary');
-
-    if (tabName === 'autodeploy') {
-        if (primaryBtn) primaryBtn.style.display = 'flex';
-        if (primaryTxt) primaryTxt.innerText = '⚡ Hamısını İndi Yoxla';
-        if (typeof loadAutoDeployCenter === 'function') loadAutoDeployCenter();
-    } else if (tabName === 'watchdog') {
-        if (primaryBtn) primaryBtn.style.display = 'flex';
-        if (primaryTxt) primaryTxt.innerText = '💾 Ayarları Saxla';
-        if (typeof loadBackgroundServicesTab === 'function') loadBackgroundServicesTab();
-    } else if (tabName === 'logs') {
-        if (primaryBtn) primaryBtn.style.display = 'none';
-        if (typeof loadBackgroundActivityLogs === 'function') loadBackgroundActivityLogs();
-    }
-
-    if (window.lucide && typeof lucide.createIcons === 'function') {
-        lucide.createIcons();
-    }
-}
-
 function refreshActiveBgTab() {
     if (currentBgSubTab === 'autodeploy') {
         if (typeof loadAutoDeployCenter === 'function') loadAutoDeployCenter();
     } else if (currentBgSubTab === 'watchdog') {
-        if (typeof loadBackgroundServicesTab === 'function') loadBackgroundServicesTab();
+        if (typeof loadBackgroundServicesSettings === 'function') loadBackgroundServicesSettings();
+        if (typeof loadBackgroundAppsOverview === 'function') loadBackgroundAppsOverview();
+    } else if (currentBgSubTab === 'tunnels') {
+        if (typeof loadMultiNodeTunnelsOverview === 'function') loadMultiNodeTunnelsOverview();
     } else if (currentBgSubTab === 'logs') {
         if (typeof loadBackgroundActivityLogs === 'function') loadBackgroundActivityLogs();
     }
@@ -963,6 +1545,8 @@ function triggerActiveBgAction(btn) {
         if (typeof triggerCheckAllAutoDeploy === 'function') triggerCheckAllAutoDeploy(btn);
     } else if (currentBgSubTab === 'watchdog') {
         if (typeof saveBackgroundServicesSettings === 'function') saveBackgroundServicesSettings();
+    } else if (currentBgSubTab === 'tunnels') {
+        if (typeof loadMultiNodeTunnelsOverview === 'function') loadMultiNodeTunnelsOverview();
     }
 }
 
@@ -1008,3 +1592,187 @@ function clearCleanTerminalLogs() {
 
 window.copyCleanTerminalLogs = copyCleanTerminalLogs;
 window.clearCleanTerminalLogs = clearCleanTerminalLogs;
+
+// ==========================================================================
+// Tünel Link Tarixçəsi və Fəaliyyət İnteqrasiyası
+// ==========================================================================
+async function openTunnelLinkHistoryModal(appId, appName) {
+    let backdrop = document.getElementById('tunnel-history-modal');
+    if (!backdrop) {
+        backdrop = document.createElement('div');
+        backdrop.id = 'tunnel-history-modal';
+        backdrop.className = 'modal-backdrop';
+        backdrop.innerHTML = `
+            <div class="modal-card" style="max-width: 760px; width: 95%; max-height: 85vh; display: flex; flex-direction: column;">
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--card-border);">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <div style="width: 34px; height: 34px; border-radius: 8px; background: rgba(56, 189, 248, 0.12); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                            <i data-lucide="history" style="width: 18px; height: 18px; color: #38bdf8;"></i>
+                        </div>
+                        <div>
+                            <h3 id="hist-modal-title" style="margin: 0; font-size: 1.1rem; color: #fff;">Keçid Link Tarixçəsi</h3>
+                            <p id="hist-modal-subtitle" style="margin: 2px 0 0; font-size: 0.78rem; color: var(--text-secondary);">Linklərin təyin olunma və qüvvədən düşmə vaxtları</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; background: rgba(0,210,255,0.03); border-bottom: 1px solid rgba(255,255,255,0.05); gap: 10px; flex-wrap: wrap;">
+                    <div id="hist-modal-app-badge" style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem;">
+                        <span style="color: var(--text-secondary);">Layihə:</span>
+                        <strong id="hist-modal-app-name" style="color: #00d2ff;">-</strong>
+                    </div>
+                    <button id="hist-modal-jump-activity-btn" class="btn btn-secondary btn-xs" style="color: #a78bfa; border-color: rgba(167,139,250,0.3); font-size: 0.76rem; padding: 4px 10px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;">
+                        <i data-lucide="list" style="width: 12px; height: 12px;"></i>
+                        <span>Fəaliyyət Jurnalında Loqlara Bax</span>
+                    </button>
+                </div>
+
+                <div id="tunnel-history-list" style="flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px;">
+                    <div style="text-align: center; color: var(--text-secondary); padding: 30px; font-size: 0.85rem;">Yüklənir...</div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; padding: 12px 20px; border-top: 1px solid var(--card-border);">
+                    <button class="btn btn-secondary" onclick="closeModal('tunnel-history-modal')" style="font-size: 0.82rem; padding: 6px 16px;">Bağla</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(backdrop);
+    }
+
+    const appNameEl = document.getElementById('hist-modal-app-name');
+    const jumpBtn = document.getElementById('hist-modal-jump-activity-btn');
+    const listEl = document.getElementById('tunnel-history-list');
+
+    if (appNameEl) appNameEl.textContent = appName;
+    if (jumpBtn) {
+        jumpBtn.onclick = () => {
+            closeModal('tunnel-history-modal');
+            showActivityLogsForApp(appName);
+        };
+    }
+
+    if (listEl) {
+        listEl.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 30px; font-size: 0.85rem;"><span style="display:inline-block; animation: spin 1s linear infinite;">⏳</span> Tarixçə məlumatları gətirilir...</div>';
+    }
+
+    if (typeof showModal === 'function') {
+        showModal('tunnel-history-modal');
+    } else {
+        backdrop.style.display = 'flex';
+    }
+
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+    }
+
+    try {
+        const res = await fetch(`/api/tunnels/history/${appId}`);
+        if (!res.ok) throw new Error('Status ' + res.status);
+        const history = await res.json();
+
+        if (!history || history.length === 0) {
+            listEl.innerHTML = `
+                <div style="text-align: center; padding: 35px 20px; background: rgba(255,255,255,0.015); border: 1px dashed rgba(255,255,255,0.08); border-radius: 8px;">
+                    <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.04); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 8px;">
+                        <i data-lucide="history" style="width: 22px; height: 22px; color: #64748b;"></i>
+                    </div>
+                    <p style="margin: 0; color: #cbd5e1; font-size: 0.88rem; font-weight: 500;">Hələ ki qeydə alınmış link dəyişikliyi yoxdur.</p>
+                    <p style="margin: 5px 0 0; color: var(--text-secondary); font-size: 0.78rem;">Bu layihə üçün yeni tünel linki təyin edildikdə və ya dəyişdikdə bütün tarixçə və vaxtlar burada saxlanılacaq.</p>
+                </div>
+            `;
+            if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+            return;
+        }
+
+        listEl.innerHTML = history.map(item => {
+            const isActive = item.status === 'active';
+            const statusColor = isActive ? '#00e676' : '#94a3b8';
+            const statusBg = isActive ? 'rgba(0,230,118,0.07)' : 'rgba(255,255,255,0.03)';
+            const statusBorder = isActive ? 'rgba(0,230,118,0.25)' : 'rgba(255,255,255,0.06)';
+            const statusLabel = isActive 
+                ? '<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#00e676;box-shadow:0 0 6px #00e676;"></span>Aktiv Canlı Link</span>' 
+                : (item.status === 'stopped' 
+                    ? '<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;"></span>Dayandırılıb</span>' 
+                    : '<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#94a3b8;"></span>Qüvvədən Düşüb</span>');
+
+            let assignedTimeFormatted = item.assigned_at || '-';
+            let expiredTimeFormatted = item.expired_at || (isActive ? 'Hazırda aktivdir' : '-');
+
+            return `
+                <div style="background: ${statusBg}; border: 1px solid ${statusBorder}; border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; transition: all 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span style="font-size: 0.75rem; font-weight: 700; color: ${statusColor}; text-transform: uppercase; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px;">
+                            ${statusLabel}
+                        </span>
+                        <div style="font-size: 0.72rem; color: var(--text-secondary); font-family: monospace; display: inline-flex; align-items: center; gap: 4px;">
+                            <i data-lucide="calendar" style="width: 12px; height: 12px; color: #94a3b8;"></i>
+                            <span>Təyin tarixi:</span>
+                            <strong style="color: #cbd5e1;">${assignedTimeFormatted}</strong>
+                        </div>
+                    </div>
+
+                    <!-- Yeni Təyin Olunan Link -->
+                    <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
+                        <span style="font-size: 0.75rem; color: #38bdf8; font-weight: 600; flex-shrink: 0;">Link:</span>
+                        <a href="${item.new_url}" target="_blank" style="color: #00d2ff; font-family: monospace; font-size: 0.78rem; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${item.new_url}">
+                            ${item.new_url}
+                        </a>
+                        <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${item.new_url}'); showToast('Link kopyalandı', 'info');" style="padding: 2px 6px; font-size: 0.65rem; display: inline-flex; align-items: center;">
+                            <i data-lucide="copy" style="width: 11px; height: 11px;"></i>
+                        </button>
+                    </div>
+
+                    <!-- Əgər Köhnə Link Varsa -->
+                    ${item.previous_url ? `
+                        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.73rem; color: #94a3b8; padding: 0 4px;">
+                            <i data-lucide="corner-down-left" style="width: 12px; height: 12px; color: #f87171; flex-shrink: 0;"></i>
+                            <span style="color: #f87171; flex-shrink: 0;">Əvvəlki link:</span>
+                            <span style="font-family: monospace; text-decoration: line-through; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+                                ${item.previous_url}
+                            </span>
+                        </div>
+                    ` : ''}
+
+                    <!-- Qüvvədən Düşmə Vaxtı -->
+                    ${!isActive && item.expired_at ? `
+                        <div style="font-size: 0.72rem; color: #f87171; display: flex; align-items: center; gap: 5px; padding-top: 2px;">
+                            <i data-lucide="clock" style="width: 12px; height: 12px; color: #f87171;"></i>
+                            <span>Qüvvədən düşmə tarixi:</span>
+                            <strong style="font-family: monospace;">${expiredTimeFormatted}</strong>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+
+        if (window.lucide && typeof lucide.createIcons === 'function') {
+            lucide.createIcons();
+        }
+    } catch (e) {
+        console.error('Tünel link tarixçəsi xətası:', e);
+        if (listEl) {
+            listEl.innerHTML = `<div style="color: #ff5252; padding: 20px; text-align: center; font-size: 0.82rem;">Tarixçə yüklənərkən xəta: ${e.message}</div>`;
+        }
+    }
+}
+
+function showActivityLogsForApp(appName) {
+    if (typeof showModal === 'function') {
+        showModal('activity-log-modal');
+    }
+    setTimeout(() => {
+        const sel = document.getElementById('activity-project-filter');
+        if (sel) {
+            sel.value = appName;
+        }
+        if (typeof activityLogsState !== 'undefined') {
+            activityLogsState.projectFilter = appName;
+            if (typeof filterAndRenderActivityLogs === 'function') {
+                filterAndRenderActivityLogs();
+            }
+        }
+    }, 150);
+}
+
+window.openTunnelLinkHistoryModal = openTunnelLinkHistoryModal;
+window.showActivityLogsForApp = showActivityLogsForApp;

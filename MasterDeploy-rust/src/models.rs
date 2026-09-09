@@ -168,3 +168,103 @@ pub struct CreateActivityLogInput {
     pub target_id: Option<String>,
     pub ip_address: Option<String>,
 }
+
+// ==========================================
+// Multi-Node Server Plugins & Tunnels Models
+// ==========================================
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ServerPlugin {
+    pub id: String,
+    pub server_id: String,
+    pub plugin_name: String,
+    pub status: String,
+    pub config_json: Option<String>,
+    pub installed_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InstallServerPluginInput {
+    pub server_id: Option<String>,
+    pub install_all: Option<bool>,
+    pub config_json: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Tunnel {
+    pub id: String,
+    pub server_id: String,
+    pub name: String,
+    pub tunnel_type: String, // 'shared' və ya 'dedicated'
+    pub public_url: Option<String>,
+    pub status: String,      // 'active', 'starting', 'stopped', 'error'
+    pub last_error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTunnelInput {
+    pub server_id: Option<String>,
+    pub name: String,
+    pub tunnel_type: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TunnelWithDetails {
+    pub id: String,
+    pub server_id: String,
+    pub server_name: String,
+    pub server_ip: String,
+    pub name: String,
+    pub tunnel_type: String,
+    pub public_url: Option<String>,
+    pub status: String,
+    pub last_error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub routes: Vec<TunnelRouteDetail>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TunnelRouteDetail {
+    pub route_id: String,
+    pub app_id: String,
+    pub app_name: String,
+    pub target_port: i64,
+    pub route_path: String,
+    pub cloudflare_url: Option<String>,
+    pub cf_worker_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct TunnelRoute {
+    pub id: String,
+    pub tunnel_id: String,
+    pub app_id: String,
+    pub target_port: i64,
+    pub route_path: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AttachTunnelRouteInput {
+    pub tunnel_id: String,
+    pub app_id: String,
+    pub target_port: i64,
+    pub route_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct TunnelLinkHistory {
+    pub id: String,
+    pub app_id: String,
+    pub app_name: String,
+    pub tunnel_id: Option<String>,
+    pub previous_url: Option<String>,
+    pub new_url: String,
+    pub status: String,
+    pub assigned_at: String,
+    pub expired_at: Option<String>,
+}

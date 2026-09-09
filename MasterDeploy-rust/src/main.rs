@@ -16,7 +16,9 @@ pub mod plugins;
 pub mod servers;
 pub mod ssh;
 pub mod system;
+pub mod tunnels;
 pub mod utils;
+
 
 #[derive(Clone)]
 pub struct AppState {
@@ -85,9 +87,11 @@ async fn main() {
         .nest("/api/servers", servers::servers_router())
         .nest("/api/ssh-keys", servers::ssh_keys_router())
         .nest("/api/applications", applications::applications_router())
+        .nest("/api/tunnels", tunnels::tunnels_router())
         .nest("/api/deploy", deploy::deploy_router())
         .nest("/api/deployments", deploy::deployments_router())
         .route("/api/runtime-logs/:app_id", get(applications::get_runtime_logs))
+
         .nest("/api/plugins/cloudflare", Router::new()
             .route("/start/:app_id", axum::routing::post(plugins::cloudflare::start_cloudflare_tunnel))
             .route("/logs/:app_id", get(plugins::cloudflare::get_cloudflare_tunnel_logs))

@@ -1,0 +1,17 @@
+[Unit]
+Description=MasterDeploy Multi-Tunnel Watchdog Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/masterdeploy
+ExecStart=/usr/bin/python3 /etc/masterdeploy/remote_tunnel_daemon.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

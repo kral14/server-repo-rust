@@ -443,19 +443,28 @@ async function loadServerVolumes(serverId) {
 }
 
 async function deleteServerVolume(serverId, volumeName) {
-    if (!confirm(`"${volumeName}" volume-unu tamamilə silmək istədiyinizdən əminsiniz?`)) return;
+    const confirmed = await showConfirmModal({
+        title: 'Docker Volume-unu Sil',
+        subtitle: volumeName,
+        message: `"${volumeName}" volume-unu tamamilə silmək istədiyinizdən əminsiniz?`,
+        warning: 'Bu əməliyyat həmin həcmdəki bütün məlumatları serverdən tamamilə siləcək!',
+        confirmText: 'Volume-u Sil',
+        type: 'danger',
+        icon: '🗑️'
+    });
+    if (!confirmed) return;
 
     try {
         const res = await fetch(`/api/servers/${serverId}/volumes/${volumeName}`, { method: 'POST' });
         if (res.ok) {
-            alert('Volume uğurla silindi!');
+            showToast('Volume uğurla silindi!', 'success');
             loadServerVolumes(serverId);
         } else {
             const err = await res.text();
-            alert(`Xəta: ${err}`);
+            showToast(`Xəta: ${err}`, 'error');
         }
     } catch (e) {
-        alert(`Qoşulma xətası: ${e.message}`);
+        showToast(`Qoşulma xətası: ${e.message}`, 'error');
     }
 }
 
@@ -468,7 +477,7 @@ function copyServerVolumes(serverId, btn) {
         btn.innerText = '✅ Kopyalandı!';
         setTimeout(() => { btn.innerText = originalText; }, 2000);
     }).catch(err => {
-        alert('Kopyalamaq mümkün olmadı: ' + err);
+        showToast('Kopyalamaq mümkün olmadı: ' + err, 'error');
     });
 }
 
@@ -535,6 +544,10 @@ function toggleDeployTypeFields(context) {
         if (imgInputs) imgInputs.style.display = 'none';
         if (gitInputs) gitInputs.style.display = 'block';
         
+        if (context === 'wiz' && typeof loadWizGithubRepos === 'function') {
+            loadWizGithubRepos();
+        }
+
         if (context === 'settings') {
             const accordionBuilder = document.getElementById('settings-builder-content');
             if (accordionBuilder) {

@@ -172,7 +172,7 @@ async function loadApplications() {
                         </div>
 
                         <!-- Sütun 4: Keçidlər və Linklər -->
-                        <div class="col-links">
+                        <div class="col-links" id="app-links-${app.id}">
                             ${(app.status === 'success' || app.status === 'running') ? `
                                 <a href="${apiLink}" target="_blank" onclick="event.stopPropagation()" style="font-size: 0.72rem; color: var(--accent-color); text-decoration: none; padding: 0.25rem 0.55rem; background: rgba(0, 210, 255, 0.08); border: 1px solid rgba(0, 210, 255, 0.22); border-radius: 5px; display: inline-flex; align-items: center; gap: 0.35rem; transition: 0.2s;" title="Lokal Keçid">
                                     <i data-lucide="external-link" style="width: 11px; height: 11px;"></i> Lokal Keçid
@@ -187,32 +187,14 @@ async function loadApplications() {
                                     <i data-lucide="globe" style="width: 11px; height: 11px;"></i> Worker Linki
                                 </a>
                                 ` : ''}
-                                ${isCfInstalled ? `
-                                <button onclick="generateCloudflareTunnel(event, '${app.id}')" style="font-size: 0.72rem; color: #fff; background: linear-gradient(135deg, #f97316, #ea580c); border: none; border-radius: 5px; padding: 0.25rem 0.55rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.35rem; transition: 0.2s;" title="Cloudflare Tunelini İşə Sal / Link Al">
-                                    <i data-lucide="radio" style="width: 11px; height: 11px;"></i> Tunnel AI
-                                </button>
-                                ` : ''}
                             ` : '<span style="font-size: 0.72rem; color: #64748b; font-style: italic;">Keçid yoxdur</span>'}
                         </div>
 
-                        <!-- Sütun 5: Status və Əməliyyat Menyusu -->
+                        <!-- Sütun 5: Status -->
                         <div class="col-status">
                             <div style="display:inline-flex; align-items:center; gap:0.4rem; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); padding: 0.28rem 0.65rem; border-radius: 6px; font-size: 0.74rem; font-weight: 600;">
                                 <span style="width:7px; height:7px; border-radius:50%; background:${sc}; display:inline-block; box-shadow: 0 0 6px ${sc};"></span>
                                 <span style="color:${sc};">${app.status.toUpperCase()}</span>
-                            </div>
-                            
-                            <!-- 3 nöqtə menyu -->
-                            <div style="position: relative;">
-                                <button class="app-menu-btn" onclick="toggleAppMenu(event, '${app.id}')" style="padding: 0.2rem 0.45rem; font-size: 1rem; border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); color: #94a3b8; cursor: pointer;">⋮</button>
-                                <div id="app-menu-${app.id}" class="app-dropdown-menu">
-                                    <button onclick="event.stopPropagation(); openAppDetails('${app.id}')" style="display: inline-flex; align-items: center; gap: 6px; width: 100%;">
-                                        <i data-lucide="eye" style="width: 14px; height: 14px;"></i> Detallara Bax
-                                    </button>
-                                    <button class="danger" onclick="handleDeleteAppClick(event, '${app.id}', '${encodeURIComponent(app.name || 'Adsız Layihə')}')" style="display: inline-flex; align-items: center; gap: 6px; width: 100%;">
-                                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Sil
-                                    </button>
-                                </div>
                             </div>
                         </div>
 
@@ -227,7 +209,7 @@ async function loadApplications() {
             `;
         }
 
-        const renderHash = 'grid_v7_' + JSON.stringify(apps.map(a => `${a.id}_${a.name}_${a.status}_${a.port}_${a.server_id}_${a.cloudflare_url}_${a.cf_worker_url}`));
+        const renderHash = 'grid_v8_' + JSON.stringify(apps.map(a => `${a.id}_${a.name}_${a.status}_${a.port}_${a.server_id}_${a.cloudflare_url}_${a.cf_worker_url}`));
         if (appsList && appsList.getAttribute('data-render-hash') !== renderHash) {
             appsList.setAttribute('data-render-hash', renderHash);
             appsList.innerHTML = html;
@@ -329,6 +311,15 @@ async function handleCreateApp(event) {
             } else {
                 repoUrl = `https://github.com/${selectedRepoName}.git`;
             }
+        }
+
+        if (!branch) {
+            branch = 'main';
+        }
+
+        if (!repoUrl) {
+            alert("⚠️ Zəhmət olmasa Git Repo URL daxil edin və ya siyahıdan seçin!");
+            return;
         }
     }
 
@@ -477,3 +468,67 @@ async function deleteApp(appId, appName) {
         }
     });
 }
+
+// =====================================
+// Multi-Node Tunnels UI Helper Funksiyaları
+// =====================================
+
+function toggleTunnelSelectionFields() {
+    const isChecked = document.getElementById('app-enable-tunnel')?.checked;
+    const optionsContainer = document.getElementById('app-tunnel-options');
+    if (optionsContainer) {
+        optionsContainer.style.display = isChecked ? 'block' : 'none';
+        if (isChecked) {
+            const serverSelect = document.getElementById('app-server');
+            if (serverSelect && serverSelect.value) {
+                loadTunnelsForServer(serverSelect.value);
+            }
+        }
+    }
+}
+
+function handleTunnelModeChange() {
+    const mode = document.getElementById('app-tunnel-mode')?.value;
+    const existingGroup = document.getElementById('app-existing-tunnel-group');
+    const newGroup = document.getElementById('app-new-tunnel-group');
+
+    if (mode === 'shared') {
+        if (existingGroup) existingGroup.style.display = 'block';
+        if (newGroup) newGroup.style.display = 'none';
+    } else if (mode === 'new') {
+        if (existingGroup) existingGroup.style.display = 'none';
+        if (newGroup) newGroup.style.display = 'block';
+    } else {
+        if (existingGroup) existingGroup.style.display = 'none';
+        if (newGroup) newGroup.style.display = 'none';
+    }
+}
+
+async function loadTunnelsForServer(serverId) {
+    const tunnelSelect = document.getElementById('app-existing-tunnel-select');
+    if (!tunnelSelect || !serverId) return;
+
+    tunnelSelect.innerHTML = '<option value="">Tünellər yüklənir...</option>';
+
+    try {
+        const res = await fetch(`/api/tunnels/server/${serverId}`);
+        const tunnels = await res.json();
+
+        if (Array.isArray(tunnels) && tunnels.length > 0) {
+            tunnelSelect.innerHTML = tunnels.map(t => {
+                const statusBadge = t.status === 'active' ? '🟢 Aktiv' : '⚪ Dayanıb';
+                return `<option value="${t.id}">${t.name} (${statusBadge}) - ${t.tunnel_type === 'shared' ? 'Ortaq' : 'Ayrı'}</option>`;
+            }).join('');
+        } else {
+            tunnelSelect.innerHTML = '<option value="">Bu serverdə aktiv tünel yoxdur (Yeni tünel seçin)</option>';
+            const modeSelect = document.getElementById('app-tunnel-mode');
+            if (modeSelect) {
+                modeSelect.value = 'new';
+                handleTunnelModeChange();
+            }
+        }
+    } catch (e) {
+        tunnelSelect.innerHTML = '<option value="">Tünelləri yükləmək alınmadı</option>';
+    }
+}
+

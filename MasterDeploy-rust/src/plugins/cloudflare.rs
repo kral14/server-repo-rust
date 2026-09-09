@@ -80,6 +80,8 @@ pub async fn start_cloudflare_tunnel(
         let db_clone = state.db.clone();
         let app_id_clone = app_id.clone();
         let app_name_clone = app.name.clone();
+        let server_id_clone = app.server_id.clone();
+        let port_clone = app.port;
         let cf_worker_url_clone = app.cf_worker_url.clone();
         let ssh_bin_clone = ssh_bin.to_string();
         let ssh_user_clone = server.ssh_user.clone();
@@ -156,6 +158,8 @@ pub async fn start_cloudflare_tunnel(
                             .bind(&app_id_clone)
                             .execute(&db_clone)
                             .await;
+
+                        sync_app_tunnel_active(&db_clone, &app_id_clone, &app_name_clone, &server_id_clone, port_clone, url).await;
                         
                         println!("[TUNNEL] Link KV bazasına (Cloudflare) yazılmağa göndərilir...");
                         match send_url_to_kv(&db_clone, &app_name_clone, cf_worker_url_clone.clone(), url).await {
@@ -303,6 +307,8 @@ pub async fn get_cloudflare_tunnel_logs(
                 .execute(&state.db)
                 .await;
             
+            sync_app_tunnel_active(&state.db, &app.id, &app.name, &app.server_id, app.port, url).await;
+
             let _ = send_url_to_kv(&state.db, &app.name, app.cf_worker_url.clone(), url).await;
         }
     }
@@ -316,6 +322,267 @@ pub async fn get_cloudflare_tunnel_logs(
         "logs": output_str,
         "cloudflare_url": cloudflare_url
     })))
+}
+
+pub async fn sync_app_tunnel_active(
+    pool: &sqlx::SqlitePool,
+    app_id: &str,
+    app_name: &str,
+    server_id: &str,
+    app_port: i64,
+    url: &str,
+) {
+    // 1. Tətbiqin mövcud tunnel_id-si varmı?
+    let current_tunnel_id: Option<String> = match sqlx::query_as::<_, (Option<String>,)>(
+        "SELECT tunnel_id FROM applications WHERE id = ?"
+    )
+    .bind(app_id)
+    .fetch_optional(pool)
+    .await {
+        Ok(Some((tid,))) => tid,
+        _ => None,
+    };
+
+    let tunnel_id = if let Some(tid) = current_tunnel_id {
+        let _ = sqlx::query(
+            "UPDATE tunnels SET public_url = ?, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .bind(url)
+        .bind(&tid)
+        .execute(pool)
+        .await;
+        tid
+    } else {
+        let tunnel_name = format!("Tunel-{} (Dedicated)", app_name);
+        let existing_tid: Option<String> = match sqlx::query_as::<_, (String,)>(
+            "SELECT id FROM tunnels WHERE server_id = ? AND name = ?"
+        )
+        .bind(server_id)
+        .bind(&tunnel_name)
+        .fetch_optional(pool)
+        .await {
+            Ok(Some((tid,))) => {
+                let _ = sqlx::query(
+                    "UPDATE tunnels SET public_url = ?, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+                )
+                .bind(url)
+                .bind(&tid)
+                .execute(pool)
+                .await;
+                Some(tid)
+            }
+            _ => None,
+        };
+
+        let tid = match existing_tid {
+            Some(t) => t,
+            None => {
+                let new_id = uuid::Uuid::new_v4().to_string();
+                let _ = sqlx::query(
+                    "INSERT INTO tunnels (id, server_id, name, tunnel_type, public_url, status) VALUES (?, ?, ?, 'dedicated', ?, 'active')"
+                )
+                .bind(&new_id)
+                .bind(server_id)
+                .bind(&tunnel_name)
+                .bind(url)
+                .execute(pool)
+                .await;
+                new_id
+            }
+        };
+
+        let _ = sqlx::query("UPDATE applications SET tunnel_id = ? WHERE id = ?")
+            .bind(&tid)
+            .bind(app_id)
+            .execute(pool)
+            .await;
+
+        tid
+    };
+
+    let route_id = uuid::Uuid::new_v4().to_string();
+    let _ = sqlx::query(
+        "INSERT INTO tunnel_routes (id, tunnel_id, app_id, target_port, route_path) VALUES (?, ?, ?, ?, '/') \
+         ON CONFLICT(tunnel_id, app_id) DO UPDATE SET target_port = excluded.target_port"
+    )
+    .bind(&route_id)
+    .bind(&tunnel_id)
+    .bind(app_id)
+    .bind(app_port)
+    .execute(pool)
+    .await;
+
+    // Tünel keçid tarixçəsini və Fəaliyyət Jurnalını qeyd et
+    record_tunnel_link_change(pool, app_id, app_name, Some(&tunnel_id), url).await;
+}
+
+pub async fn record_tunnel_link_change(
+    pool: &sqlx::SqlitePool,
+    app_id: &str,
+    app_name: &str,
+    tunnel_id: Option<&str>,
+    new_url: &str,
+) {
+    if new_url.trim().is_empty() {
+        return;
+    }
+
+    let last_active: Option<(String, String)> = sqlx::query_as(
+        "SELECT id, new_url FROM tunnel_link_history WHERE app_id = ? AND status = 'active' ORDER BY assigned_at DESC LIMIT 1"
+    )
+    .bind(app_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or_default();
+
+    if let Some((last_id, old_url)) = last_active {
+        if old_url == new_url {
+            return;
+        }
+
+        let _ = sqlx::query(
+            "UPDATE tunnel_link_history SET status = 'expired', expired_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .bind(&last_id)
+        .execute(pool)
+        .await;
+
+        let new_hist_id = uuid::Uuid::new_v4().to_string();
+        let _ = sqlx::query(
+            "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, previous_url, new_url, status) VALUES (?, ?, ?, ?, ?, ?, 'active')"
+        )
+        .bind(&new_hist_id)
+        .bind(app_id)
+        .bind(app_name)
+        .bind(tunnel_id)
+        .bind(&old_url)
+        .bind(new_url)
+        .execute(pool)
+        .await;
+
+        let log_msg = format!(
+            "🌐 [Tünel Keçidi] '{}' üçün yeni link aktivləşdirildi: {} (Əvvəlki link qüvvədən düşdü: {})",
+            app_name, new_url, old_url
+        );
+        crate::utils::add_activity_log_pro(
+            pool,
+            &log_msg,
+            "success",
+            Some("Tunnels"),
+            Some("Tunnel Watcher"),
+            Some(app_id),
+            None,
+        ).await;
+    } else {
+        let new_hist_id = uuid::Uuid::new_v4().to_string();
+        let _ = sqlx::query(
+            "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, previous_url, new_url, status) VALUES (?, ?, ?, ?, NULL, ?, 'active')"
+        )
+        .bind(&new_hist_id)
+        .bind(app_id)
+        .bind(app_name)
+        .bind(tunnel_id)
+        .bind(new_url)
+        .execute(pool)
+        .await;
+
+        let log_msg = format!(
+            "🌐 [Tünel Keçidi] '{}' layihəsinə ilkin canlı keçid linki təyin edildi: {}",
+            app_name, new_url
+        );
+        crate::utils::add_activity_log_pro(
+            pool,
+            &log_msg,
+            "success",
+            Some("Tunnels"),
+            Some("Tunnel Watcher"),
+            Some(app_id),
+            None,
+        ).await;
+    }
+}
+
+pub async fn record_tunnel_link_stopped(
+    pool: &sqlx::SqlitePool,
+    app_id: &str,
+    app_name: &str,
+) {
+    let last_active: Option<(String, String)> = sqlx::query_as(
+        "SELECT id, new_url FROM tunnel_link_history WHERE app_id = ? AND status = 'active' ORDER BY assigned_at DESC LIMIT 1"
+    )
+    .bind(app_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or_default();
+
+    if let Some((last_id, old_url)) = last_active {
+        let _ = sqlx::query(
+            "UPDATE tunnel_link_history SET status = 'stopped', expired_at = CURRENT_TIMESTAMP WHERE id = ?"
+        )
+        .bind(&last_id)
+        .execute(pool)
+        .await;
+
+        let log_msg = format!(
+            "🛑 [Tünel Keçidi] '{}' tünel linki qüvvədən düşdü / dayandırıldı (Link: {})",
+            app_name, old_url
+        );
+        crate::utils::add_activity_log_pro(
+            pool,
+            &log_msg,
+            "warning",
+            Some("Tunnels"),
+            Some("Tunnel Watcher"),
+            Some(app_id),
+            None,
+        ).await;
+    }
+}
+
+pub async fn sync_app_tunnel_stopped(
+    pool: &sqlx::SqlitePool,
+    app_id: &str,
+) {
+    let app_info: Option<(Option<String>, String)> = sqlx::query_as(
+        "SELECT tunnel_id, name FROM applications WHERE id = ?"
+    )
+    .bind(app_id)
+    .fetch_optional(pool)
+    .await
+    .unwrap_or_default();
+
+    if let Some((Some(ref tid), ref app_name)) = app_info {
+        let tunnel_type: Option<String> = match sqlx::query_as::<_, (String,)>(
+            "SELECT tunnel_type FROM tunnels WHERE id = ?"
+        )
+        .bind(tid)
+        .fetch_optional(pool)
+        .await {
+            Ok(Some((tt,))) => Some(tt),
+            _ => None,
+        };
+
+        if let Some(t_type) = tunnel_type {
+            if t_type == "dedicated" {
+                let _ = sqlx::query("DELETE FROM tunnel_routes WHERE tunnel_id = ?").bind(tid).execute(pool).await;
+                let _ = sqlx::query("DELETE FROM tunnels WHERE id = ?").bind(tid).execute(pool).await;
+            } else {
+                let _ = sqlx::query("DELETE FROM tunnel_routes WHERE tunnel_id = ? AND app_id = ?")
+                    .bind(tid)
+                    .bind(app_id)
+                    .execute(pool)
+                    .await;
+            }
+        }
+        record_tunnel_link_stopped(pool, app_id, app_name).await;
+    } else if let Some((None, ref app_name)) = app_info {
+        record_tunnel_link_stopped(pool, app_id, app_name).await;
+    }
+
+    let _ = sqlx::query("UPDATE applications SET cloudflare_url = NULL, tunnel_id = NULL WHERE id = ?")
+        .bind(app_id)
+        .execute(pool)
+        .await;
 }
 
 pub async fn stop_cloudflare_tunnel(
@@ -390,10 +657,8 @@ pub async fn stop_cloudflare_tunnel(
         out_res.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("SSH command execution failed: {}", e)))?;
     }
 
-    let _ = sqlx::query("UPDATE applications SET cloudflare_url = NULL WHERE id = ?")
-        .bind(&app_id)
-        .execute(&state.db)
-        .await;
+    // Tünelləri və layihə əlaqələrini arxa planla tam sinxron təmizləyirik
+    sync_app_tunnel_stopped(&state.db, &app_id).await;
 
     Ok(Json(serde_json::json!({ "success": true })))
 }

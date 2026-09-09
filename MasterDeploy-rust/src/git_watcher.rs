@@ -5,10 +5,10 @@ use crate::deploy::trigger_deployment_impl;
 
 pub async fn git_polling_loop(db: SqlitePool) {
     println!("[INFO] Git Auto-Deploy Polling Service is running... 🕵️");
-    let mut loop_tick: u64 = 0;
+    let mut _loop_tick: u64 = 0;
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
-        loop_tick += 1;
+        _loop_tick += 1;
 
         // 1. Köhnə deployment loqlarının tənzimlənə bilən həddə əsasən avtomatik təmizlənməsi
         let autoclean_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_autoclean_enabled'")
@@ -27,7 +27,7 @@ pub async fn git_polling_loop(db: SqlitePool) {
         let tunnel_watchdog_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_tunnel_watchdog_enabled'")
             .fetch_optional(&db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
 
-        if (tunnel_watchdog_enabled == "1" || tunnel_watchdog_enabled == "true") && loop_tick % 4 == 0 {
+        if (tunnel_watchdog_enabled == "1" || tunnel_watchdog_enabled == "true") && _loop_tick % 4 == 0 {
             if let Ok(tunnel_apps) = sqlx::query_as::<_, Application>(
                 "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
                  build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \

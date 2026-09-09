@@ -21,12 +21,14 @@ async function loadPlugins() {
                     ${isCf && p.installed ? `<span id="cf-plugin-status-badge" style="color: #ffb86c; font-size: 0.8rem; margin-right: 10px; font-weight: 500;">🟡 Yoxlanılır...</span>` : ''}
                     ${p.installed ?
                     `
+                         <button class="btn btn-secondary" onclick="installPlugin('${p.id}')" style="padding: 6px 12px; font-size: 0.8rem; border-color: rgba(59, 130, 246, 0.4); color: #93c5fd;" title="Serverlər üzrə idarəetmə və terminal">🖥️ Serverlər</button>
                          ${isCf ? `<button class="btn btn-secondary" onclick="openCloudflareSetupModal()" style="padding: 6px 12px; font-size: 0.8rem; border-color: rgba(59, 130, 246, 0.4); color: #93c5fd;">⚙️ Sazla</button>` : ''}
                          <button class="btn btn-secondary" onclick="uninstallPlugin('${p.id}')" style="color: var(--danger-color) !important; padding: 6px 12px; font-size: 0.8rem;">Uninstall</button>
                         ` :
                     `<button class="btn btn-primary" onclick="installPlugin('${p.id}')" style="padding: 6px 12px; font-size: 0.8rem;">Install</button>`
                 }
                 </div>
+
             </div>
             `;
         }).join('');
@@ -64,47 +66,191 @@ async function loadPlugins() {
     }
 }
 
+let currentSelectedPluginId = null;
+
 async function installPlugin(id) {
-    const card = event.target.closest('.plugin-card');
-    const btnContainer = event.target.parentElement;
-    btnContainer.innerHTML = `<span class="plugin-loading-spinner"></span> <span style="font-size:0.8rem; color:var(--text-secondary);">Quraşdırılır...</span>`;
+    currentSelectedPluginId = id;
+    const modal = document.getElementById('plugin-server-select-modal');
+    const listContainer = document.getElementById('plugin-servers-list');
+    const titleEl = document.getElementById('plugin-select-title');
+    
+    if (titleEl) {
+        titleEl.innerHTML = `🌐 '${id.toUpperCase()}' Modulu üçün Server Seçin`;
+    }
+    
+    if (listContainer) {
+        listContainer.innerHTML = '<div style="color:var(--text-secondary); font-size:0.85rem; padding:10px;">Serverlər yoxlanılır...</div>';
+    }
+    
+    // Sistem pəncərə meneceri ilə tam hüquqlu desktop pəncərəsi kimi açırıq
+    if (typeof showModal === 'function') {
+        await showModal('plugin-server-select-modal');
+    } else if (modal) {
+        modal.classList.add('active');
+    }
 
     try {
-        const res = await fetch(`/api/plugins/${id}/install`, { method: 'POST' });
+
+        const res = await fetch(`/api/plugins/${id}/servers`);
+        const servers = await res.json();
+
+        if (!listContainer) return;
+        if (!Array.isArray(servers) || servers.length === 0) {
+            listContainer.innerHTML = '<div style="color:var(--text-secondary); font-size:0.85rem; padding:10px;">Heç bir server tapılmadı. Əvvəlcə Serverlər bölməsindən server əlavə edin.</div>';
+            return;
+        }
+
+        listContainer.innerHTML = servers.map(s => {
+            return `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); border:1px solid var(--card-border); padding:10px 14px; border-radius:8px;">
+                <div>
+                    <div style="font-weight:600; font-size:0.92rem; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
+                        <span>🖥️ ${s.server_name}</span>
+                        <span style="font-size:0.75rem; color:var(--text-secondary); font-family:monospace;">(${s.server_ip})</span>
+                    </div>
+                    <div style="font-size:0.78rem; margin-top:2px;">
+                        ${s.installed ? '<span style="color:#00e676;">🟢 Bu serverdə aktivdir</span>' : '<span style="color:var(--text-secondary);">⚪ Quraşdırılmayıb</span>'}
+                    </div>
+                </div>
+                <div>
+                    ${s.installed ?
+                        `<button class="btn btn-secondary" onclick="uninstallPluginFromServer('${id}', '${s.server_id}')" style="color:var(--danger-color)!important; padding:4px 10px; font-size:0.75rem;">Sil</button>` :
+                        `<button class="btn btn-primary" onclick="installPluginToServer('${id}', '${s.server_id}')" style="padding:4px 10px; font-size:0.75rem;">Quraşdır</button>`
+                    }
+                </div>
+            </div>
+            `;
+        }).join('');
+    } catch (e) {
+        if (listContainer) {
+            listContainer.innerHTML = `<div style="color:var(--danger-color); font-size:0.85rem; padding:10px;">Xəta: ${e.message}</div>`;
+        }
+    }
+}
+
+function appendPluginTerminalLog(text, color = '#4ade80') {
+    const term = document.getElementById('plugin-terminal-body');
+    if (!term) return;
+    const line = document.createElement('div');
+    line.style.color = color;
+    line.style.marginBottom = '4px';
+    const timestamp = new Date().toLocaleTimeString();
+    line.textContent = `[${timestamp}] ${text}`;
+    term.appendChild(line);
+    term.scrollTop = term.scrollHeight;
+}
+
+function clearPluginTerminal() {
+    const term = document.getElementById('plugin-terminal-body');
+    if (term) {
+        term.innerHTML = '<span style="color:#64748b;">[SİSTEM] Terminal təmizləndi. Hazırdır...</span>';
+    }
+}
+
+async function installPluginToServer(pluginId, serverId) {
+    appendPluginTerminalLog(`🚀 Quraşdırma başladılır: '${pluginId}' -> Server ID: ${serverId}...`, '#38bdf8');
+    appendPluginTerminalLog(`📡 Uzaq serverə SSH ilə qoşulur və sistem paketləri yoxlanılır...`, '#94a3b8');
+
+    try {
+        const res = await fetch(`/api/plugins/${pluginId}/install`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ server_id: serverId, install_all: false })
+        });
         if (res.ok) {
-            setTimeout(async () => {
-                await loadPlugins();
+            appendPluginTerminalLog(`📦 cloudflared və müstəqil Watchdog Daemon skripti quraşdırılır...`, '#94a3b8');
+            appendPluginTerminalLog(`⚙️ Systemd servisi (md-tunnel.service) qeydiyyata alınır...`, '#94a3b8');
+            setTimeout(() => {
+                appendPluginTerminalLog(`✅ TƏBRİKLƏR! '${pluginId}' modulu həmin serverdə uğurla aktivləşdirildi! 🎉`, '#00e676');
+                addActivityLog(`Modul serverə quraşdırıldı: ${pluginId}`, 'setup');
+                installPlugin(pluginId); // Siyahını yeniləyirik
+                loadPlugins();
                 loadApplications();
-                addActivityLog(`Modul quraşdırıldı: ${id}`, 'setup');
-                if (id === 'cloudflare') {
-                    // Avtomatik sazlama pəncərəsi açılsın
-                    openCloudflareSetupModal();
-                }
-            }, 1500); // Vizual gözəllik üçün animasiyanı 1.5s saxlayırıq
+            }, 600);
+        } else {
+            const err = await res.text();
+            appendPluginTerminalLog(`❌ XƏTA: Quraşdırma zamanı problem yarandı: ${err}`, '#ff1744');
         }
     } catch (e) {
-        console.error(e);
+        appendPluginTerminalLog(`❌ ŞƏBƏKƏ XƏTASI: ${e.message}`, '#ff1744');
+        console.error("Quraşdırma xətası:", e);
+    }
+}
+
+async function installPluginAllServers() {
+    if (!currentSelectedPluginId) return;
+    appendPluginTerminalLog(`🚀 Qlobal quraşdırma başladıldı: '${currentSelectedPluginId}' bütün aktiv serverlərə tətbiq olunur...`, '#38bdf8');
+    try {
+        const res = await fetch(`/api/plugins/${currentSelectedPluginId}/install`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ install_all: true })
+        });
+        if (res.ok) {
+            appendPluginTerminalLog(`✅ Bütün serverlərdə quraşdırma və daemon sinxronizasiyası tamamlandı! 🎉`, '#00e676');
+            addActivityLog(`Modul bütün serverlərə quraşdırıldı: ${currentSelectedPluginId}`, 'setup');
+            installPlugin(currentSelectedPluginId);
+            loadPlugins();
+            loadApplications();
+        } else {
+            const err = await res.text();
+            appendPluginTerminalLog(`❌ XƏTA: ${err}`, '#ff1744');
+        }
+    } catch (e) {
+        appendPluginTerminalLog(`❌ ŞƏBƏKƏ XƏTASI: ${e.message}`, '#ff1744');
+        console.error("Qlobal quraşdırma xətası:", e);
+    }
+}
+
+async function uninstallPluginFromServer(pluginId, serverId) {
+    appendPluginTerminalLog(`🗑️ Modul silinir: '${pluginId}' serverdən (ID: ${serverId}) çıxarılır...`, '#f59e0b');
+    try {
+        const res = await fetch(`/api/plugins/${pluginId}/uninstall`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ server_id: serverId })
+        });
+        if (res.ok) {
+            appendPluginTerminalLog(`✅ Modul həmin serverdən uğurla ləğv edildi.`, '#00e676');
+            addActivityLog(`Modul serverdən silindi: ${pluginId}`, 'delete');
+            installPlugin(pluginId); // Siyahını yeniləyirik
+            loadPlugins();
+            loadApplications();
+        } else {
+            const err = await res.text();
+            appendPluginTerminalLog(`❌ Silinmə xətası: ${err}`, '#ff1744');
+        }
+    } catch (e) {
+        appendPluginTerminalLog(`❌ ŞƏBƏKƏ XƏTASI: ${e.message}`, '#ff1744');
+        console.error("Silinmə xətası:", e);
     }
 }
 
 async function uninstallPlugin(id) {
-    const card = event.target.closest('.plugin-card');
-    const btnContainer = event.target.parentElement;
-    btnContainer.innerHTML = `<span class="plugin-loading-spinner" style="border-top-color:var(--danger-color);"></span> <span style="font-size:0.8rem; color:var(--text-secondary);">Silinir...</span>`;
-
+    const confirmed = await showConfirmModal({
+        title: 'Modulu Ləğv Et',
+        subtitle: id,
+        message: `'${id}' modulunu bütün serverlərdən ləğv etmək istədiyinizə əminsiniz?`,
+        warning: 'Bu əməliyyat həmin modula aid bütün servisləri dayandıracaq.',
+        confirmText: 'Modulu Sil',
+        type: 'danger',
+        icon: '🗑️'
+    });
+    if (!confirmed) return;
     try {
         const res = await fetch(`/api/plugins/${id}/uninstall`, { method: 'POST' });
         if (res.ok) {
-            setTimeout(async () => {
-                await loadPlugins();
-                loadApplications();
-                addActivityLog(`Modul silindi: ${id}`, 'delete');
-            }, 1500);
+            await loadPlugins();
+            loadApplications();
+            addActivityLog(`Modul tamamilə silindi: ${id}`, 'delete');
+            if (typeof showToast === 'function') showToast(`'${id}' modulu uğurla ləğv edildi!`, 'success');
         }
     } catch (e) {
         console.error(e);
+        if (typeof showToast === 'function') showToast(`Xəta: ${e.message}`, 'error');
     }
 }
+
 
 function openCloudflareHelpModal() {
     const template = document.getElementById('worker-code-template');
@@ -280,20 +426,33 @@ async function deployCloudflareWorker(appId) {
 }
 
 async function deleteCloudflareWorker(appId) {
-    if (!appId) { alert('Tətbiq ID tapılmadı.'); return; }
-    if (!confirm('Bu tətbiqin Cloudflare Worker-ini və sabit linkini silmək istədiyinizdən əminsiniz?')) return;
+    if (!appId) {
+        if (typeof showToast === 'function') showToast('Tətbiq ID tapılmadı.', 'error');
+        return;
+    }
+    const confirmed = await showConfirmModal({
+        title: 'Cloudflare Worker-i Sil',
+        message: 'Bu tətbiqin Cloudflare Worker-ini və sabit linkini silmək istədiyinizdən əminsiniz?',
+        warning: 'Worker silindikdə xarici keçid dərhal deaktiv olacaq.',
+        confirmText: 'Worker-i Sil',
+        type: 'danger',
+        icon: '☁️'
+    });
+    if (!confirmed) return;
     
     const btn = document.getElementById('btn-delete-cf-worker');
-    const originalText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '⌛ Silinir...';
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⌛ Silinir...';
+    }
 
     try {
         const res = await fetch(`/api/plugins/cloudflare/delete-worker/${appId}`, {
             method: 'POST'
         });
         if (res.ok) {
-            alert('Cloudflare Worker uğurla silindi!');
+            if (typeof showToast === 'function') showToast('Cloudflare Worker uğurla silindi!', 'success');
             const urlInput = document.getElementById('settings-cf-worker-url');
             if (urlInput) urlInput.value = '';
             
@@ -303,13 +462,15 @@ async function deleteCloudflareWorker(appId) {
             if (typeof loadApplications === 'function') loadApplications();
         } else {
             const errText = await res.text();
-            alert('Worker silmə xətası: ' + errText);
+            if (typeof showToast === 'function') showToast('Worker silmə xətası: ' + errText, 'error');
         }
     } catch (e) {
-        alert('Xəta baş verdi: ' + e.message);
+        if (typeof showToast === 'function') showToast('Xəta baş verdi: ' + e.message, 'error');
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = originalText;
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
     }
 }
 
@@ -524,16 +685,34 @@ async function closeCloudflareModal(shouldStop) {
         } catch (e) {
             console.error(e);
         }
+    }
+
+    if (typeof loadApplications === 'function') {
         loadApplications();
+    }
+    if (typeof openAppDetails === 'function' && typeof currentAppDetailsId !== 'undefined' && currentAppDetailsId && currentAppDetailsId === currentCfAppId) {
+        openAppDetails(currentCfAppId, false);
     }
     currentCfAppId = null;
 }
 
 // Generate Cloudflare Tunnel
-async function generateCloudflareTunnel(event, id) {
+async function generateCloudflareTunnel(event, id, customAppName) {
     if (event) event.stopPropagation();
 
-    const appName = event ? (event.currentTarget.closest('.list-item') ? event.currentTarget.closest('.list-item').querySelector('h3').innerText.split('\n')[0].replace('🚀', '').trim() : id) : id;
+    let appName = customAppName || '';
+    if (!appName && event && event.currentTarget) {
+        const item = event.currentTarget.closest('.list-item');
+        if (item) {
+            const heading = item.querySelector('strong, h3, h4, .col-app strong');
+            if (heading && heading.innerText) {
+                appName = heading.innerText.split('\n')[0].replace('🚀', '').trim();
+            }
+        }
+    }
+    if (!appName) {
+        appName = id;
+    }
 
     currentCfAppId = id;
     openCloudflareModal(id, appName);
@@ -580,7 +759,8 @@ async function runCfCommand(cmdType) {
             const res = await fetch(`/api/plugins/cloudflare/stop/${currentCfAppId}`, { method: 'POST' });
             if (res.ok) {
                 appendCfLog('[SİSTEM] Konteyner tamamilə dayandırıldı və silindi.', '#ff1744');
-                loadApplications();
+                if (typeof loadApplications === 'function') loadApplications();
+                if (typeof loadMultiNodeTunnelsOverview === 'function') loadMultiNodeTunnelsOverview();
             } else {
                 const err = await res.text();
                 appendCfLog(`[XƏTA] Dayandırma xətası: ${err}`, '#ff1744');
@@ -624,6 +804,17 @@ function startCfLogsPolling() {
                     if (!urlFound) {
                         urlFound = true;
                         addActivityLog(`Cloudflare tunel linki alındı: ${data.cloudflare_url}`, 'success');
+
+                        // Anında arxa fondakı cədvəli və tətbiq detallarını yeniləyirik
+                        if (typeof loadApplications === 'function') {
+                            loadApplications();
+                        }
+                        if (typeof loadMultiNodeTunnelsOverview === 'function') {
+                            loadMultiNodeTunnelsOverview();
+                        }
+                        if (typeof openAppDetails === 'function' && typeof currentAppDetailsId !== 'undefined' && currentAppDetailsId && currentAppDetailsId === currentCfAppId) {
+                            openAppDetails(currentCfAppId, false);
+                        }
                     }
                 }
             } else {

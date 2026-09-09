@@ -23,8 +23,20 @@ const windowNames = {
     'kt-rsa-overlay': '🔐 RSA 4096-bit Açar',
     'kt-ssh-overlay': '🔑 Yeni SSH Açarı',
     'kt-edit-ssh-overlay': '✏️ SSH Açarı Redaktə',
-    'server-clean-modal': '🧹 Server Dərindən Təmizləmə'
+    'server-clean-modal': '🧹 Server Dərindən Təmizləmə',
+    'plugin-server-select-modal': '🌐 Modul Quraşdırma Mərkəzi',
+    'plugins-modal': '🧩 Modullar (Plugins)',
+    'create-tunnel-modal': '🌐 Yeni Tünel Yarat',
+    'attach-route-modal': '🔗 Tünelə Layihə Qoş',
+    'tunnel-history-modal': '⏱️ Keçid Link Tarixçəsi',
+    'win-dashboard': '📊 İdarəetmə Paneli (Dashboard)',
+    'win-servers': '🖥️ Serverlər',
+    'win-applications': '🚀 Layihələr',
+    'win-background-services': '⚡ Auto-Deploy & Tünellər',
+    'win-keys-tokens': '🔑 Açarlar və Tokenlər',
+    'win-app-details': '📦 Layihə Detalları'
 };
+
 
 function saveWindowPosition(id, card) {
     if (card.classList.contains('maximized')) return;
@@ -72,6 +84,42 @@ function clampWindowToScreen(card) {
     card.style.top = `${top}px`;
     card.style.left = `${left}px`;
 }
+
+// Pəncərə daxilindəki təkrar başlıq bağlama (X) düymələrini avtomatik təmizləyən qlobal funksiya
+function cleanDuplicateWindowCloseButtons(root) {
+    if (!root) return;
+    const body = root.classList?.contains('win-body') ? root : root.querySelector('.win-body');
+    if (!body) return;
+
+    const btns = body.querySelectorAll('button, .close-btn, [data-close-modal]');
+    btns.forEach(btn => {
+        if (btn.classList.contains('win-btn-close') || btn.classList.contains('win-btn-min') || btn.classList.contains('win-btn-max') || btn.closest('.win-header')) {
+            return;
+        }
+
+        if (btn.closest('.modal-actions') || btn.closest('.modal-footer')) {
+            return;
+        }
+
+        const oc = (btn.getAttribute('onclick') || '').toLowerCase();
+        const text = btn.textContent.trim();
+        const lowerText = text.toLowerCase();
+        const isActionText = lowerText.includes('ləğv') || lowerText.includes('imtina') || lowerText.includes('bağla') || lowerText.includes('yadda') || lowerText.includes('save');
+
+        if (isActionText) {
+            return;
+        }
+
+        const hasXIcon = btn.querySelector('[data-lucide="x"], svg, i.lucide-x, i.fa-times') !== null;
+        const isXSign = text === '✕' || text === '×' || text === 'X' || text === 'x' || text === '' || hasXIcon;
+        const isCloseHandler = oc.includes('closemodal') || oc.includes('hideoverlay') || btn.classList.contains('close-btn') || btn.hasAttribute('data-close-modal');
+
+        if (isCloseHandler || (isXSign && btn.classList.contains('btn-secondary')) || btn.classList.contains('close-btn')) {
+            btn.remove();
+        }
+    });
+}
+window.cleanDuplicateWindowCloseButtons = cleanDuplicateWindowCloseButtons;
 
 // İstənilən pəncərəni tən ortada bərpa etmə (Emergency Center Reset)
 function centerWindow(windowId) {
@@ -160,15 +208,22 @@ async function restoreDesktopWindowsState() {
         }
 
         for (const winId of state.active) {
-            const backdrop = document.getElementById(winId);
-            if (backdrop) {
-                await showModal(winId);
-                if (state.maximized && state.maximized.includes(winId)) {
-                    maximizeWindow(winId);
+            if (winId.startsWith('win-')) {
+                const tabId = winId.replace('win-', '');
+                if (typeof openDesktopWindow === 'function') {
+                    await openDesktopWindow(tabId);
                 }
-                if (state.minimized && state.minimized.includes(winId)) {
-                    minimizeWindow(winId);
+            } else {
+                const backdrop = document.getElementById(winId);
+                if (backdrop) {
+                    await showModal(winId);
                 }
+            }
+            if (state.maximized && state.maximized.includes(winId)) {
+                maximizeWindow(winId);
+            }
+            if (state.minimized && state.minimized.includes(winId)) {
+                minimizeWindow(winId);
             }
         }
     } catch (e) {
@@ -269,6 +324,16 @@ function initializeWindow(backdropId, titleText) {
     // Hide duplicate H2 titles in content
     const oldH2 = card.querySelector('.win-body h2');
     if (oldH2) oldH2.style.display = 'none';
+
+    // Avtomatik olaraq məzmun daxilindəki təkrar başlıq bağlama (X) düymələrini təmizlə və izlə
+    const winBody = card.querySelector('.win-body');
+    if (winBody) {
+        cleanDuplicateWindowCloseButtons(winBody);
+        try {
+            const obs = new MutationObserver(() => cleanDuplicateWindowCloseButtons(winBody));
+            obs.observe(winBody, { childList: true, subtree: true });
+        } catch (e) {}
+    }
 
     // Bind controls
     card.querySelector('.win-btn-min').onclick = (e) => { e.stopPropagation(); minimizeWindow(backdropId); };
@@ -417,6 +482,22 @@ function bringToFront(windowId) {
     maxZIndex++;
     if (card) card.style.zIndex = maxZIndex;
     backdrop.style.zIndex = maxZIndex;
+
+    // Header nav chip aktivliyini yenilə
+    if (windowId.startsWith('win-')) {
+        const tabId = windowId.replace('win-', '');
+        document.querySelectorAll('.topbar-nav-chip').forEach(chip => {
+            const chipTab = chip.getAttribute('data-topbar-tab');
+            if (chipTab === tabId) {
+                chip.classList.add('active');
+            } else if (chipTab && !activeWindows['win-' + chipTab]) {
+                chip.classList.remove('active');
+            }
+        });
+        if (typeof updateHeaderSearchPlaceholder === 'function') {
+            updateHeaderSearchPlaceholder(tabId);
+        }
+    }
 }
 
 function minimizeWindow(windowId) {
@@ -644,6 +725,280 @@ function showToast(message, type = 'info') {
     }, 4000);
 }
 
+// ==========================================================================
+// Universal Custom Confirm & Alert Dialog System (Modern Premium Modals)
+// ==========================================================================
+
+/**
+ * Modern Custom Confirm Modal (Promise-based)
+ * @param {string|Object} options
+ * @returns {Promise<boolean>}
+ */
+function showConfirmModal(options) {
+    let opts = {};
+    if (typeof options === 'string') {
+        opts = { message: options };
+    } else if (typeof options === 'object' && options !== null) {
+        opts = options;
+    }
+
+    const title = opts.title || 'Təsdiq Tələb Olunur';
+    const message = opts.message || opts.body || '';
+    const subtitle = opts.subtitle || '';
+    const warning = opts.warning || '';
+    const confirmText = opts.confirmText || 'Təsdiqlə';
+    const cancelText = opts.cancelText || 'Ləğv Et';
+    const type = opts.type || (warning || opts.danger ? 'danger' : 'primary'); // 'danger' | 'warning' | 'primary' | 'info'
+    const defaultIcon = type === 'danger' ? '⚠️' : (type === 'warning' ? '⚡' : '❓');
+    const icon = opts.icon || defaultIcon;
+
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirm-card-modal');
+        if (!modal) {
+            resolve(window.confirm(message || title));
+            return;
+        }
+
+        const iconEl = document.getElementById('confirm-card-icon');
+        const iconWrap = document.getElementById('confirm-card-icon-wrap');
+        const titleEl = document.getElementById('confirm-card-title');
+        const subEl = document.getElementById('confirm-card-subtitle');
+        const bodyEl = document.getElementById('confirm-card-body');
+        const warnEl = document.getElementById('confirm-card-warning');
+        const yesBtn = document.getElementById('confirm-card-yes');
+        const noBtn = document.getElementById('confirm-card-no');
+
+        if (iconEl) iconEl.textContent = icon;
+        if (iconWrap) {
+            if (type === 'danger') {
+                iconWrap.style.background = 'rgba(239,68,68,0.14)';
+                iconWrap.style.borderColor = 'rgba(239,68,68,0.35)';
+            } else if (type === 'warning') {
+                iconWrap.style.background = 'rgba(245,158,11,0.14)';
+                iconWrap.style.borderColor = 'rgba(245,158,11,0.35)';
+            } else {
+                iconWrap.style.background = 'rgba(0,210,255,0.14)';
+                iconWrap.style.borderColor = 'rgba(0,210,255,0.35)';
+            }
+        }
+
+        if (titleEl) titleEl.textContent = title;
+        if (subEl) {
+            if (subtitle) {
+                subEl.style.display = 'block';
+                subEl.textContent = subtitle;
+            } else {
+                subEl.style.display = 'none';
+            }
+        }
+
+        if (bodyEl) {
+            bodyEl.innerHTML = message;
+            bodyEl.style.display = message ? 'block' : 'none';
+        }
+
+        if (warnEl) {
+            if (warning) {
+                warnEl.style.display = 'block';
+                warnEl.textContent = warning;
+            } else {
+                warnEl.style.display = 'none';
+            }
+        }
+
+        if (noBtn) {
+            noBtn.style.display = 'inline-block';
+            noBtn.textContent = cancelText;
+        }
+
+        if (yesBtn) {
+            yesBtn.textContent = confirmText;
+            if (type === 'danger') {
+                yesBtn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                yesBtn.style.color = '#fff';
+            } else if (type === 'warning') {
+                yesBtn.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                yesBtn.style.color = '#000';
+            } else {
+                yesBtn.style.background = 'linear-gradient(135deg, #7c3aed, #00d2ff)';
+                yesBtn.style.color = '#fff';
+            }
+            if (opts.confirmStyle) {
+                yesBtn.style.cssText += opts.confirmStyle;
+            }
+        }
+
+        modal.style.display = 'flex';
+        modal.style.zIndex = '10000010';
+
+        let isDone = false;
+        const cleanup = (result) => {
+            if (isDone) return;
+            isDone = true;
+            modal.style.display = 'none';
+            document.removeEventListener('keydown', keyHandler);
+            if (result && typeof opts.onConfirm === 'function') {
+                opts.onConfirm();
+            }
+            resolve(result);
+        };
+
+        const keyHandler = (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                cleanup(false);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                cleanup(true);
+            }
+        };
+        document.addEventListener('keydown', keyHandler);
+
+        yesBtn.onclick = (e) => {
+            e.stopPropagation();
+            cleanup(true);
+        };
+        noBtn.onclick = (e) => {
+            e.stopPropagation();
+            cleanup(false);
+        };
+        modal.onclick = (e) => {
+            if (e.target === modal) cleanup(false);
+        };
+    });
+}
+
+/**
+ * Modern Custom Alert Modal (Promise-based)
+ * @param {string|Object} options
+ * @param {string} [customTitle]
+ * @param {string} [customType]
+ * @returns {Promise<void>}
+ */
+function showAlertModal(options, customTitle, customType) {
+    let opts = {};
+    if (typeof options === 'string') {
+        opts = {
+            message: options,
+            title: customTitle || 'Məlumat',
+            type: customType || 'info'
+        };
+    } else if (typeof options === 'object' && options !== null) {
+        opts = options;
+    }
+
+    const title = opts.title || 'Məlumat';
+    const message = opts.message || opts.body || '';
+    const subtitle = opts.subtitle || '';
+    const buttonText = opts.buttonText || opts.okText || 'Tamam';
+    const type = opts.type || 'info'; // 'info' | 'success' | 'warning' | 'error'
+    const defaultIcon = type === 'success' ? '✅' : (type === 'error' ? '❌' : (type === 'warning' ? '⚠️' : 'ℹ️'));
+    const icon = opts.icon || defaultIcon;
+
+    return new Promise((resolve) => {
+        const modal = document.getElementById('confirm-card-modal');
+        if (!modal) {
+            if (typeof showToast === 'function') {
+                showToast(message || title, type);
+            } else {
+                alert(message || title);
+            }
+            resolve();
+            return;
+        }
+
+        const iconEl = document.getElementById('confirm-card-icon');
+        const iconWrap = document.getElementById('confirm-card-icon-wrap');
+        const titleEl = document.getElementById('confirm-card-title');
+        const subEl = document.getElementById('confirm-card-subtitle');
+        const bodyEl = document.getElementById('confirm-card-body');
+        const warnEl = document.getElementById('confirm-card-warning');
+        const yesBtn = document.getElementById('confirm-card-yes');
+        const noBtn = document.getElementById('confirm-card-no');
+
+        if (iconEl) iconEl.textContent = icon;
+        if (iconWrap) {
+            if (type === 'success') {
+                iconWrap.style.background = 'rgba(16,185,129,0.14)';
+                iconWrap.style.borderColor = 'rgba(16,185,129,0.35)';
+            } else if (type === 'error') {
+                iconWrap.style.background = 'rgba(239,68,68,0.14)';
+                iconWrap.style.borderColor = 'rgba(239,68,68,0.35)';
+            } else {
+                iconWrap.style.background = 'rgba(0,210,255,0.14)';
+                iconWrap.style.borderColor = 'rgba(0,210,255,0.35)';
+            }
+        }
+
+        if (titleEl) titleEl.textContent = title;
+        if (subEl) {
+            if (subtitle) {
+                subEl.style.display = 'block';
+                subEl.textContent = subtitle;
+            } else {
+                subEl.style.display = 'none';
+            }
+        }
+
+        if (bodyEl) {
+            bodyEl.innerHTML = message;
+            bodyEl.style.display = message ? 'block' : 'none';
+        }
+
+        if (warnEl) warnEl.style.display = 'none';
+        if (noBtn) noBtn.style.display = 'none';
+
+        if (yesBtn) {
+            yesBtn.textContent = buttonText;
+            yesBtn.style.background = 'linear-gradient(135deg, #7c3aed, #00d2ff)';
+            yesBtn.style.color = '#fff';
+        }
+
+        modal.style.display = 'flex';
+        modal.style.zIndex = '10000010';
+
+        let isDone = false;
+        const cleanup = () => {
+            if (isDone) return;
+            isDone = true;
+            modal.style.display = 'none';
+            if (noBtn) noBtn.style.display = 'inline-block';
+            document.removeEventListener('keydown', keyHandler);
+            resolve();
+        };
+
+        const keyHandler = (e) => {
+            if (e.key === 'Escape' || e.key === 'Enter') {
+                e.preventDefault();
+                cleanup();
+            }
+        };
+        document.addEventListener('keydown', keyHandler);
+
+        yesBtn.onclick = (e) => {
+            e.stopPropagation();
+            cleanup();
+        };
+        modal.onclick = (e) => {
+            if (e.target === modal) cleanup();
+        };
+    });
+}
+
+// Global Export
+window.showConfirmModal = showConfirmModal;
+window.showAlertModal = showAlertModal;
+window.showConfirmCard = showConfirmModal;
+
+// Brauzerin native alert() pəncərələrini tamamilə premium modal pəncərə ilə əvəzləyirik
+try {
+    window.alert = function(msg) {
+        if (typeof showAlertModal === 'function') {
+            showAlertModal(msg);
+        }
+    };
+} catch (e) {}
+
 let modalsLoaded = false;
 let modalsLoadingPromise = null;
 
@@ -700,6 +1055,9 @@ async function showModal(id) {
             card.style.top = '56px';
         }
         clampWindowToScreen(card);
+        cleanDuplicateWindowCloseButtons(card);
+        setTimeout(() => cleanDuplicateWindowCloseButtons(card), 80);
+        setTimeout(() => cleanDuplicateWindowCloseButtons(card), 300);
     }
 
     activeWindows[id] = true;
@@ -710,6 +1068,11 @@ async function showModal(id) {
         if (typeof startLiveActivityMonitor === 'function') {
             startLiveActivityMonitor();
         }
+    }
+
+    if (id === 'create-service-modal') {
+        if (typeof loadWizServers === 'function') loadWizServers();
+        if (typeof loadWizGithubRepos === 'function') loadWizGithubRepos();
     }
 
     bringToFront(id);
@@ -734,6 +1097,16 @@ function closeModal(id) {
     if (id === 'activity-log-modal') {
         if (typeof stopLiveActivityMonitor === 'function') {
             stopLiveActivityMonitor();
+        }
+    }
+
+    // Əgər tab pəncərəsidirsə, uyğun chip-in aktivliyini sil
+    if (id.startsWith('win-')) {
+        const tabId = id.replace('win-', '');
+        const chip = document.querySelector(`.topbar-nav-chip[data-topbar-tab="${tabId}"]`);
+        if (chip) chip.classList.remove('active');
+        if (tabId === 'background-services' && typeof stopTunnelAutoSync === 'function') {
+            stopTunnelAutoSync();
         }
     }
 
@@ -792,6 +1165,142 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// ==========================================================================
+// Universal Desktop Tab Window Launcher
+// ==========================================================================
+async function openDesktopWindow(tabId) {
+    if (!tabId) return;
+    if (tabId === 'autodeploy') tabId = 'background-services';
+    if (tabId === 'activity-log-modal') {
+        showModal('activity-log-modal');
+        return;
+    }
+    if (tabId === 'plugins-modal') {
+        showModal('plugins-modal');
+        return;
+    }
+
+    const winId = 'win-' + tabId;
+
+    // Əgər pəncərə artıq açıqdırsa
+    if (activeWindows[winId]) {
+        if (minimizedWindows[winId]) {
+            restoreWindow(winId);
+        }
+        bringToFront(winId);
+        const card = document.getElementById(winId)?.querySelector('.modal-card');
+        if (card) {
+            clampWindowToScreen(card);
+            card.style.transition = 'box-shadow 0.25s ease';
+            card.style.boxShadow = '0 0 35px rgba(0, 210, 255, 0.65)';
+            setTimeout(() => {
+                if (card) card.style.boxShadow = '';
+            }, 500);
+        }
+        triggerTabSpecificLoader(tabId);
+        return;
+    }
+
+    // Əgər tab hələ yüklənməyibsə, təmin et
+    if (typeof ensureTabLoaded === 'function') {
+        await ensureTabLoaded(tabId);
+    }
+
+    let backdrop = document.getElementById(winId);
+    if (!backdrop) {
+        const tabSection = document.getElementById(`tab-${tabId}`);
+        if (!tabSection) {
+            console.warn(`Tab bölməsi tapılmadı: tab-${tabId}`);
+            return;
+        }
+
+        backdrop = document.createElement('div');
+        backdrop.id = winId;
+        backdrop.className = 'modal-backdrop desktop-tab-window';
+
+        const card = document.createElement('div');
+        card.className = 'modal-card desktop-tab-card';
+
+        // Geniş iş sahəsi ölçüləri
+        let initialW = Math.min(Math.max(window.innerWidth * 0.82, 720), 1200);
+        let initialH = Math.min(Math.max(window.innerHeight * 0.78, 520), 800);
+        if (tabId === 'dashboard') {
+            initialW = Math.min(Math.max(window.innerWidth * 0.70, 680), 920);
+            initialH = Math.min(Math.max(window.innerHeight * 0.68, 480), 620);
+        }
+
+        card.style.width = `${initialW}px`;
+        card.style.height = `${initialH}px`;
+        card.style.minWidth = '480px';
+        card.style.minHeight = '360px';
+
+        // Tab section-u card daxilinə köçürürük
+        tabSection.style.display = 'flex';
+        tabSection.style.flexDirection = 'column';
+        tabSection.style.flex = '1';
+        tabSection.style.height = '100%';
+        tabSection.classList.add('active');
+
+        card.appendChild(tabSection);
+        backdrop.appendChild(card);
+        document.body.appendChild(backdrop);
+    } else {
+        // Əgər pəncərə artıq mövcuddursa, amma tabSection əsas səhifəyə qaytarılmışdısa, yenidən pəncərəyə bağla
+        const tabSection = document.getElementById(`tab-${tabId}`);
+        const targetContainer = backdrop.querySelector('.win-body') || backdrop.querySelector('.modal-card');
+        if (tabSection && targetContainer && tabSection.parentElement !== targetContainer) {
+            tabSection.style.display = 'flex';
+            tabSection.style.flexDirection = 'column';
+            tabSection.style.flex = '1';
+            tabSection.style.height = '100%';
+            tabSection.classList.add('active');
+            targetContainer.appendChild(tabSection);
+        }
+    }
+
+    // Pəncərəni açırıq
+    await showModal(winId);
+
+    // Kaskad mövqe (əgər yaddaşda əvvəlki mövqe yoxdursa)
+    const card = backdrop.querySelector('.modal-card');
+    if (card && !localStorage.getItem(`win_pos_${winId}`)) {
+        const count = Object.keys(activeWindows).length;
+        const offsetIndex = count % 5;
+        const topPos = 58 + (offsetIndex * 26);
+        const cardW = card.offsetWidth || 800;
+        const leftPos = Math.max(15, Math.floor((window.innerWidth - cardW) / 2) + ((offsetIndex - 2) * 30));
+        card.style.top = `${topPos}px`;
+        card.style.left = `${leftPos}px`;
+        clampWindowToScreen(card);
+    }
+
+    // Tab-a uyğun məlumat yükləyicisini işə sal
+    triggerTabSpecificLoader(tabId);
+}
+
+function triggerTabSpecificLoader(tabId) {
+    if (tabId === 'background-services') {
+        if (typeof switchBgSubTab === 'function') {
+            const savedBgSub = localStorage.getItem('active_bg_subtab') || (typeof currentBgSubTab !== 'undefined' ? currentBgSubTab : 'autodeploy');
+            switchBgSubTab(savedBgSub);
+        }
+    } else if (tabId === 'servers') {
+        if (typeof loadServers === 'function') loadServers();
+    } else if (tabId === 'applications') {
+        if (typeof loadApplications === 'function') loadApplications();
+    } else if (tabId === 'keys-tokens') {
+        if (typeof initKeysTokens === 'function') initKeysTokens();
+    } else if (tabId === 'dashboard') {
+        if (typeof fetchServerStats === 'function') fetchServerStats();
+    }
+
+    if (window.lucide && typeof lucide.createIcons === 'function') {
+        lucide.createIcons();
+    }
+}
+
+window.openDesktopWindow = openDesktopWindow;
+
 // Brauzer və ya monitor ölçüsü dəyişdikdə bütün aktiv pəncərələri avtomatik ekran hüdudlarına qaytar
 window.addEventListener('resize', () => {
     Object.keys(activeWindows).forEach(winId => {
@@ -810,3 +1319,44 @@ window.addEventListener('resize', () => {
 function fitTerminalHeight() {
     // Flexbox handles terminal height cleanly and reliably
 }
+
+// Header Hover Dropdown-dan birbaşa pəncərə və alt-taba keçid funksiyası
+async function navigateDesktopSubTab(mainTabId, subTabId, actionFn) {
+    if (!mainTabId) return;
+
+    if (mainTabId.startsWith('modal:')) {
+        const modalId = mainTabId.replace('modal:', '');
+        showModal(modalId);
+        if (typeof actionFn === 'function') {
+            setTimeout(actionFn, 100);
+        }
+        return;
+    }
+
+    if (mainTabId === 'background-services' && subTabId) {
+        try {
+            localStorage.setItem('active_bg_subtab', subTabId);
+        } catch (e) {}
+    }
+
+    await openDesktopWindow(mainTabId);
+
+    const applySubTab = () => {
+        if (mainTabId === 'background-services' && subTabId) {
+            if (typeof switchBgSubTab === 'function') switchBgSubTab(subTabId);
+        } else if (mainTabId === 'keys-tokens' && subTabId) {
+            if (typeof switchCoolifySubTab === 'function') switchCoolifySubTab(subTabId);
+        } else if (mainTabId === 'applications' && subTabId) {
+            if (typeof switchAppTab === 'function') switchAppTab(subTabId);
+        }
+
+        if (typeof actionFn === 'function') {
+            actionFn();
+        }
+    };
+
+    applySubTab();
+    setTimeout(applySubTab, 120);
+    setTimeout(applySubTab, 350);
+}
+window.navigateDesktopSubTab = navigateDesktopSubTab;

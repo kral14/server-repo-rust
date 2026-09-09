@@ -23,6 +23,7 @@ function toggleDeployTypeFields(prefix) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    if (typeof ensureModalsLoaded === 'function') ensureModalsLoaded();
     initTabs();
     loadServers();
     if (typeof initKeysTokens === 'function') initKeysTokens();
@@ -31,6 +32,74 @@ document.addEventListener('DOMContentLoaded', () => {
     resetEnvVarsContainer();
     fetchAppVersion();
     renderActivityLogs();
+
+    // Topbar Kontekstual Axtarış Qutusunun Tənzimlənməsi (Brauzer şifrə/login avtodoldurmasından 100% azad)
+    const searchInp = document.getElementById('topbar-context-search');
+    if (searchInp) {
+        if (!Object.getOwnPropertyDescriptor(searchInp, 'value')) {
+            Object.defineProperty(searchInp, 'value', {
+                get() {
+                    return (this.innerText || '').replace(/[\r\n]+/g, ' ').trim();
+                },
+                set(val) {
+                    this.innerText = val || '';
+                    if (!val) this.innerHTML = '';
+                    const clearBtn = document.getElementById('topbar-search-clear-btn');
+                    if (clearBtn) clearBtn.style.display = val ? 'block' : 'none';
+                },
+                configurable: true
+            });
+        }
+        if (!Object.getOwnPropertyDescriptor(searchInp, 'placeholder')) {
+            Object.defineProperty(searchInp, 'placeholder', {
+                get() {
+                    return this.getAttribute('data-placeholder') || '';
+                },
+                set(val) {
+                    this.setAttribute('data-placeholder', val || '');
+                },
+                configurable: true
+            });
+        }
+
+        // İlkin təmizlik
+        searchInp.value = '';
+
+        // İstifadəçi daxilində yazdıqda dərhal axtarış işə düşsün
+        searchInp.addEventListener('input', () => {
+            const val = searchInp.value;
+            if (!val) searchInp.innerHTML = '';
+            if (typeof onHeaderContextSearch === 'function') {
+                onHeaderContextSearch(val);
+            }
+        });
+
+        // Enter basıldıqda yeni sətir yaratmasın
+        searchInp.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                searchInp.blur();
+            }
+        });
+
+        // Kopyalanıb yapışdırıldıqda yalnız sadə mətn kimi qəbul etsin
+        searchInp.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const text = (e.clipboardData || window.clipboardData).getData('text');
+            document.execCommand('insertText', false, text);
+        });
+
+        // Əlavə qoruyucu timer: kənar avtodoldurma cəhdi olarsa silinsin
+        let killCount = 0;
+        const killTimer = setInterval(() => {
+            if (searchInp.value.includes('@')) {
+                searchInp.value = '';
+                if (typeof onHeaderContextSearch === 'function') onHeaderContextSearch('');
+            }
+            killCount++;
+            if (killCount > 30) clearInterval(killTimer);
+        }, 80);
+    }
 
     // Inject Taskbar / Footer
     const taskbar = document.createElement('div');
@@ -64,9 +133,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (appId) {
             currentAppDetailsId = appId;
             const subTab = localStorage.getItem('active_app_subtab') || 'overview';
-            switchTab('app-details');
-            switchAppTab(subTab);
-            openAppDetails(appId, false);
+            switchTab('app-details').then(() => {
+                if (typeof openAppDetails === 'function') {
+                    openAppDetails(appId, false);
+                }
+                if (typeof switchAppTab === 'function') {
+                    switchAppTab(subTab);
+                }
+            });
         } else {
             switchTab('applications');
         }
@@ -192,7 +266,7 @@ function copyTerminalLogs(elementId) {
     }
 }
 
-// Tab Switching Logic
+// Tab Switching Logic (Orijinal Tam Səhifə Rejimi)
 function initTabs() {
     const navButtons = document.querySelectorAll('.nav-btn');
 
@@ -246,6 +320,17 @@ async function switchTab(tabId) {
     }
     localStorage.setItem('active_tab', tabId);
 
+    // Əgər həmin tab hazırda pəncərə daxilindədirsə, pəncərəni bağlayıb əsas səhifəyə qaytarırıq
+    const winId = 'win-' + tabId;
+    if (typeof closeModal === 'function') {
+        closeModal(winId);
+    }
+    const targetSection = document.getElementById(`tab-${tabId}`);
+    const mainContent = document.querySelector('.main-content');
+    if (targetSection && mainContent && targetSection.parentElement !== mainContent) {
+        mainContent.appendChild(targetSection);
+    }
+
     // Update nav buttons active state
     document.querySelectorAll('.nav-btn').forEach(btn => {
         if (btn.getAttribute('data-tab') === tabId) {
@@ -284,35 +369,201 @@ async function switchTab(tabId) {
     await ensureTabLoaded(tabId);
 
     // Update tab sections visibility
-    document.querySelectorAll('.tab-section').forEach(section => {
+    document.querySelectorAll('.main-content > .tab-section').forEach(section => {
         section.classList.remove('active');
         section.style.setProperty('display', 'none', 'important');
     });
 
-    const targetSection = document.getElementById(`tab-${tabId}`);
-    if (targetSection) {
-        targetSection.classList.add('active');
-        targetSection.style.setProperty('display', 'flex', 'important');
-        targetSection.style.setProperty('flex-direction', 'column', 'important');
-        targetSection.style.setProperty('flex', '1', 'important');
-        targetSection.style.setProperty('min-height', '0', 'important');
+    const activeSec = document.getElementById(`tab-${tabId}`);
+    if (activeSec && activeSec.parentElement === mainContent) {
+        activeSec.classList.add('active');
+        activeSec.style.setProperty('display', 'flex', 'important');
+        activeSec.style.setProperty('flex-direction', 'column', 'important');
+        activeSec.style.setProperty('flex', '1', 'important');
+        activeSec.style.setProperty('min-height', '0', 'important');
     }
 
     // Trigger tab-specific loaders
     if (tabId === 'background-services') {
         if (typeof switchBgSubTab === 'function') {
-            switchBgSubTab(currentBgSubTab || 'autodeploy');
+            const savedBgSub = localStorage.getItem('active_bg_subtab') || (typeof currentBgSubTab !== 'undefined' ? currentBgSubTab : 'autodeploy');
+            switchBgSubTab(savedBgSub);
         }
-    } else if (tabId === 'applications') {
-        if (typeof loadApplications === 'function') loadApplications();
-    } else if (tabId === 'servers') {
-        if (typeof loadServers === 'function') loadServers();
-    } else if (tabId === 'keys-tokens') {
-        if (typeof initKeysTokens === 'function') initKeysTokens();
+    } else {
+        if (typeof stopTunnelAutoSync === 'function') stopTunnelAutoSync();
+        if (tabId === 'applications') {
+            if (typeof loadApplications === 'function') loadApplications();
+        } else if (tabId === 'servers') {
+            if (typeof loadServers === 'function') loadServers();
+        } else if (tabId === 'keys-tokens') {
+            if (typeof initKeysTokens === 'function') initKeysTokens();
+        }
+    }
+
+    // Update Context Search Placeholder & re-apply current search if active
+    if (typeof updateHeaderSearchPlaceholder === 'function') {
+        updateHeaderSearchPlaceholder(tabId);
+    }
+    const curSearchVal = document.getElementById('topbar-context-search')?.value;
+    if (curSearchVal && typeof onHeaderContextSearch === 'function') {
+        setTimeout(() => onHeaderContextSearch(curSearchVal), 150);
     }
 
     if (window.lucide && typeof lucide.createIcons === 'function') {
         lucide.createIcons();
+    }
+}
+
+// ==========================================================================
+// Qlobal Kontekstual Axtarış Sistemi (Header Search Bar)
+// ==========================================================================
+function onHeaderContextSearch(query) {
+    const q = (query || '').trim().toLowerCase();
+    const clearBtn = document.getElementById('topbar-search-clear-btn');
+    if (clearBtn) {
+        clearBtn.style.display = q ? 'block' : 'none';
+    }
+
+    const activeTab = localStorage.getItem('active_tab') || 'dashboard';
+
+    // 1. Arxa Plan və Auto-Deploy (background-services)
+    if (activeTab === 'background-services') {
+        const bgSub = localStorage.getItem('active_bg_subtab') || 'autodeploy';
+        if (bgSub === 'tunnels') {
+            const appRows = document.querySelectorAll('.tunnel-app-row');
+            const tunnelCards = document.querySelectorAll('.tunnel-card-item');
+            const vmCards = document.querySelectorAll('.tunnel-vm-card');
+
+            if (!q) {
+                appRows.forEach(r => r.style.display = 'flex');
+                tunnelCards.forEach(t => t.style.display = 'flex');
+                vmCards.forEach(v => v.style.display = 'block');
+                return;
+            }
+
+            vmCards.forEach(vm => {
+                let vmHasMatch = false;
+                const vmName = vm.getAttribute('data-vm-name') || '';
+                const vmIp = vm.getAttribute('data-vm-ip') || '';
+                if (vmName.includes(q) || vmIp.includes(q)) {
+                    vmHasMatch = true;
+                }
+
+                const tCards = vm.querySelectorAll('.tunnel-card-item');
+                tCards.forEach(tc => {
+                    let tcHasMatch = false;
+                    const tcName = tc.getAttribute('data-tunnel-name') || '';
+                    if (tcName.includes(q)) {
+                        tcHasMatch = true;
+                    }
+
+                    const rows = tc.querySelectorAll('.tunnel-app-row');
+                    let anyRowMatch = false;
+                    rows.forEach(row => {
+                        const key = (row.getAttribute('data-search-key') || '').toLowerCase();
+                        if (key.includes(q) || vmHasMatch || tcHasMatch) {
+                            row.style.display = 'flex';
+                            anyRowMatch = true;
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    });
+
+                    if (tcHasMatch || anyRowMatch || vmHasMatch) {
+                        tc.style.display = 'flex';
+                        vmHasMatch = true;
+                    } else {
+                        tc.style.display = 'none';
+                    }
+                });
+
+                vm.style.display = vmHasMatch ? 'block' : 'none';
+            });
+            return;
+        } else if (bgSub === 'autodeploy') {
+            const input = document.getElementById('autodeploy-search-input');
+            if (input) {
+                input.value = query;
+                if (typeof filterAutoDeployApps === 'function') filterAutoDeployApps();
+            }
+            return;
+        } else if (bgSub === 'logs') {
+            const searchInput = document.getElementById('bg-activity-search');
+            if (searchInput) {
+                searchInput.value = query;
+                if (typeof filterBgActivityLogs === 'function') filterBgActivityLogs();
+            }
+            return;
+        }
+    }
+
+    // 2. Layihələr (Applications)
+    if (activeTab === 'applications') {
+        const appItems = document.querySelectorAll('#apps-list .list-item, #apps-list .app-row');
+        appItems.forEach(item => {
+            const text = (item.innerText || '').toLowerCase();
+            item.style.display = (!q || text.includes(q)) ? 'block' : 'none';
+        });
+        return;
+    }
+
+    // 3. Serverlər (Servers)
+    if (activeTab === 'servers') {
+        const srvItems = document.querySelectorAll('#servers-list .card, #servers-list .server-card');
+        srvItems.forEach(item => {
+            const text = (item.innerText || '').toLowerCase();
+            item.style.display = (!q || text.includes(q)) ? 'block' : 'none';
+        });
+        return;
+    }
+
+    // 4. Açarlar (Keys & Tokens)
+    if (activeTab === 'keys-tokens') {
+        const keysInput = document.getElementById('coolify-search-keys');
+        if (keysInput) {
+            keysInput.value = query;
+            if (typeof filterCoolifyKeys === 'function') filterCoolifyKeys();
+        }
+        return;
+    }
+}
+
+function clearHeaderContextSearch() {
+    const input = document.getElementById('topbar-context-search');
+    if (input) {
+        input.value = '';
+        input.innerHTML = '';
+        if (typeof onHeaderContextSearch === 'function') {
+            onHeaderContextSearch('');
+        }
+        input.focus();
+    }
+}
+
+function updateHeaderSearchPlaceholder(tabId) {
+    const input = document.getElementById('topbar-context-search');
+    if (!input) return;
+    const currentTab = tabId || localStorage.getItem('active_tab') || 'dashboard';
+
+    if (currentTab === 'background-services') {
+        const bgSub = localStorage.getItem('active_bg_subtab') || 'autodeploy';
+        if (bgSub === 'tunnels') {
+            input.placeholder = 'Tünel və ya layihə axtar...';
+        } else if (bgSub === 'autodeploy') {
+            input.placeholder = 'Auto-Deploy tətbiqi axtar...';
+        } else if (bgSub === 'logs') {
+            input.placeholder = 'Loqlarda axtar...';
+        } else {
+            input.placeholder = 'Sistem servisi axtar...';
+        }
+    } else if (currentTab === 'applications') {
+        input.placeholder = 'Layihə adı / port axtar...';
+    } else if (currentTab === 'servers') {
+        input.placeholder = 'Server adı / IP axtar...';
+    } else if (currentTab === 'keys-tokens') {
+        input.placeholder = 'Açar / Token axtar...';
+    } else {
+        input.placeholder = 'Dashboard-da axtar...';
     }
 }
 

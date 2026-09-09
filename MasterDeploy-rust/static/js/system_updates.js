@@ -281,57 +281,32 @@ async function confirmSystemUpdate() {
 }
 function updateSelectedVersionChanges() { }
 
-// ─── Custom Kart Modal (confirm yerine) ───────────────────────────────────────
-function showConfirmCard({ icon, title, subtitle, body, warning, confirmText, confirmStyle, onConfirm }) {
-    const modal = document.getElementById('confirm-card-modal');
-    document.getElementById('confirm-card-icon').textContent = icon || '❓';
-    document.getElementById('confirm-card-title').textContent = title || 'Əminsiniz?';
-    document.getElementById('confirm-card-subtitle').textContent = subtitle || '';
-    document.getElementById('confirm-card-body').innerHTML = body || '';
-
-    const warnEl = document.getElementById('confirm-card-warning');
-    if (warning) {
-        warnEl.style.display = 'block';
-        warnEl.textContent = warning;
-    } else {
-        warnEl.style.display = 'none';
+// ─── Custom Kart Modal (confirm / alert yerinə) ───────────────────────────────────
+function showConfirmCard(opts) {
+    if (typeof showConfirmModal === 'function') {
+        return showConfirmModal(opts);
     }
-
-    const yesBtn = document.getElementById('confirm-card-yes');
-    yesBtn.textContent = confirmText || 'Təsdiqlə';
-    yesBtn.style.cssText = `padding: 8px 20px; ${confirmStyle || ''}`;
-
-    modal.style.display = 'flex';
-
-    const close = () => { modal.style.display = 'none'; };
-    yesBtn.onclick = () => { close(); onConfirm && onConfirm(); };
-    document.getElementById('confirm-card-no').onclick = close;
-    modal.onclick = (e) => { if (e.target === modal) close(); };
 }
 
 function showInfoCard(title, subtitle, body) {
-    showConfirmCard({
-        icon: 'ℹ️', title, subtitle, body,
-        confirmText: 'Bağla',
-        confirmStyle: '',
-        onConfirm: () => { }
-    });
-    document.getElementById('confirm-card-no').style.display = 'none';
-    setTimeout(() => document.getElementById('confirm-card-no').style.display = '', 100);
+    if (typeof showAlertModal === 'function') {
+        return showAlertModal({ title, subtitle, message: body });
+    }
 }
 
 // ─── Fəaliyyət Jurnalı & Canlı Debug Monitoru ──────────────────────────────
 const LOG_ICONS = {
-    deploy: { icon: '🚀', color: '#00d2ff', tagClass: 'term-tag-deploy', label: 'Deploy' },
-    update: { icon: '🔄', color: '#7c3aed', tagClass: 'term-tag-info', label: 'Yenilənmə' },
-    server: { icon: '🖥️', color: '#00e676', tagClass: 'term-tag-info', label: 'Server' },
-    app: { icon: '📦', color: '#ff9800', tagClass: 'term-tag-info', label: 'Layihə' },
-    error: { icon: '❌', color: '#ff1744', tagClass: 'term-tag-error', label: 'Xəta' },
-    warning: { icon: '⚠️', color: '#ffb86c', tagClass: 'term-tag-warning', label: 'Xəbərdarlıq' },
-    success: { icon: '✅', color: '#00e676', tagClass: 'term-tag-success', label: 'Uğurlu' },
-    info: { icon: 'ℹ️', color: '#9aa0a6', tagClass: 'term-tag-info', label: 'Məlumat' },
-    delete: { icon: '🗑️', color: '#ff1744', tagClass: 'term-tag-error', label: 'Silinmə' },
-    setup: { icon: '⚙️', color: '#00e676', tagClass: 'term-tag-success', label: 'Qurulum' },
+    deploy: { icon: '<i data-lucide="zap" style="width:16px;height:16px;color:#00d2ff;"></i>', color: '#00d2ff', tagClass: 'term-tag-deploy', label: 'Deploy' },
+    update: { icon: '<i data-lucide="refresh-cw" style="width:16px;height:16px;color:#7c3aed;"></i>', color: '#7c3aed', tagClass: 'term-tag-info', label: 'Yenilənmə' },
+    server: { icon: '<i data-lucide="server" style="width:16px;height:16px;color:#00e676;"></i>', color: '#00e676', tagClass: 'term-tag-info', label: 'Server' },
+    app: { icon: '<i data-lucide="box" style="width:16px;height:16px;color:#ff9800;"></i>', color: '#ff9800', tagClass: 'term-tag-info', label: 'Layihə' },
+    error: { icon: '<i data-lucide="alert-circle" style="width:16px;height:16px;color:#ff1744;"></i>', color: '#ff1744', tagClass: 'term-tag-error', label: 'Xəta' },
+    warning: { icon: '<i data-lucide="alert-triangle" style="width:16px;height:16px;color:#ffb86c;"></i>', color: '#ffb86c', tagClass: 'term-tag-warning', label: 'Xəbərdarlıq' },
+    success: { icon: '<i data-lucide="check-circle-2" style="width:16px;height:16px;color:#00e676;"></i>', color: '#00e676', tagClass: 'term-tag-success', label: 'Uğurlu' },
+    info: { icon: '<i data-lucide="info" style="width:16px;height:16px;color:#38bdf8;"></i>', color: '#9aa0a6', tagClass: 'term-tag-info', label: 'Məlumat' },
+    delete: { icon: '<i data-lucide="trash-2" style="width:16px;height:16px;color:#ff1744;"></i>', color: '#ff1744', tagClass: 'term-tag-error', label: 'Silinmə' },
+    setup: { icon: '<i data-lucide="settings" style="width:16px;height:16px;color:#00e676;"></i>', color: '#00e676', tagClass: 'term-tag-success', label: 'Qurulum' },
+    tunnels: { icon: '<i data-lucide="cloud" style="width:16px;height:16px;color:#38bdf8;"></i>', color: '#38bdf8', tagClass: 'term-tag-info', label: 'Tünel' },
 };
 
 let activityLogsState = {
@@ -339,6 +314,7 @@ let activityLogsState = {
     filteredLogs: [],
     levelFilter: 'all',
     moduleFilter: 'all',
+    projectFilter: 'all',
     searchQuery: '',
     isStreaming: true,
     viewMode: 'cards', // 'cards' | 'terminal'

@@ -48,7 +48,8 @@ pub async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec
 }
 
 pub async fn list_autodeploy_applications(State(state): State<AppState>) -> Result<Json<Vec<Application>>, (StatusCode, String)> {
-    let mut apps = match sqlx::query_as::<_, Application>(
+    let apps = match sqlx::query_as::<_, Application>(
+
         "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
