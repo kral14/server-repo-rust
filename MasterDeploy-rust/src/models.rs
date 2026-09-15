@@ -313,4 +313,10 @@ pub struct AddWhitelistIpInput {
     pub client_ip: String,
     pub port: Option<u16>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct TogglePortInput {
+    pub open: bool,
+    pub port: Option<u16>,
+}
 

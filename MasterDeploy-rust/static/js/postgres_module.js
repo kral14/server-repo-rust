@@ -62,6 +62,13 @@ async function loadPgServers(preferredServerId = null) {
 
         currentPgServerId = select.value;
 
+        // Port nəzarət düyməsini dərhal aktivləşdir və statusunu gətir
+        const portWrapper = document.getElementById('pg-port-control-wrapper');
+        if (portWrapper) {
+            portWrapper.style.display = 'inline-flex';
+            loadPgPortStatus(currentPgServerId);
+        }
+
         // ✅ ANİ YÜKLƏNMƏ: Local DB-dən bazaları dərhal göstər (SSH gözləmə!)
         loadPgDatabases(currentPgServerId);
 
@@ -82,6 +89,14 @@ async function onPgServerSelectChange() {
     currentPgServerId = select.value;
     const resBox = document.getElementById('pg-result-box');
     if (resBox) resBox.style.display = 'none';
+
+    // Port nəzarət düyməsini yenilə
+    const portWrapper = document.getElementById('pg-port-control-wrapper');
+    if (portWrapper) {
+        portWrapper.style.display = 'inline-flex';
+        loadPgPortStatus(currentPgServerId);
+    }
+
     // Ani: local DB-dən dərhal bazaları göstər
     loadPgDatabases(currentPgServerId);
     // Arxa planda SSH status yoxla
@@ -180,8 +195,88 @@ function updatePgEngineStatusUI(data) {
         if (createSection) createSection.style.display = 'none';
     }
 
+    const portWrapper = document.getElementById('pg-port-control-wrapper');
+    if (data.running) {
+        if (portWrapper) {
+            portWrapper.style.display = 'inline-flex';
+            loadPgPortStatus(currentPgServerId);
+        }
+    } else {
+        if (portWrapper) portWrapper.style.display = 'none';
+    }
+
     if (window.lucide && typeof lucide.createIcons === 'function') {
         lucide.createIcons();
+    }
+}
+
+// Xarici port 5432 status dəyişəni və funksiyaları
+let currentPgPortOpen = false;
+
+async function loadPgPortStatus(serverId) {
+    const wrapper = document.getElementById('pg-port-control-wrapper');
+    const btn = document.getElementById('pg-port-toggle-btn');
+    const dot = document.getElementById('pg-port-dot');
+    const txt = document.getElementById('pg-port-text');
+    if (!wrapper || !btn || !serverId) return;
+
+    try {
+        const resp = await fetch(`/api/plugins/postgres/port-status/${serverId}`);
+        if (!resp.ok) return;
+        const res = await resp.json();
+        currentPgPortOpen = res.is_open;
+
+        if (res.is_open) {
+            btn.style.background = 'rgba(16, 185, 129, 0.12)';
+            btn.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+            btn.style.color = '#34d399';
+            if (dot) dot.style.background = '#10b981';
+            if (txt) txt.innerHTML = 'Port 5432: <b style="color:#10b981;">Açıq</b> <span style="font-size:0.65rem; color:#94a3b8; margin-left:2px;">(Bağla)</span>';
+            btn.title = 'Port 5432 xaricə açıqdır. Bağlamaq üçün klikləyin.';
+        } else {
+            btn.style.background = 'rgba(239, 68, 68, 0.1)';
+            btn.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+            btn.style.color = '#f87171';
+            if (dot) dot.style.background = '#ef4444';
+            if (txt) txt.innerHTML = 'Port 5432: <b style="color:#ef4444;">Bağlı</b> <span style="font-size:0.65rem; color:#60a5fa; margin-left:2px;">(Xaricə Aç)</span>';
+            btn.title = 'Port 5432 xaricə bağlıdır (yalnız daxili əlaqə). Xaricə açmaq üçün klikləyin.';
+        }
+    } catch (e) {
+        console.error('loadPgPortStatus xətası:', e);
+    }
+}
+
+async function togglePgPortAccess() {
+    if (!currentPgServerId) return;
+    const btn = document.getElementById('pg-port-toggle-btn');
+    const txt = document.getElementById('pg-port-text');
+
+    const targetOpen = !currentPgPortOpen;
+    const confirmMsg = targetOpen
+        ? "⚠️ PostgreSQL portunu (5432) xaricə açmaq istəyirsiniz?\nBu zaman xarici IP ilə birbaşa (məs: DBeaver, Python skript) qoşulmaq mümkün olacaq."
+        : "🔒 PostgreSQL portunu (5432) xaricə bağlamaq istəyirsiniz?\nBu zaman yalnız server daxilindəki Docker konteynerləri və localhost qoşula biləcək.";
+
+    if (!confirm(confirmMsg)) return;
+
+    if (btn) btn.disabled = true;
+    if (txt) txt.textContent = targetOpen ? 'Açılır...' : 'Bağlanır...';
+
+    try {
+        const resp = await fetch(`/api/plugins/postgres/toggle-port/${currentPgServerId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ open: targetOpen, port: 5432 })
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        const res = await resp.json();
+        
+        await loadPgPortStatus(currentPgServerId);
+        alert(res.message || (targetOpen ? 'Port açıldı' : 'Port bağlandı'));
+    } catch (err) {
+        alert('❌ Xəta baş verdi: ' + err.message);
+        await loadPgPortStatus(currentPgServerId);
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 

@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.0.177",
+    "date": "15.09.2026 23:48",
+    "changes": [
+      "Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."
+    ]
+  },
+  {
     "version": "v1.0.176",
     "date": "15.09.2026 18:33",
     "changes": [

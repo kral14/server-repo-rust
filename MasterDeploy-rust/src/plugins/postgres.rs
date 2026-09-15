@@ -8,7 +8,7 @@ use uuid::Uuid;
 use sqlx::SqlitePool;
 use crate::models::{
     Server, PostgresInstanceStatus, InstallPostgresInput, CreatePostgresDbInput,
-    PostgresDbRecord, AddWhitelistIpInput,
+    PostgresDbRecord, AddWhitelistIpInput, TogglePortInput,
 };
 use crate::utils::add_activity_log_pro;
 use crate::AppState;
@@ -21,6 +21,8 @@ pub fn postgres_router() -> Router<AppState> {
         .route("/list-dbs/:server_id", get(list_databases))
         .route("/delete-db/:server_id/:db_name", delete(delete_database))
         .route("/whitelist-ip/:server_id", post(whitelist_ip))
+        .route("/port-status/:server_id", get(get_port_status))
+        .route("/toggle-port/:server_id", post(toggle_port_exposure))
 }
 
 fn generate_random_password(len: usize) -> String {
@@ -428,5 +430,89 @@ pub async fn whitelist_ip(
             Ok(Json(true))
         }
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Firewall yenilənmə xətası: {}", e))),
+    }
+}
+
+pub async fn get_port_status(
+    State(state): State<AppState>,
+    AxumPath(server_id): AxumPath<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let server = get_server_by_id(&state.db, &server_id).await?;
+    let port: u16 = 5432;
+
+    // UFW və ya DOCKER-USER qaydalarını yoxlayırıq
+    let check_cmd = format!(
+        "sudo iptables -S DOCKER-USER 2>/dev/null | grep -E -- '-p tcp.*--dport {port} -j DROP' || sudo ufw status 2>/dev/null | grep -E '{port}/tcp.*DENY'",
+        port = port
+    );
+
+    let is_blocked = match run_ssh_quick(&server, &state.db, &check_cmd).await {
+        Ok(out) => !out.trim().is_empty(),
+        Err(_) => false,
+    };
+
+    Ok(Json(serde_json::json!({
+        "port": port,
+        "is_open": !is_blocked
+    })))
+}
+
+pub async fn toggle_port_exposure(
+    State(state): State<AppState>,
+    AxumPath(server_id): AxumPath<String>,
+    Json(input): Json<TogglePortInput>,
+) -> Result<Json<serde_json::Value>, (StatusCode, String)> {
+    let server = get_server_by_id(&state.db, &server_id).await?;
+    let port = input.port.unwrap_or(5432);
+
+    let cmd = if input.open {
+        // Portu xaricə AÇIRIQ:
+        format!(
+            "sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null || true && \
+             sudo ufw delete deny {port}/tcp 2>/dev/null || true && \
+             sudo ufw allow {port}/tcp 2>/dev/null || true && \
+             sudo ufw reload 2>/dev/null || true",
+            port = port
+        )
+    } else {
+        // Portu xaricə BAĞLAYIRIQ (yalnız daxili Docker və localhost icazəli qalır):
+        format!(
+            "sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null || true && \
+             sudo iptables -I DOCKER-USER 1 -s 127.0.0.1 -p tcp --dport {port} -j ACCEPT 2>/dev/null || true && \
+             sudo iptables -I DOCKER-USER 2 -s 172.16.0.0/12 -p tcp --dport {port} -j ACCEPT 2>/dev/null || true && \
+             sudo iptables -I DOCKER-USER 3 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true && \
+             sudo iptables -I DOCKER-USER 4 -p tcp --dport {port} -j DROP 2>/dev/null || true && \
+             sudo ufw delete allow {port}/tcp 2>/dev/null || true && \
+             sudo ufw deny {port}/tcp 2>/dev/null || true && \
+             sudo ufw reload 2>/dev/null || true",
+            port = port
+        )
+    };
+
+    match run_ssh_quick(&server, &state.db, &cmd).await {
+        Ok(_) => {
+            let msg = if input.open {
+                format!("PostgreSQL portu ({}) xaricə açıldı (istənilən IP qoşula bilər)", port)
+            } else {
+                format!("PostgreSQL portu ({}) xaricə bağlandı (təhlükəsiz rejim aktivdir)", port)
+            };
+
+            add_activity_log_pro(
+                &state.db,
+                &format!("'{}' serverində {}", server.name, msg),
+                if input.open { "warning" } else { "success" },
+                Some("PostgresPlugin"),
+                Some("admin"),
+                Some(&server_id),
+                None,
+            ).await;
+
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "is_open": input.open,
+                "message": msg
+            })))
+        }
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Firewall əmri icra edilərkən xəta: {}", e))),
     }
 }
