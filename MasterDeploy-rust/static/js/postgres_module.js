@@ -296,7 +296,11 @@ async function generateNewPgDatabase() {
         const resUser = document.getElementById('pg-res-user');
         const resPass = document.getElementById('pg-res-pass');
 
-        if (connStrInput) connStrInput.value = data.connection_string;
+        if (connStrInput) {
+            // Göstərmək üçün maskala, kopyalama üçün real-ı saxla
+            connStrInput.value = maskConnStringHost(data.connection_string);
+            connStrInput.setAttribute('data-real', data.connection_string);
+        }
         if (resDb) resDb.textContent = data.db_name;
         if (resUser) resUser.textContent = data.db_user;
         if (resPass) resPass.textContent = data.db_password;
@@ -321,13 +325,17 @@ async function generateNewPgDatabase() {
     }
 }
 
-// Nəticə connection string-ini kopyalayır
+// Nəticə connection string-ini kopyalayır (həmişə real, maskalanmamış string)
 function copyResultConnStr() {
     const input = document.getElementById('pg-result-conn-str');
     const btn = document.getElementById('pg-copy-result-btn');
-    if (!input || !input.value) return;
+    if (!input) return;
 
-    navigator.clipboard.writeText(input.value).then(() => {
+    // data-real atributundan real string-i götür (mövcud deyilsə, input.value-dan)
+    const realStr = input.getAttribute('data-real') || input.value;
+    if (!realStr) return;
+
+    navigator.clipboard.writeText(realStr).then(() => {
         if (btn) {
             const old = btn.innerHTML;
             btn.innerHTML = '✓ Kopyalandı!';
@@ -342,6 +350,7 @@ function copyResultConnStr() {
         document.execCommand('copy');
     });
 }
+
 
 // Bu serverdəki mövcud bazaları gətirir və cədvələ doldurur
 async function loadPgDatabases(serverId) {
