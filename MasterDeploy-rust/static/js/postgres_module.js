@@ -61,39 +61,40 @@ async function loadPgServers(preferredServerId = null) {
         }
 
         currentPgServerId = select.value;
-        await refreshPgStatus();
+
+        // ✅ ANİ YÜKLƏNMƏ: Local DB-dən bazaları dərhal göstər (SSH gözləmə!)
+        loadPgDatabases(currentPgServerId);
+
+        // ✅ Arxa planda SSH status yoxla (yavaş — bloklamır)
+        refreshPgStatus();
+
     } catch (e) {
         console.error('loadPgServers xətası:', e);
         select.innerHTML = `<option value="">Xəta: ${e.message}</option>`;
     }
 }
 
+
 // Server dəyişdirildikdə
 async function onPgServerSelectChange() {
     const select = document.getElementById('pg-server-select');
     if (!select || !select.value) return;
     currentPgServerId = select.value;
-    // Əvvəlki nəticə qutusunu bağlayırıq
     const resBox = document.getElementById('pg-result-box');
     if (resBox) resBox.style.display = 'none';
-    await refreshPgStatus();
+    // Ani: local DB-dən dərhal bazaları göstər
+    loadPgDatabases(currentPgServerId);
+    // Arxa planda SSH status yoxla
+    refreshPgStatus();
 }
 
-// Seçilmiş serverdə PostgreSQL statusunu yoxlayır
+
+// Seçilmiş serverdə PostgreSQL statusunu yoxlayır (arxa planda çalışır)
 async function refreshPgStatus() {
     if (!currentPgServerId) return;
 
-    const dot = document.getElementById('pg-status-dot');
-    const title = document.getElementById('pg-status-title');
-    const sub = document.getElementById('pg-status-sub');
     const installWrapper = document.getElementById('pg-install-action-wrapper');
     const createSection = document.getElementById('pg-create-section');
-
-    if (dot) dot.style.background = '#eab308';
-    if (title) title.textContent = 'Mühərrik vəziyyəti yoxlanılır...';
-    if (sub) sub.textContent = 'SSH vasitəsilə Docker konteyneri sorğulanır...';
-    if (installWrapper) installWrapper.style.display = 'none';
-    if (createSection) createSection.style.display = 'none';
 
     try {
         const resp = await fetch(`/api/plugins/postgres/status/${currentPgServerId}`);
@@ -102,13 +103,12 @@ async function refreshPgStatus() {
         currentPgStatus = data;
 
         updatePgEngineStatusUI(data);
+        // Əgər running olarsa bazaları yenidən yüklə (artıq yükləniblər, bu sadəcə yeniləyir)
         if (data.running) {
-            await loadPgDatabases(currentPgServerId);
+            loadPgDatabases(currentPgServerId);
         }
     } catch (err) {
         console.error('refreshPgStatus xətası:', err);
-        if (dot) dot.style.background = '#ef4444';
-        if (title) title.textContent = 'Əlaqə Xətası';
         if (sub) sub.textContent = err.message || 'Serverə SSH ilə qoşulmaq mümkün olmadı';
     }
 }
@@ -384,7 +384,11 @@ async function loadPgDatabases(serverId) {
             tr.style.borderBottom = '1px solid rgba(255,255,255,0.04)';
 
             const itemJsonStr = encodeURIComponent(JSON.stringify(item));
-            const safeConnStr = escapeHtml(item.connection_string);
+            const realConnStr = item.connection_string;
+            const safeConnStr = escapeHtml(realConnStr);
+
+            // Host hissəsini maskala (göstərmək üçün) — kopyalama həmişə real string götürür
+            const maskedConnStr = escapeHtml(maskConnStringHost(realConnStr));
 
             tr.innerHTML = `
                 <td style="padding: 5px 8px; font-weight: 600; color: #fff; vertical-align: middle; white-space: nowrap;">
@@ -403,7 +407,8 @@ async function loadPgDatabases(serverId) {
                 <td style="padding: 5px 8px; vertical-align: middle;">
                     <div style="display: flex; align-items: center; gap: 4px; width: 100%;">
                         <input type="password"
-                               value="${safeConnStr}"
+                               value="${maskedConnStr}"
+                               data-real="${safeConnStr}"
                                readonly
                                onclick="this.select()"
                                title="Klikləyərək seçə bilərsiniz"
@@ -452,20 +457,33 @@ async function loadPgDatabases(serverId) {
     }
 }
 
-// Eye toggle — inline SVG ilə
+// Host maskalama funksiyası — postgresql://user:pass@HOST:port/db → ...@[HOST]:port/db
+function maskConnStringHost(connStr) {
+    if (!connStr) return connStr;
+    // postgresql://user:pass@84.8.148.216:5432/db → postgresql://user:pass@[HOST]:5432/db
+    return connStr.replace(/(@)([^@:/]+)(:\d+\/)/g, '$1[HOST]$3');
+}
+
+// Eye toggle — inline SVG ilə (masked/real dəyəri toogle edir)
 function pgToggleEye(inputId, btn) {
     const el = document.getElementById(inputId);
     if (!el) return;
     const SVG_EYE = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
     const SVG_EYEOFF = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+    const realVal = el.getAttribute('data-real') || el.value;
+    const maskedVal = maskConnStringHost(realVal);
     if (el.type === 'password') {
+        // Göstər: real dəyəri göstər (host də görünsün)
         el.type = 'text';
+        el.value = realVal;
         el.style.letterSpacing = 'normal';
         btn.innerHTML = SVG_EYEOFF;
         btn.title = 'Gizlət';
         btn.style.color = '#38bdf8';
     } else {
+        // Gizlət: masked dəyərə qaytar
         el.type = 'password';
+        el.value = maskedVal;
         el.style.letterSpacing = '2px';
         btn.innerHTML = SVG_EYE;
         btn.title = 'Göstər';
@@ -473,11 +491,12 @@ function pgToggleEye(inputId, btn) {
     }
 }
 
-// Copy — input value-dan kopyala
+// Copy — data-real atributundan real connection string-i kopyala
 function pgCopyStr(inputId, btn) {
     const el = document.getElementById(inputId);
     if (!el) return;
-    const str = el.value;
+    // data-real atributundan real (maskalanmamış) string-i götür
+    const str = el.getAttribute('data-real') || el.value;
     const SVG_CHECK = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
     const SVG_COPY = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
     navigator.clipboard.writeText(str).then(() => {
@@ -492,6 +511,7 @@ function pgCopyStr(inputId, btn) {
         document.execCommand('copy');
     });
 }
+
 
 
 
