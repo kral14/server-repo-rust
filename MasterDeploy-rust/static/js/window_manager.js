@@ -3,6 +3,13 @@ const activeWindows = {};
 const minimizedWindows = {};
 let maxZIndex = 1000;
 
+// =========================================================================
+// Modal Open Hooks Registry
+// Hər modal açıldıqda avtomatik çağırılacaq refresh funksiyaları buraya qeyd edilir.
+// İstifadə: window.modalOpenHooks['modal-id'] = async () => { ... };
+// =========================================================================
+window.modalOpenHooks = window.modalOpenHooks || {};
+
 const windowNames = {
     'github-modal': '⚙️ GitHub Ayarları',
     'activity-log-modal': '📋 Fəaliyyət Jurnalı',
@@ -29,7 +36,7 @@ const windowNames = {
     'create-tunnel-modal': '🌐 Yeni Tünel Yarat',
     'attach-route-modal': '🔗 Tünelə Layihə Qoş',
     'tunnel-history-modal': '⏱️ Keçid Link Tarixçəsi',
-    'postgres-modal': '🐘 PostgreSQL Bazaları',
+    'postgres-modal': '<i data-lucide="database" style="width:13px;height:13px;margin-right:6px;vertical-align:-2px;color:#38bdf8;"></i>PostgreSQL',
     'win-dashboard': '📊 İdarəetmə Paneli (Dashboard)',
     'win-servers': '🖥️ Serverlər',
     'win-applications': '🚀 Layihələr',
@@ -1074,6 +1081,30 @@ async function showModal(id) {
     if (id === 'create-service-modal') {
         if (typeof loadWizServers === 'function') loadWizServers();
         if (typeof loadWizGithubRepos === 'function') loadWizGithubRepos();
+    }
+
+    if (id === 'postgres-modal') {
+        if (typeof loadPgServers === 'function') loadPgServers();
+        if (typeof fetchMyIpAddress === 'function') fetchMyIpAddress();
+    }
+
+    if (id === 'system-update-modal') {
+        if (typeof initSystemUpdates === 'function') initSystemUpdates();
+        if (typeof renderVersionCards === 'function') setTimeout(renderVersionCards, 300);
+    }
+
+    if (id === 'plugins-modal') {
+        if (typeof loadPluginsList === 'function') loadPluginsList();
+        else if (typeof initPluginsModal === 'function') initPluginsModal();
+    }
+
+    // Ümumi hook registry: window.modalOpenHooks['modal-id'] = async () => {...}
+    if (window.modalOpenHooks && window.modalOpenHooks[id]) {
+        try {
+            await window.modalOpenHooks[id]();
+        } catch (e) {
+            console.warn(`modalOpenHook [${id}] xətası:`, e);
+        }
     }
 
     bringToFront(id);
