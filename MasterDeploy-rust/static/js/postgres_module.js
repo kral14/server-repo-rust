@@ -349,6 +349,17 @@ async function loadPgDatabases(serverId) {
     const countBadge = document.getElementById('pg-db-count-badge');
     if (!tbody) return;
 
+    // Inline SVG ikonlar (Lucide-dən asılı olmadan çalışır)
+    const SVG = {
+        db: `<svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>`,
+        eye: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`,
+        eyeOff: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
+        copy: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+        link: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
+        trash: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
+        check: `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+    };
+
     try {
         const resp = await fetch(`/api/plugins/postgres/list-dbs/${serverId}`);
         if (!resp.ok) throw new Error('Bazaları gətirmək mümkün olmadı');
@@ -360,7 +371,7 @@ async function loadPgDatabases(serverId) {
             tbody.innerHTML = `
                 <tr>
                     <td colspan="5" style="padding: 24px; text-align: center; color: var(--text-secondary);">
-                        Bu serverdə hələ heç bir layihə bazası yaradılmayıb. Yuxarıdakı form ilə dərhal yarada bilərsiniz.
+                        Bu serverdə hələ heç bir layihə bazası yaradılmayıb.
                     </td>
                 </tr>
             `;
@@ -372,13 +383,13 @@ async function loadPgDatabases(serverId) {
             const tr = document.createElement('tr');
             tr.style.borderBottom = '1px solid rgba(255,255,255,0.04)';
 
-            // Item-in məlumatlarını JSON olaraq saxlayırıq
             const itemJsonStr = encodeURIComponent(JSON.stringify(item));
+            const safeConnStr = escapeHtml(item.connection_string);
 
             tr.innerHTML = `
                 <td style="padding: 5px 8px; font-weight: 600; color: #fff; vertical-align: middle; white-space: nowrap;">
                     <span style="display: inline-flex; align-items: center; gap: 4px;">
-                        <i data-lucide="database" style="width: 11px; height: 11px; color: #38bdf8;"></i>
+                        ${SVG.db}
                         <span style="font-size: 0.74rem;">${escapeHtml(item.app_name)}</span>
                     </span>
                 </td>
@@ -391,36 +402,44 @@ async function loadPgDatabases(serverId) {
                 </td>
                 <td style="padding: 5px 8px; vertical-align: middle;">
                     <div style="display: flex; align-items: center; gap: 4px; width: 100%;">
-                        <input type="password" 
-                               value="${escapeHtml(item.connection_string)}" 
-                               readonly 
+                        <input type="password"
+                               value="${safeConnStr}"
+                               readonly
                                onclick="this.select()"
                                title="Klikləyərək seçə bilərsiniz"
-                               style="height: 24px; padding: 0 6px; border-radius: 4px; background: rgba(0,0,0,0.45); border: 1px solid var(--card-border); color: #38bdf8; font-size: 0.72rem; font-family: monospace; flex: 1; min-width: 260px; letter-spacing: 2px;" 
+                               style="height: 24px; padding: 0 6px; border-radius: 4px; background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.1); color: #38bdf8; font-size: 0.72rem; font-family: monospace; flex: 1; min-width: 200px; letter-spacing: 2px;"
                                id="cs-${item.id}">
-                        <button type="button" class="btn btn-secondary" onclick="toggleShowPassword('cs-${item.id}', this)" style="height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px;" title="Göstər / Gizlə">
-                            <i data-lucide="eye" style="width: 11px; height: 11px;"></i>
+                        <button type="button"
+                                title="Göstər / Gizlə"
+                                onclick="pgToggleEye('cs-${item.id}', this)"
+                                style="height: 24px; width: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; color: #94a3b8; flex-shrink: 0;">
+                            ${SVG.eye}
                         </button>
-                        <button type="button" class="btn btn-primary" onclick="copyPgDbConnString('${escapeHtml(item.connection_string)}', this)" style="height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: #3b82f6; border-radius: 4px;" title="Kopyala">
-                            <i data-lucide="copy" style="width: 11px; height: 11px;"></i>
+                        <button type="button"
+                                title="Kopyala"
+                                onclick="pgCopyStr('cs-${item.id}', this)"
+                                style="height: 24px; width: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: #3b82f6; border: none; cursor: pointer; color: #fff; flex-shrink: 0;">
+                            ${SVG.copy}
                         </button>
-                        <button type="button" class="btn btn-secondary" onclick="openPgDbDetails('${itemJsonStr}')" style="height: 24px; width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; background: rgba(255,255,255,0.06); border-radius: 4px;" title="Tam baxış və fərqli hostlar">
-                            <i data-lucide="external-link" style="width: 11px; height: 11px;"></i>
+                        <button type="button"
+                                title="Tam baxış və fərqli hostlar"
+                                onclick="openPgDbDetails('${itemJsonStr}')"
+                                style="height: 24px; width: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); cursor: pointer; color: #94a3b8; flex-shrink: 0;">
+                            ${SVG.link}
                         </button>
                     </div>
                 </td>
                 <td style="padding: 5px 8px; text-align: right; vertical-align: middle; white-space: nowrap;">
-                    <button type="button" class="btn-icon" onclick="deletePgDatabasePrompt('${serverId}', '${escapeHtml(item.db_name)}', '${escapeHtml(item.app_name)}')" style="color: #f87171; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 4px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;" title="Bazanı sil">
-                        <i data-lucide="trash-2" style="width: 11px; height: 11px;"></i>
+                    <button type="button"
+                            title="Bazanı sil"
+                            onclick="deletePgDatabasePrompt('${serverId}', '${escapeHtml(item.db_name)}', '${escapeHtml(item.app_name)}')"
+                            style="color: #f87171; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: 4px; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;">
+                        ${SVG.trash}
                     </button>
                 </td>
             `;
             tbody.appendChild(tr);
         });
-
-        if (window.lucide && typeof lucide.createIcons === 'function') {
-            lucide.createIcons();
-        }
     } catch (e) {
         console.error('loadPgDatabases xətası:', e);
         tbody.innerHTML = `
@@ -433,38 +452,51 @@ async function loadPgDatabases(serverId) {
     }
 }
 
-function toggleShowPassword(inputId, btn) {
+// Eye toggle — inline SVG ilə
+function pgToggleEye(inputId, btn) {
     const el = document.getElementById(inputId);
     if (!el) return;
+    const SVG_EYE = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    const SVG_EYEOFF = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
     if (el.type === 'password') {
         el.type = 'text';
         el.style.letterSpacing = 'normal';
-        btn.innerHTML = '<i data-lucide="eye-off" style="width: 11px; height: 11px;"></i>';
-        btn.title = 'Gizlət (Şifrələ)';
+        btn.innerHTML = SVG_EYEOFF;
+        btn.title = 'Gizlət';
+        btn.style.color = '#38bdf8';
     } else {
         el.type = 'password';
         el.style.letterSpacing = '2px';
-        btn.innerHTML = '<i data-lucide="eye" style="width: 11px; height: 11px;"></i>';
-        btn.title = 'Tam Göstər';
-    }
-    if (window.lucide && typeof lucide.createIcons === 'function') {
-        lucide.createIcons();
+        btn.innerHTML = SVG_EYE;
+        btn.title = 'Göstər';
+        btn.style.color = '#94a3b8';
     }
 }
 
-function copyPgDbConnString(str, btn) {
+// Copy — input value-dan kopyala
+function pgCopyStr(inputId, btn) {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    const str = el.value;
+    const SVG_CHECK = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const SVG_COPY = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
     navigator.clipboard.writeText(str).then(() => {
-        const oldHtml = btn.innerHTML;
-        btn.innerHTML = '<i data-lucide="check" style="width: 11px; height: 11px;"></i>';
+        btn.innerHTML = SVG_CHECK;
         btn.style.background = '#10b981';
-        if (window.lucide) lucide.createIcons();
         setTimeout(() => {
-            btn.innerHTML = oldHtml;
+            btn.innerHTML = SVG_COPY;
             btn.style.background = '#3b82f6';
-            if (window.lucide) lucide.createIcons();
         }, 1500);
+    }).catch(() => {
+        el.select();
+        document.execCommand('copy');
     });
 }
+
+
+
+
+
 
 // Baza üçün detallı baxış və host dəyişdirici (Xarici IP vs Localhost vs Docker)
 function openPgDbDetails(itemJsonEncoded) {

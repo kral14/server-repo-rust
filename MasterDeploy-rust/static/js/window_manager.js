@@ -94,40 +94,37 @@ function clampWindowToScreen(card) {
 }
 
 // Pəncərə daxilindəki təkrar başlıq bağlama (X) düymələrini avtomatik təmizləyən qlobal funksiya
+// QEYD: Yalnız explicit close-btn/data-close-modal/closeModal handler olan düymələr silinir.
+// İkon düymələri (eye, copy, trash, external-link, rotate-cw və s.) silinmir!
 function cleanDuplicateWindowCloseButtons(root) {
     if (!root) return;
     const body = root.classList?.contains('win-body') ? root : root.querySelector('.win-body');
     if (!body) return;
 
-    const btns = body.querySelectorAll('button, .close-btn, [data-close-modal]');
-    btns.forEach(btn => {
-        if (btn.classList.contains('win-btn-close') || btn.classList.contains('win-btn-min') || btn.classList.contains('win-btn-max') || btn.closest('.win-header')) {
-            return;
-        }
+    // Yalnız explicit bağlama düymələrini hədəfə al
+    const candidates = body.querySelectorAll('button.close-btn, [data-close-modal]');
+    candidates.forEach(btn => {
+        if (btn.closest('.win-header')) return;
+        btn.remove();
+    });
 
-        if (btn.closest('.modal-actions') || btn.closest('.modal-footer')) {
-            return;
-        }
-
-        const oc = (btn.getAttribute('onclick') || '').toLowerCase();
-        const text = btn.textContent.trim();
-        const lowerText = text.toLowerCase();
-        const isActionText = lowerText.includes('ləğv') || lowerText.includes('imtina') || lowerText.includes('bağla') || lowerText.includes('yadda') || lowerText.includes('save');
-
-        if (isActionText) {
-            return;
-        }
-
-        const hasXIcon = btn.querySelector('[data-lucide="x"], svg, i.lucide-x, i.fa-times') !== null;
-        const isXSign = text === '✕' || text === '×' || text === 'X' || text === 'x' || text === '' || hasXIcon;
-        const isCloseHandler = oc.includes('closemodal') || oc.includes('hideoverlay') || btn.classList.contains('close-btn') || btn.hasAttribute('data-close-modal');
-
-        if (isCloseHandler || (isXSign && btn.classList.contains('btn-secondary')) || btn.classList.contains('close-btn')) {
+    // closeModal/hideOverlay çağıran düymələri də yoxla — amma ANCAQ
+    // title-bar-da göründüyü kimi "modal bağlayan" düymə olduğu aydın olanlardır.
+    // Cədvəl/form içindəki ikon düymələrinə TOXUNMA.
+    const allBtns = body.querySelectorAll('button');
+    allBtns.forEach(btn => {
+        if (btn.closest('.win-header')) return;
+        // Yalnız onclick-i tam olaraq closeModal çağıran düymələri sil
+        const oc = btn.getAttribute('onclick') || '';
+        // Məsələn: closeModal('postgres-modal') — başqa heç nə yoxdur
+        if (/^closeModal\s*\(/.test(oc.trim()) || /^hideOverlay\s*\(/.test(oc.trim())) {
             btn.remove();
         }
     });
 }
+
 window.cleanDuplicateWindowCloseButtons = cleanDuplicateWindowCloseButtons;
+
 
 // İstənilən pəncərəni tən ortada bərpa etmə (Emergency Center Reset)
 function centerWindow(windowId) {
