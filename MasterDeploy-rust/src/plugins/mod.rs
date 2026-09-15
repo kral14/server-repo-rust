@@ -1,4 +1,5 @@
 pub mod cloudflare;
+pub mod postgres;
 
 use axum::{
     routing::{get, post},
@@ -25,6 +26,7 @@ pub fn router() -> Router<AppState> {
         .route("/api/plugins/:id/servers", get(get_plugin_servers))
         .route("/api/plugins/:id/install", post(install_plugin))
         .route("/api/plugins/:id/uninstall", post(uninstall_plugin))
+        .nest("/api/plugins/postgres", postgres::postgres_router())
         .route("/proxy/:app_name/*path", axum::routing::any(cloudflare::proxy_handler))
         .route("/proxy/:app_name", axum::routing::any(cloudflare::proxy_handler))
 }
@@ -76,6 +78,7 @@ async fn list_plugins(State(state): State<AppState>) -> Result<Json<Vec<PluginIn
 
     let mut list = Vec::new();
     let has_cloudflare = plugins_in_db.iter().any(|p| p.0 == "cloudflare");
+    let has_postgres = plugins_in_db.iter().any(|p| p.0 == "postgres");
 
     if !has_cloudflare {
         let _ = sqlx::query("INSERT INTO plugins (id, name, description, installed, version) VALUES ('cloudflare', 'Cloudflare Tunnel', 'Multi-Node Müstəqil Tünel İnteqrasiyası', 0, '2.0.0')")
@@ -87,6 +90,19 @@ async fn list_plugins(State(state): State<AppState>) -> Result<Json<Vec<PluginIn
             description: "Multi-Node Müstəqil Tünel İnteqrasiyası".to_string(),
             installed: false,
             version: "2.0.0".to_string(),
+        });
+    }
+
+    if !has_postgres {
+        let _ = sqlx::query("INSERT INTO plugins (id, name, description, installed, version) VALUES ('postgres', 'PostgreSQL Database Engine', 'Multi-tenant layihələr üçün avtomatik baza və təhlükəsizlik generatoru', 0, '16-alpine')")
+            .execute(&state.db)
+            .await;
+        list.push(PluginInfo {
+            id: "postgres".to_string(),
+            name: "PostgreSQL Database Engine".to_string(),
+            description: "Multi-tenant layihələr üçün avtomatik baza və təhlükəsizlik generatoru".to_string(),
+            installed: false,
+            version: "16-alpine".to_string(),
         });
     }
 

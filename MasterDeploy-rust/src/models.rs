@@ -267,4 +267,50 @@ pub struct TunnelLinkHistory {
     pub status: String,
     pub assigned_at: String,
     pub expired_at: Option<String>,
-}
+}
+
+// ==========================================
+// PostgreSQL Database Manager Models
+// ==========================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostgresInstanceStatus {
+    pub installed: bool,
+    pub running: bool,
+    pub container_name: String,
+    pub port: u16,
+    pub server_ip: String,
+    pub data_dir: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct InstallPostgresInput {
+    pub port: Option<u16>,
+    pub root_password: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreatePostgresDbInput {
+    pub app_name: String,
+    pub client_ip: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct PostgresDbRecord {
+    pub id: String,
+    pub server_id: String,
+    pub app_name: String,
+    pub db_name: String,
+    pub db_user: String,
+    pub db_password: String,
+    pub port: i64,
+    pub connection_string: String,
+    pub created_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AddWhitelistIpInput {
+    pub client_ip: String,
+    pub port: Option<u16>,
+}
+

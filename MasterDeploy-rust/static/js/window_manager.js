@@ -29,6 +29,7 @@ const windowNames = {
     'create-tunnel-modal': '🌐 Yeni Tünel Yarat',
     'attach-route-modal': '🔗 Tünelə Layihə Qoş',
     'tunnel-history-modal': '⏱️ Keçid Link Tarixçəsi',
+    'postgres-modal': '🐘 PostgreSQL Bazaları',
     'win-dashboard': '📊 İdarəetmə Paneli (Dashboard)',
     'win-servers': '🖥️ Serverlər',
     'win-applications': '🚀 Layihələr',

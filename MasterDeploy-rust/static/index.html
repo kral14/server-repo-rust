@@ -73,7 +73,7 @@
                 <div class="topbar-nav-dropdown">
                     <div class="topbar-dropdown-header">
                         <span>Server İdarəetməsi</span>
-                        <span class="dropdown-count">3 Bölmə</span>
+                        <span class="dropdown-count">4 Bölmə</span>
                     </div>
                     <button class="topbar-dropdown-item" onclick="navigateDesktopSubTab('servers')">
                         <div class="dropdown-item-icon"><i data-lucide="server"></i></div>
@@ -97,6 +97,14 @@
                             <span class="dropdown-item-title">Docker Volumları (Disk)</span>
                             <span class="dropdown-item-desc">Disk sahəsi və yaddaş təmizliyi</span>
                         </div>
+                    </button>
+                    <button class="topbar-dropdown-item" onclick="openPostgresModal()">
+                        <div class="dropdown-item-icon" style="font-size: 1.1rem;">🐘</div>
+                        <div class="dropdown-item-info">
+                            <span class="dropdown-item-title">PostgreSQL Bazaları</span>
+                            <span class="dropdown-item-desc">Baza aç, şifrə və Connection String yarat</span>
+                        </div>
+                        <span class="dropdown-item-badge badge-blue" style="background: rgba(51, 103, 145, 0.3); color: #38bdf8;">Baza</span>
                     </button>
                 </div>
             </div>
@@ -393,6 +401,7 @@
     <script src="/js/ssh_keys_helpers.js?v=3"></script>
     <script src="/js/background_services.js?v=18"></script>
     <script src="/js/keys_tokens.js?v=4"></script>
+    <script src="/js/postgres_module.js?v=1"></script>
     <script src="/app.js?v=8.5"></script>
 
 
