@@ -635,7 +635,7 @@ function openPgDbDetails(itemJsonEncoded) {
         const currentHost = hostMatch ? hostMatch[1] : '';
 
         const urlWithLocalhost = currentHost ? rawUrl.replace(`@${currentHost}:`, '@localhost:') : rawUrl;
-        const urlWithDocker = currentHost ? rawUrl.replace(`@${currentHost}:`, '@masterdeploy-postgres:') : rawUrl;
+        const urlWithDocker = currentHost ? rawUrl.replace(`@${currentHost}:`, '@172.17.0.1:') : rawUrl;
         const maskedRawUrl = maskConnStringHost(rawUrl);
 
         const dialog = document.createElement('div');
@@ -745,7 +745,7 @@ function openPgDbDetails(itemJsonEncoded) {
                 if (bLocal) { bLocal.style.borderColor = '#3b82f6'; bLocal.style.background = 'rgba(59,130,246,0.15)'; bLocal.style.color = '#60a5fa'; bLocal.style.fontWeight = '600'; }
             } else if (mode === 'docker') {
                 if (box) box.value = window._pgDetailUrls.docker;
-                if (hostEl) hostEl.textContent = 'masterdeploy-postgres';
+                if (hostEl) hostEl.textContent = '172.17.0.1 (Docker)';
                 if (bDocker) { bDocker.style.borderColor = '#3b82f6'; bDocker.style.background = 'rgba(59,130,246,0.15)'; bDocker.style.color = '#60a5fa'; bDocker.style.fontWeight = '600'; }
             }
         };

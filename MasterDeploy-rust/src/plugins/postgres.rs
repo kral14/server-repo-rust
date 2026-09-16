@@ -27,7 +27,7 @@ pub fn postgres_router() -> Router<AppState> {
 
 fn generate_random_password(len: usize) -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
-    let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_!*";
+    let chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_";
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -182,8 +182,10 @@ pub async fn install_postgres(
            -v /data/postgres-data:/var/lib/postgresql/data \
            -e POSTGRES_PASSWORD='{root_pass}' \
            postgres:16-alpine && \
-         sudo ufw allow in on lo to any port {port} proto tcp 2>/dev/null || true && \
-         sudo ufw allow from 172.17.0.0/16 to any port {port} proto tcp 2>/dev/null || true",
+         while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null; do :; done; \
+         sudo iptables -I DOCKER-USER 1 -p tcp --dport {port} -j ACCEPT 2>/dev/null || true && \
+         sudo ufw allow {port}/tcp 2>/dev/null || true && \
+         sudo ufw reload 2>/dev/null || true",
         port = port,
         root_pass = root_pass
     );
@@ -263,15 +265,15 @@ pub async fn create_database(
          DO $$\n\
          BEGIN\n\
            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{user}') THEN\n\
-             CREATE USER {user} WITH ENCRYPTED PASSWORD '{pass}';\n\
+             CREATE USER \"{user}\" WITH ENCRYPTED PASSWORD '{pass}';\n\
            ELSE\n\
-             ALTER USER {user} WITH ENCRYPTED PASSWORD '{pass}';\n\
+             ALTER USER \"{user}\" WITH ENCRYPTED PASSWORD '{pass}';\n\
            END IF;\n\
          END\n\
          $$;\n\
-         SELECT 'CREATE DATABASE {db} OWNER {user}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{db}')\\gexec\n\
-         GRANT ALL PRIVILEGES ON DATABASE {db} TO {user};\n\
-         ALTER DATABASE {db} OWNER TO {user};\n\
+         SELECT 'CREATE DATABASE \"{db}\" OWNER \"{user}\"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{db}')\\gexec\n\
+         GRANT ALL PRIVILEGES ON DATABASE \"{db}\" TO \"{user}\";\n\
+         ALTER DATABASE \"{db}\" OWNER TO \"{user}\";\n\
          EOF",
         user = db_user,
         pass = db_password,
@@ -282,9 +284,30 @@ pub async fn create_database(
         return Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Baza yaradılarkən xəta: {}", e)));
     }
 
-    // Serverdə port 5432-ni birbaşa açırıq ki, istifadəçi istənilən yerdən qoşula bilsin
-    let ufw_cmd = format!("sudo ufw allow {}/tcp 2>/dev/null || true", port);
-    let _ = run_ssh_quick(&server, &state.db, &ufw_cmd).await;
+    // PostgreSQL 15/16 üçün public schema icazələrinin verilməsi (Cədvəl yaratma xətasının qarşısını alır)
+    let schema_perm_sql = format!(
+        "sudo docker exec -i masterdeploy-postgres psql -U postgres -d {db} << 'EOF'\n\
+         GRANT ALL ON SCHEMA public TO \"{user}\";\n\
+         GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO \"{user}\";\n\
+         GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO \"{user}\";\n\
+         ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO \"{user}\";\n\
+         ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO \"{user}\";\n\
+         EOF",
+        user = db_user,
+        db = db_name
+    );
+    let _ = run_ssh_quick(&server, &state.db, &schema_perm_sql).await;
+
+    // Serverdə port 5432-ni həm DOCKER-USER iptables, həm də UFW-də xaricə tam açırıq
+    let firewall_cmd = format!(
+        "while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null; do :; done; \
+         while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j ACCEPT 2>/dev/null; do :; done; \
+         sudo iptables -I DOCKER-USER 1 -p tcp --dport {port} -j ACCEPT 2>/dev/null || true; \
+         sudo ufw allow {port}/tcp 2>/dev/null || true; \
+         sudo ufw reload 2>/dev/null || true",
+        port = port
+    );
+    let _ = run_ssh_quick(&server, &state.db, &firewall_cmd).await;
 
     let connection_string = format!(
         "postgresql://{user}:{pass}@{host}:{port}/{db}",
@@ -468,7 +491,9 @@ pub async fn toggle_port_exposure(
     let cmd = if input.open {
         // Portu xaricə AÇIRIQ:
         format!(
-            "sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null || true && \
+            "while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null; do :; done; \
+             while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j ACCEPT 2>/dev/null; do :; done; \
+             sudo iptables -I DOCKER-USER 1 -p tcp --dport {port} -j ACCEPT 2>/dev/null || true && \
              sudo ufw delete deny {port}/tcp 2>/dev/null || true && \
              sudo ufw allow {port}/tcp 2>/dev/null || true && \
              sudo ufw reload 2>/dev/null || true",
@@ -477,11 +502,12 @@ pub async fn toggle_port_exposure(
     } else {
         // Portu xaricə BAĞLAYIRIQ (yalnız daxili Docker və localhost icazəli qalır):
         format!(
-            "sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null || true && \
+            "while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null; do :; done; \
+             while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j ACCEPT 2>/dev/null; do :; done; \
              sudo iptables -I DOCKER-USER 1 -s 127.0.0.1 -p tcp --dport {port} -j ACCEPT 2>/dev/null || true && \
              sudo iptables -I DOCKER-USER 2 -s 172.16.0.0/12 -p tcp --dport {port} -j ACCEPT 2>/dev/null || true && \
              sudo iptables -I DOCKER-USER 3 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true && \
-             sudo iptables -I DOCKER-USER 4 -p tcp --dport {port} -j DROP 2>/dev/null || true && \
+             sudo iptables -A DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null || true && \
              sudo ufw delete allow {port}/tcp 2>/dev/null || true && \
              sudo ufw deny {port}/tcp 2>/dev/null || true && \
              sudo ufw reload 2>/dev/null || true",
