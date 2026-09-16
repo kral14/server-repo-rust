@@ -392,8 +392,7 @@ async function generateNewPgDatabase() {
         const resPass = document.getElementById('pg-res-pass');
 
         if (connStrInput) {
-            // Göstərmək üçün maskala, kopyalama üçün real-ı saxla
-            connStrInput.value = maskConnStringHost(data.connection_string);
+            connStrInput.value = data.connection_string;
             connStrInput.setAttribute('data-real', data.connection_string);
         }
         if (resDb) resDb.textContent = data.db_name;
@@ -522,9 +521,6 @@ async function loadPgDatabases(serverId) {
             const realConnStr = item.connection_string;
             const safeConnStr = escapeHtml(realConnStr);
 
-            // Host hissəsini maskala (göstərmək üçün) — kopyalama həmişə real string götürür
-            const maskedConnStr = escapeHtml(maskConnStringHost(realConnStr));
-
             tr.innerHTML = `
                 <td style="padding: 5px 8px; font-weight: 600; color: #fff; vertical-align: middle; white-space: nowrap;">
                     <span style="display: inline-flex; align-items: center; gap: 4px;">
@@ -542,7 +538,7 @@ async function loadPgDatabases(serverId) {
                 <td style="padding: 5px 8px; vertical-align: middle;">
                     <div style="display: flex; align-items: center; gap: 4px; width: 100%;">
                         <input type="password"
-                               value="${maskedConnStr}"
+                               value="${safeConnStr}"
                                data-real="${safeConnStr}"
                                readonly
                                onclick="this.select()"
@@ -592,32 +588,28 @@ async function loadPgDatabases(serverId) {
     }
 }
 
-// Host maskalama funksiyası — postgresql://user:pass@HOST:port/db → ...@[HOST]:port/db
+// Host maskalama funksiyası — istifadəçinin tələbi ilə maskalanma ləğv edildi, birbaşa real connection string qaytarılır
 function maskConnStringHost(connStr) {
-    if (!connStr) return connStr;
-    return connStr.replace(/(@)([^@:/]+)/g, '$1[HOST]');
+    return connStr;
 }
 
-// Eye toggle — inline SVG ilə (masked/real dəyəri toogle edir)
+// Eye toggle — inline SVG ilə (şifrələnmiş nöqtələr / real dəyəri toogle edir)
 function pgToggleEye(inputId, btn) {
     const el = document.getElementById(inputId);
     if (!el) return;
     const SVG_EYE = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
     const SVG_EYEOFF = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
     const realVal = el.getAttribute('data-real') || el.value;
-    const maskedVal = maskConnStringHost(realVal);
     if (el.type === 'password') {
-        // Göstər: IP həmişə [HOST] kimi gizli qalır, parol və istifadəçi adı açılır
         el.type = 'text';
-        el.value = maskedVal;
+        el.value = realVal;
         el.style.letterSpacing = 'normal';
         btn.innerHTML = SVG_EYEOFF;
         btn.title = 'Gizlət';
         btn.style.color = '#38bdf8';
     } else {
-        // Gizlət: nöqtələr rejimi
         el.type = 'password';
-        el.value = maskedVal;
+        el.value = realVal;
         el.style.letterSpacing = '2px';
         btn.innerHTML = SVG_EYE;
         btn.title = 'Göstər';
@@ -629,7 +621,6 @@ function pgToggleEye(inputId, btn) {
 function pgCopyStr(inputId, btn) {
     const el = document.getElementById(inputId);
     if (!el) return;
-    // data-real atributundan real (maskalanmamış) string-i götür
     const str = el.getAttribute('data-real') || el.value;
     const SVG_CHECK = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
     const SVG_COPY = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
@@ -643,12 +634,6 @@ function pgCopyStr(inputId, btn) {
         }, 1500);
     });
 }
-
-
-
-
-
-
 
 // Baza üçün detallı baxış və host dəyişdirici (Xarici IP vs Localhost vs Docker)
 function openPgDbDetails(itemJsonEncoded) {
@@ -665,7 +650,6 @@ function openPgDbDetails(itemJsonEncoded) {
 
         const urlWithLocalhost = currentHost ? rawUrl.replace(`@${currentHost}:`, '@localhost:') : rawUrl;
         const urlWithDocker = currentHost ? rawUrl.replace(`@${currentHost}:`, '@172.17.0.1:') : rawUrl;
-        const maskedRawUrl = maskConnStringHost(rawUrl);
 
         const dialog = document.createElement('div');
         dialog.id = 'pg-db-detail-dialog';
@@ -689,7 +673,7 @@ function openPgDbDetails(itemJsonEncoded) {
                     <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;">
                         <button type="button" id="pg-mode-ip" class="btn btn-secondary" onclick="switchPgDetailMode('ip')" style="padding: 5px 8px; font-size: 0.73rem; border-color: #3b82f6; background: rgba(59,130,246,0.12); color: #60a5fa; font-weight: 600; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                             <i data-lucide="globe" style="width: 11px; height: 11px;"></i>
-                            <span>Xarici IP ([HOST])</span>
+                            <span>Xarici IP</span>
                         </button>
                         <button type="button" id="pg-mode-local" class="btn btn-secondary" onclick="switchPgDetailMode('local')" style="padding: 5px 8px; font-size: 0.73rem; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
                             <i data-lucide="cpu" style="width: 11px; height: 11px;"></i>
@@ -705,7 +689,7 @@ function openPgDbDetails(itemJsonEncoded) {
                 <!-- Tam Connection String qutusu -->
                 <div style="margin-bottom: 12px;">
                     <div style="position: relative;">
-                        <textarea id="pg-detail-conn-box" readonly onclick="this.select()" rows="2" style="width: 100%; padding: 8px 10px; border-radius: 6px; background: #06090e; border: 1px solid rgba(59,130,246,0.3); color: #38bdf8; font-family: monospace; font-size: 0.75rem; resize: none; word-break: break-all; line-height: 1.4;">${escapeHtml(maskedRawUrl)}</textarea>
+                        <textarea id="pg-detail-conn-box" readonly onclick="this.select()" rows="2" style="width: 100%; padding: 8px 10px; border-radius: 6px; background: #06090e; border: 1px solid rgba(59,130,246,0.3); color: #38bdf8; font-family: monospace; font-size: 0.75rem; resize: none; word-break: break-all; line-height: 1.4;">${escapeHtml(rawUrl)}</textarea>
                     </div>
                     <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
                         <button type="button" class="btn btn-primary" onclick="copyPgDetailBox()" id="pg-copy-detail-btn" style="height: 26px; padding: 0 12px; background: #10b981; font-weight: 500; font-size: 0.75rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;">
@@ -718,7 +702,7 @@ function openPgDbDetails(itemJsonEncoded) {
                 <!-- Ayrı-ayrı parametrlər -->
                 <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--card-border); border-radius: 6px; padding: 8px 12px; font-size: 0.73rem;">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-                        <div><span style="color: #64748b;">Host:</span> <b id="pg-detail-host" style="color: #fff; font-family: monospace;">[HOST]</b></div>
+                        <div><span style="color: #64748b;">Host:</span> <b id="pg-detail-host" style="color: #fff; font-family: monospace;">${escapeHtml(currentHost || 'Xarici IP')}</b></div>
                         <div><span style="color: #64748b;">Port:</span> <b style="color: #fff; font-family: monospace;">${item.port || 5432}</b></div>
                         <div><span style="color: #64748b;">Baza:</span> <b style="color: #fff; font-family: monospace;">${escapeHtml(item.db_name)}</b></div>
                         <div><span style="color: #64748b;">User:</span> <b style="color: #fff; font-family: monospace;">${escapeHtml(item.db_user)}</b></div>
@@ -740,9 +724,9 @@ function openPgDbDetails(itemJsonEncoded) {
         // Rejim dəyişmə funksiyaları
         window._pgDetailUrls = {
             ip: rawUrl,
-            maskedIp: maskedRawUrl,
             local: urlWithLocalhost,
             docker: urlWithDocker,
+            currentHost: currentHost,
             currentMode: 'ip'
         };
 
@@ -765,8 +749,8 @@ function openPgDbDetails(itemJsonEncoded) {
             });
 
             if (mode === 'ip') {
-                if (box) box.value = window._pgDetailUrls.maskedIp;
-                if (hostEl) hostEl.textContent = '[HOST]';
+                if (box) box.value = window._pgDetailUrls.ip;
+                if (hostEl) hostEl.textContent = window._pgDetailUrls.currentHost || 'Xarici IP';
                 if (bIp) { bIp.style.borderColor = '#3b82f6'; bIp.style.background = 'rgba(59,130,246,0.15)'; bIp.style.color = '#60a5fa'; bIp.style.fontWeight = '600'; }
             } else if (mode === 'local') {
                 if (box) box.value = window._pgDetailUrls.local;
