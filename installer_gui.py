@@ -95,8 +95,32 @@ class RemoteInstallerGUI:
         self.setup_tray()
         self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
         
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+        
         if self.ip_entry.get() and self.key_entry.get():
             self.root.after(500, lambda: self.backend.test_connection(auto=True))
+
+    def on_tab_changed(self, event=None):
+        selected = self.notebook.select()
+        if str(selected) == str(self.tab_local):
+            if os.name == 'nt':
+                try:
+                    import ctypes
+                    if ctypes.windll.shell32.IsUserAnAdmin() == 0:
+                        ans = messagebox.askyesno(
+                            "Administrator İcazəsi Lazımdır",
+                            "Yerli kompüterdə (Local PC) Docker və şəbəkə tənzimləmələri üçün Administrator hüquqları tələb olunur.\n\nProqramı Administrator kimi yenidən başlatmaq istəyirsiniz?"
+                        )
+                        if ans:
+                            import sys
+                            script_path = os.path.abspath(sys.argv[0])
+                            params = " ".join([f'"{arg}"' for arg in sys.argv[1:]])
+                            ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{script_path}" {params}', None, 1)
+                            self.root.destroy()
+                        else:
+                            self.notebook.select(self.tab_remote)
+                except:
+                    pass
 
     def create_button(self, parent, text, bg_color, command, **kwargs):
         fg_color = kwargs.pop("fg", "white")
@@ -531,7 +555,10 @@ class RemoteInstallerGUI:
         self.backend.save_config()
 
     def minimize_to_tray(self):
-        self.root.withdraw()
+        if self.tray_icon:
+            self.root.withdraw()
+        else:
+            self.root.destroy()
 
     def restore_from_tray(self, icon=None, item=None):
         self.root.after(0, self.root.deiconify)
@@ -539,18 +566,22 @@ class RemoteInstallerGUI:
 
     def exit_app(self, icon=None, item=None):
         if self.tray_icon:
-            self.tray_icon.stop()
+            try:
+                self.tray_icon.stop()
+            except: pass
         self.root.after(0, self.root.destroy)
 
     def setup_tray(self):
         try:
-            import pystray
-            from PIL import Image, ImageDraw
+            import importlib
+            pystray = importlib.import_module("pystray")
+            pil_image = importlib.import_module("PIL.Image")
+            pil_draw = importlib.import_module("PIL.ImageDraw")
             import threading
             
             def create_image():
-                image = Image.new('RGB', (64, 64), color=(18, 18, 18))
-                dc = ImageDraw.Draw(image)
+                image = pil_image.new('RGB', (64, 64), color=(18, 18, 18))
+                dc = pil_draw.Draw(image)
                 dc.rectangle((16, 16, 48, 48), fill=(0, 210, 255))
                 return image
 
@@ -562,5 +593,5 @@ class RemoteInstallerGUI:
             )
             self.tray_icon = pystray.Icon("MasterDeploy", image, "MasterDeploy Installer", menu)
             threading.Thread(target=self.tray_icon.run, daemon=True).start()
-        except Exception as e:
-            print(f"Tray startup error: {e}")
+        except Exception:
+            self.tray_icon = None

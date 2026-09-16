@@ -157,16 +157,14 @@ class RemoteInstallerLogic:
         except: pass
 
     def fix_key_permissions(self, key_path):
-        if os.name == 'nt':
+        if os.name == 'nt' and key_path and os.path.exists(key_path):
             try:
+                norm_key = os.path.normpath(key_path)
                 domain = os.environ.get("USERDOMAIN", "")
                 username = os.environ.get("USERNAME", "")
-                if not username:
-                    import getpass
-                    username = getpass.getuser()
                 identity = f"{domain}\\{username}" if domain else username
-                subprocess.run(["icacls", key_path, "/inheritance:r"], capture_output=True)
-                subprocess.run(["icacls", key_path, "/grant:r", f"{identity}:F"], capture_output=True)
+                creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                subprocess.run(f'icacls "{norm_key}" /inheritance:r && icacls "{norm_key}" /grant:r "{identity}:F"', shell=True, capture_output=True, creationflags=creationflags)
             except: pass
 
     def test_connection(self, auto=False):
@@ -273,8 +271,17 @@ class RemoteInstallerLogic:
             cmd = "sudo ufw reset --force && sudo ufw default deny incoming && sudo ufw default allow outgoing && sudo ufw allow 22/tcp && sudo ufw --force enable"
             msg = "⚡ Uzaq serverdə bütün portlar bağlanır (SSH xaric)..."
         else:
-            cmd = f"sudo ufw allow 22/tcp 2>/dev/null || true; sudo ufw allow {panel_port}/tcp 2>/dev/null || true; sudo ufw allow {portainer_port}/tcp 2>/dev/null || true; sudo ufw --force enable"
-            msg = "⚡ Uzaq serverdə standart icazəli portlar açılır..."
+            cmd = (
+                f"sudo ufw allow 22/tcp 2>/dev/null || true; "
+                f"sudo ufw allow {panel_port}/tcp 2>/dev/null || true; "
+                f"sudo ufw allow {portainer_port}/tcp 2>/dev/null || true; "
+                f"sudo ufw allow 5432/tcp 2>/dev/null || true; "
+                f"while sudo iptables -D DOCKER-USER -p tcp --dport 5432 -j DROP 2>/dev/null; do :; done; "
+                f"while sudo iptables -D DOCKER-USER -p tcp --dport 5432 -j ACCEPT 2>/dev/null; do :; done; "
+                f"sudo iptables -I DOCKER-USER 1 -p tcp --dport 5432 -j ACCEPT 2>/dev/null || true; "
+                f"sudo ufw --force enable"
+            )
+            msg = "⚡ Uzaq serverdə standart icazəli portlar açılır (22, Panel, Portainer, Postgres)..."
 
         self.log_remote(f"\n--- {msg} ---")
 
@@ -330,11 +337,24 @@ class RemoteInstallerLogic:
         current_status = self.gui.lbl_port_status.cget("text")
         
         if "Açıq" in current_status:
-            action_cmd = f"sudo ufw delete allow {port}/tcp 2>/dev/null || true; sudo iptables -D INPUT -p tcp --dport {port} -j ACCEPT 2>/dev/null || true"
+            action_cmd = (
+                f"sudo ufw delete allow {port}/tcp 2>/dev/null || true; "
+                f"sudo iptables -D INPUT -p tcp --dport {port} -j ACCEPT 2>/dev/null || true; "
+                f"while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j ACCEPT 2>/dev/null; do :; done; "
+                f"sudo iptables -A DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null || true; "
+                f"sudo ufw reload 2>/dev/null || true"
+            )
             msg_success = f"✅ Port {port} uğurla bağlandı!"
         else:
-            action_cmd = f"sudo ufw allow {port}/tcp 2>/dev/null || true; sudo iptables -I INPUT -p tcp --dport {port} -j ACCEPT 2>/dev/null || true"
-            msg_success = f"✅ Port {port} uğurla açıldı!"
+            action_cmd = (
+                f"sudo ufw allow {port}/tcp 2>/dev/null || true; "
+                f"sudo iptables -I INPUT -p tcp --dport {port} -j ACCEPT 2>/dev/null || true; "
+                f"while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j DROP 2>/dev/null; do :; done; "
+                f"while sudo iptables -D DOCKER-USER -p tcp --dport {port} -j ACCEPT 2>/dev/null; do :; done; "
+                f"sudo iptables -I DOCKER-USER 1 -p tcp --dport {port} -j ACCEPT 2>/dev/null || true; "
+                f"sudo ufw reload 2>/dev/null || true"
+            )
+            msg_success = f"✅ Port {port} uğurla açıldı (UFW + Docker iptables daxil)!"
             
         self.log_remote(f"\n--- Port {port} üzərində əməliyyat aparılır... ---")
         
@@ -995,6 +1015,8 @@ sudo ufw default deny incoming 2>/dev/null || true;
 sudo ufw default allow outgoing 2>/dev/null || true;
 sudo ufw allow 22/tcp 2>/dev/null || true;
 sudo ufw allow {panel_p}/tcp 2>/dev/null || true;
+sudo ufw allow 5432/tcp 2>/dev/null || true;
+sudo iptables -I DOCKER-USER 1 -p tcp --dport 5432 -j ACCEPT 2>/dev/null || true;
 sudo ufw --force enable 2>/dev/null || true;
 sudo docker stop masterdeploy 2>/dev/null || true;
 sudo docker rm masterdeploy 2>/dev/null || true;
@@ -1647,18 +1669,6 @@ fi;
         return
 
 if __name__ == "__main__":
-    if os.name == 'nt':
-        import ctypes
-        import sys
-        if ctypes.windll.shell32.IsUserAnAdmin() == 0:
-            try:
-                script_path = os.path.abspath(sys.argv[0])
-                params = " ".join([f'"{arg}"' for arg in sys.argv[1:]])
-                ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, f'"{script_path}" {params}', None, 1)
-            except:
-                pass
-            sys.exit(0)
-
     root = tk.Tk()
     backend = RemoteInstallerLogic()
     app = RemoteInstallerGUI(root, backend)

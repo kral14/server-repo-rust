@@ -420,6 +420,40 @@ async function generateNewPgDatabase() {
     }
 }
 
+// HTTP və qeyri-təhlükəsiz bağlantılarda da işləyən etibarlı kopyalama funksiyası
+function pgSafeCopyText(text, callback) {
+    if (!text) return;
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => {
+            if (callback) callback();
+        }).catch(() => {
+            pgFallbackCopy(text);
+            if (callback) callback();
+        });
+    } else {
+        pgFallbackCopy(text);
+        if (callback) callback();
+    }
+}
+
+function pgFallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    ta.style.top = '-9999px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    try {
+        document.execCommand('copy');
+    } catch (e) {
+        console.warn('Fallback copy error:', e);
+    }
+    ta.remove();
+}
+
 // Nəticə connection string-ini kopyalayır (həmişə real, maskalanmamış string)
 function copyResultConnStr() {
     const input = document.getElementById('pg-result-conn-str');
@@ -430,7 +464,7 @@ function copyResultConnStr() {
     const realStr = input.getAttribute('data-real') || input.value;
     if (!realStr) return;
 
-    navigator.clipboard.writeText(realStr).then(() => {
+    pgSafeCopyText(realStr, () => {
         if (btn) {
             const old = btn.innerHTML;
             btn.innerHTML = '✓ Kopyalandı!';
@@ -440,9 +474,6 @@ function copyResultConnStr() {
                 btn.style.background = '#10b981';
             }, 2000);
         }
-    }).catch(() => {
-        input.select();
-        document.execCommand('copy');
     });
 }
 
@@ -602,16 +633,14 @@ function pgCopyStr(inputId, btn) {
     const str = el.getAttribute('data-real') || el.value;
     const SVG_CHECK = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
     const SVG_COPY = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-    navigator.clipboard.writeText(str).then(() => {
+    
+    pgSafeCopyText(str, () => {
         btn.innerHTML = SVG_CHECK;
         btn.style.background = '#10b981';
         setTimeout(() => {
             btn.innerHTML = SVG_COPY;
             btn.style.background = '#3b82f6';
         }, 1500);
-    }).catch(() => {
-        el.select();
-        document.execCommand('copy');
     });
 }
 
@@ -757,7 +786,7 @@ function openPgDbDetails(itemJsonEncoded) {
             if (mode === 'local') strToCopy = window._pgDetailUrls.local;
             if (mode === 'docker') strToCopy = window._pgDetailUrls.docker;
 
-            navigator.clipboard.writeText(strToCopy).then(() => {
+            pgSafeCopyText(strToCopy, () => {
                 if (btn) {
                     const old = btn.innerHTML;
                     btn.innerHTML = '✓ Kopyalandı!';
