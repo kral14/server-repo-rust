@@ -57,8 +57,12 @@ async fn main() {
     // Verilənlər bazasının avtomatik ehtiyat nüsxəsini (backup) çıxarırıq
     let _ = std::fs::copy("MasterDeploy-rust/masterdeploy.db", "MasterDeploy-rust/masterdeploy.db.backup");
 
-    // Start-up zamanı köhnə MasterDeploy yenilənmə köməkçi konteynerlərini tamamilə silirik
-    let _ = std::process::Command::new("docker").args(["rm", "-f", "masterdeploy-updater"]).status();
+    // Start-up zamanı köhnə MasterDeploy yenilənmə köməkçi konteynerlərini səssizcə təmizləyirik
+    let _ = std::process::Command::new("docker")
+        .args(["rm", "-f", "masterdeploy-updater"])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status();
 
     // Start-up zamanı yarımçıq qalmış (ilişmiş) deployment statuslarını 'failed' edirik
     let _ = sqlx::query("UPDATE deployments SET status = 'failed' WHERE status = 'building' OR status = 'deploying'")

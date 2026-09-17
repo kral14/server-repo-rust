@@ -59,6 +59,71 @@ def start_container(project_dir):
     print("[INFO] Kodu deyisdikde daxilde avtomatik yenilenme bash verecek.")
     print("-" * 60)
 
+def sync_remote_database(local_data_dir):
+    key_path = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ssh-key-MasterDeploy.key"))
+    host = "ubuntu@84.8.148.216"
+    local_db = os.path.normpath(os.path.join(local_data_dir, "masterdeploy.db"))
+    
+    if not os.path.exists(key_path):
+        print(f"[XƏTA] SSH açarı tapılmadı: {key_path}")
+        return
+        
+    print("\n[SYNC 1/2] Uzaq VM-də bazanın nüsxəsi hazırlanır...")
+    prepare_cmd = (
+        "sudo docker exec masterdeploy sqlite3 /app/data/masterdeploy.db 'VACUUM;' 2>/dev/null; "
+        "sudo docker cp masterdeploy:/app/data/masterdeploy.db /tmp/md_sync.db && "
+        "sudo chmod 666 /tmp/md_sync.db"
+    )
+    res = subprocess.run(
+        ["ssh", "-i", key_path, "-o", "StrictHostKeyChecking=no", "-o", "ConnectTimeout=6", host, prepare_cmd],
+        capture_output=True, text=True
+    )
+    if res.returncode != 0:
+        print(f"[XƏTA] Uzaq serverdə nüsxə hazırlana bilmədi: {res.stderr.strip()}")
+        return
+
+    print("[SYNC 2/2] masterdeploy.db lokal qovluğa endirilir...")
+    tmp_local_db = os.path.normpath(os.path.join(local_data_dir, "masterdeploy_temp.db"))
+    if os.path.exists(tmp_local_db):
+        try: os.remove(tmp_local_db)
+        except: pass
+
+    scp_res = subprocess.run(
+        ["scp", "-i", key_path, "-o", "StrictHostKeyChecking=no", f"{host}:/tmp/md_sync.db", tmp_local_db],
+        capture_output=True, text=True
+    )
+    if scp_res.returncode == 0 and os.path.exists(tmp_local_db):
+        try:
+            if os.path.exists(local_db):
+                os.remove(local_db)
+            os.replace(tmp_local_db, local_db)
+            size_kb = os.path.getsize(local_db) / 1024
+            print(f"✅ [UĞURLU] Uzaq baza tam sinxronlaşdırıldı! Həcm: {size_kb:.1f} KB\n")
+        except Exception as rename_err:
+            print(f"[XƏTA] Baza faylı əvəzlənə bilmədi: {rename_err}")
+    else:
+        print(f"[XƏTA] Baza faylı scp ilə endirilə bilmədi: {scp_res.stderr.strip()}\n")
+
+def ask_sync_remote_db(local_data_dir):
+    print("\n" + "=" * 60)
+    print(" 🔄 MASTERDEPLOY VERİLƏNLƏR BAZASI SİNXRONİZASİYASI")
+    print("=" * 60)
+    print(" Uzaq VM-dən (84.8.148.216) ən son bazanı (masterdeploy.db)")
+    print(" çəkib lokal mühitlə sinxronlaşdırmaq istəyirsiniz?")
+    print("   [1 / y / hə]  -> Bəli, uzaq bazanı çək və sinxron başlat")
+    print("   [2 / n / yox] -> Xeyr, mövcud lokal baza ilə davam et")
+    print("=" * 60)
+    
+    try:
+        choice = input(" Seçiminiz (Enter = Xeyr): ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        choice = ""
+        
+    if choice in ['1', 'y', 'yes', 'he', 'hə', 'bəli', 'beli', 's']:
+        sync_remote_database(local_data_dir)
+    else:
+        print("[INFO] Sinxronizasiya edilmədi. Mövcud lokal baza istifadə olunur.\n")
+
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     project_dir = os.path.join(base_dir, 'MasterDeploy-rust')
@@ -68,7 +133,15 @@ def main():
             print(f"[X] Xeta: 'MasterDeploy-rust' qovlugu tapilmadi.")
             sys.exit(1)
 
+    # 1. İlk öncə əvvəlki işlək konteyneri dayandırırıq ki, SQLite faylı kilidli (lock) qalmasın!
     kill_previous_instances()
+
+    # 2. Lazım olarsa bazanı sinxronlaşdırırıq
+    local_data_dir = os.path.join(base_dir, "local_data")
+    os.makedirs(local_data_dir, exist_ok=True)
+    ask_sync_remote_db(local_data_dir)
+
+    # 3. Konteyneri təzə/təmiz baza ilə başladırıq
     start_container(project_dir)
 
     # Loglari tail edirik

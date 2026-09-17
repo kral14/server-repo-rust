@@ -13,14 +13,44 @@ function showCreateServiceTab() {
     document.getElementById('dockerfile-card').classList.remove('active');
 
     // Reset inputs
-    document.getElementById('manual-public-repo').value = '';
-    document.getElementById('repo-search').value = '';
+    const manualRepo = document.getElementById('manual-public-repo');
+    if (manualRepo) manualRepo.value = '';
+    const repoSearch = document.getElementById('repo-search');
+    if (repoSearch) repoSearch.value = '';
     const wizAppName = document.getElementById('wiz-app-name');
     if (wizAppName) wizAppName.value = '';
     const wizAppRepo = document.getElementById('wiz-app-repo');
     if (wizAppRepo) wizAppRepo.value = '';
     const wizRegImg = document.getElementById('wiz-registry-image');
     if (wizRegImg) wizRegImg.value = '';
+
+    const wizBranch = document.getElementById('wiz-app-branch');
+    if (wizBranch) wizBranch.value = 'main';
+    const wizPort = document.getElementById('wiz-app-port');
+    if (wizPort) wizPort.value = '8080';
+    const wizBuildCmd = document.getElementById('wiz-build-cmd');
+    if (wizBuildCmd) wizBuildCmd.value = '';
+    const wizRunCmd = document.getElementById('wiz-run-cmd');
+    if (wizRunCmd) wizRunCmd.value = '';
+    const wizDfPath = document.getElementById('wiz-dockerfile-path');
+    if (wizDfPath) wizDfPath.value = '';
+    const wizEntry = document.getElementById('wiz-entrypoint');
+    if (wizEntry) wizEntry.value = '';
+    const wizCmd = document.getElementById('wiz-command');
+    if (wizCmd) wizCmd.value = '';
+    const wizTarget = document.getElementById('wiz-target');
+    if (wizTarget) wizTarget.value = '';
+    const wizWorkDir = document.getElementById('wiz-work-dir');
+    if (wizWorkDir) wizWorkDir.value = '';
+    const memInput = document.getElementById('wiz-app-memory');
+    if (memInput) memInput.value = '';
+    const cpuInput = document.getElementById('wiz-app-cpu');
+    if (cpuInput) cpuInput.value = '';
+
+    // CRITICAL: Reset dynamic ENV variables container so previous apps do not leak env vars
+    if (typeof resetWizEnvVarsContainer === 'function') {
+        resetWizEnvVarsContainer();
+    }
 
     const tunnelModeEl = document.getElementById('wiz-tunnel-mode');
     if (tunnelModeEl) {
@@ -238,14 +268,85 @@ async function loadWizServers() {
             serverSelect.innerHTML = optionsHtml;
             updateServerStatsAdvisor('wiz-app-server', 'wiz-server-advisor', 'wiz-app-memory', 'wiz-app-cpu');
             loadWizServerTunnels(serverSelect.value);
+            checkServerPortAvailability(serverSelect.value);
+
             serverSelect.onchange = () => {
                 updateServerStatsAdvisor('wiz-app-server', 'wiz-server-advisor', 'wiz-app-memory', 'wiz-app-cpu');
                 loadWizServerTunnels(serverSelect.value);
+                checkServerPortAvailability(serverSelect.value);
             };
+
+            const portInput = document.getElementById('wiz-app-port');
+            if (portInput) {
+                portInput.oninput = validateWizPort;
+            }
         }
         if (appServerSelect) appServerSelect.innerHTML = optionsHtml;
     } catch (e) {
         console.error("loadWizServers error:", e);
+    }
+}
+
+let wizOccupiedPorts = [];
+
+async function checkServerPortAvailability(serverId) {
+    if (!serverId) return;
+    const portInput = document.getElementById('wiz-app-port');
+    
+    try {
+        const res = await fetch(`/api/servers/${serverId}/used-ports`);
+        if (!res.ok) return;
+        const data = await res.json();
+        wizOccupiedPorts = data.ports || [];
+        
+        // Auto-suggest free port if current is generic 8080 or occupied
+        const currentPort = parseInt(portInput?.value) || 8080;
+        const isOccupied = wizOccupiedPorts.some(p => p.port === currentPort);
+        
+        if (portInput && (currentPort === 8080 || isOccupied)) {
+            if (data.suggested_port) {
+                portInput.value = data.suggested_port;
+            }
+        }
+        validateWizPort();
+    } catch (e) {
+        console.error("checkServerPortAvailability error:", e);
+    }
+}
+
+function validateWizPort() {
+    const portInput = document.getElementById('wiz-app-port');
+    let warningEl = document.getElementById('wiz-port-conflict-msg');
+    const submitBtn = document.getElementById('btn-wiz-submit-deploy');
+    if (!portInput) return;
+    
+    if (!warningEl) {
+        warningEl = document.createElement('div');
+        warningEl.id = 'wiz-port-conflict-msg';
+        warningEl.style.cssText = 'font-size: 0.8rem; margin-top: 5px; transition: all 0.2s;';
+        portInput.parentNode.appendChild(warningEl);
+    }
+    
+    const portVal = parseInt(portInput.value);
+    if (!portVal) {
+        warningEl.innerHTML = '';
+        if (submitBtn) submitBtn.disabled = false;
+        return;
+    }
+    
+    const conflict = wizOccupiedPorts.find(p => p.port === portVal);
+    if (conflict) {
+        warningEl.innerHTML = `<span style="color: #ff5252; font-weight: 500;">❌ XƏBƏRDARLIQ: ${portVal} portu bu serverdə artıq '<b>${conflict.name}</b>' konteyneri tərəfindən tutulub!</span>`;
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.title = 'Port toqquşması var. Boş bir port seçin.';
+        }
+    } else {
+        warningEl.innerHTML = `<span style="color: #00e676; font-size: 0.78rem;">✅ Port ${portVal} serverdə boşdur və təhlükəsizdir.</span>`;
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.title = '';
+        }
     }
 }
 

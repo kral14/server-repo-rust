@@ -15,6 +15,7 @@ pub fn servers_router() -> Router<AppState> {
         .route("/", get(list_servers).post(create_server))
         .route("/:server_id", get(get_server).put(update_server).delete(delete_server))
         .route("/:server_id/stats", get(get_server_stats))
+        .route("/:server_id/used-ports", get(get_server_used_ports))
         .route("/:server_id/setup", post(setup_server))
         .route("/:server_id/check", get(check_server_connection))
         .route("/:server_id/volumes", get(list_server_volumes))
@@ -1149,3 +1150,137 @@ pub async fn setup_server(
         Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to execute ssh: {}", e))),
     }
 }
+
+#[derive(serde::Serialize)]
+pub struct PortInfo {
+    pub port: u16,
+    pub name: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct UsedPortsResponse {
+    pub ports: Vec<PortInfo>,
+    pub suggested_port: u16,
+}
+
+pub async fn get_server_used_ports(
+    State(state): State<AppState>,
+    AxumPath(server_id): AxumPath<String>,
+) -> Result<Json<UsedPortsResponse>, (StatusCode, String)> {
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&server_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
+        .ok_or((StatusCode::NOT_FOUND, "Server tapılmadı".to_string()))?;
+
+    let temp_key_path = std::env::temp_dir().join(format!("temp_ports_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+    let key_content = if let Some(ref kid) = server.ssh_key_id {
+        let db_key: Option<(String,)> = sqlx::query_as("SELECT private_key FROM ssh_keys WHERE id = ?")
+            .bind(kid)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or_default();
+        db_key.map(|r| r.0).unwrap_or_else(|| server.ssh_key.clone())
+    } else {
+        server.ssh_key.clone()
+    };
+
+    let key_content = if key_content.contains("BEGIN ") {
+        key_content
+    } else {
+        std::fs::read_to_string(key_content.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+    };
+
+    let normalized_key = key_content.replace("\r\n", "\n").replace('\r', "\n").trim().to_string() + "\n";
+    let _ = std::fs::write(&temp_key_path, &normalized_key);
+
+    #[cfg(target_os = "windows")]
+    {
+        let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+        let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+        let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+    }
+
+    let cmd = "sudo docker ps --format '{{.Names}}\t{{.Ports}}' 2>/dev/null || docker ps --format '{{.Names}}\t{{.Ports}}'";
+
+    let output = if server.ip == "local" || server.ip == "127.0.0.1" {
+        tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd.replace("sudo ", ""))
+            .output()
+            .await
+    } else {
+        let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+        tokio::process::Command::new(ssh_bin)
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=/dev/null",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=5",
+                "-i", &temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                cmd,
+            ])
+            .output()
+            .await
+    };
+
+    let _ = std::fs::remove_file(&temp_key_path);
+
+    let mut ports: Vec<PortInfo> = Vec::new();
+    let mut occupied_set = std::collections::HashSet::new();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for line in text.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let parts: Vec<&str> = trimmed.split('\t').collect();
+                let container_name = parts[0].trim();
+                let ports_str = if parts.len() > 1 { parts[1] } else { "" };
+                
+                // Parse ports like 0.0.0.0:8081->8081/tcp
+                for segment in ports_str.split(',') {
+                    if let Some(arrow_idx) = segment.find("->") {
+                        let host_part = &segment[..arrow_idx];
+                        if let Some(colon_idx) = host_part.rfind(':') {
+                            let port_str = &host_part[colon_idx + 1..].trim();
+                            if let Ok(port_num) = port_str.parse::<u16>() {
+                                if !occupied_set.contains(&port_num) {
+                                    occupied_set.insert(port_num);
+                                    ports.push(PortInfo {
+                                        port: port_num,
+                                        name: container_name.to_string(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Determine suggested free port starting from 8080
+    let mut candidate: u16 = 8080;
+    while candidate < 9999 {
+        if !occupied_set.contains(&candidate) {
+            break;
+        }
+        candidate += 1;
+    }
+
+    Ok(Json(UsedPortsResponse {
+        ports,
+        suggested_port: candidate,
+    }))
+}
+

@@ -1129,6 +1129,12 @@ function closeModal(id) {
         }
     }
 
+    if (id === 'create-service-modal') {
+        if (typeof resetWizEnvVarsContainer === 'function') {
+            resetWizEnvVarsContainer();
+        }
+    }
+
     // Əgər tab pəncərəsidirsə, uyğun chip-in aktivliyini sil
     if (id.startsWith('win-')) {
         const tabId = id.replace('win-', '');

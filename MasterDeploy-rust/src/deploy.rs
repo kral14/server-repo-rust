@@ -159,35 +159,29 @@ pub async fn trigger_deployment_impl(
 
         let port_check_cmd = if server.ip == "local" || server.ip == "127.0.0.1" {
             format!(
-                "other_container=$(docker ps --filter \"publish={}\" --format \"{{{{.Names}}}}\" | grep -v \"^{}$\"); \
+                "other_container=$(docker ps --format '{{{{.Names}}}}\t{{{{.Ports}}}}' | grep -E \":{}\\->\" | awk '{{print $1}}' | grep -v \"^{}$\"); \
                  if [ ! -z \"$other_container\" ]; then \
-                     echo \"===PORT_CONFLICT===\"; \
-                 elif ! docker ps --filter \"name={}\" --format \"{{{{.Names}}}}\" | grep -q \"^{}$\"; then \
-                     if docker run --rm -p {}:{} alpine:3.18 true 2>&1 | grep -q \"port is already allocated\"; then \
-                         echo \"===PORT_CONFLICT===\"; \
-                     else \
-                         echo \"===PORT_OK===\"; \
-                     fi; \
+                     echo \"===PORT_CONFLICT:$other_container===\"; \
+                 elif docker run --rm -p {}:{} alpine:3.18 true 2>&1 | grep -q \"port is already allocated\"; then \
+                     echo \"===PORT_CONFLICT:unknown===\"; \
                  else \
                      echo \"===PORT_OK===\"; \
                  fi",
-                app.port, app.name, app.name, app.name, app.port, app.port
+                app.port, app.name, app.port, app.port
             )
         } else {
             format!(
-                "conflict_container=$(sudo docker ps --filter \"publish={}\" --format \"{{{{.Names}}}}\" | grep -v \"^{}$\"); \
+                "conflict_container=$(sudo docker ps --format '{{{{.Names}}}}\t{{{{.Ports}}}}' | grep -E \":{}\\->\" | awk '{{print $1}}' | grep -v \"^{}$\"); \
                  if [ ! -z \"$conflict_container\" ]; then \
-                     echo \"===PORT_CONFLICT===\"; \
-                 elif sudo docker ps --filter \"name={}\" --format \"{{{{.Names}}}}\" | grep -q \"^{}$\"; then \
-                     echo \"===PORT_OK===\"; \
-                 elif sudo ss -tulpn | grep -q \":{} \"; then \
-                     echo \"===PORT_CONFLICT===\"; \
+                     echo \"===PORT_CONFLICT:$conflict_container===\"; \
+                 elif sudo ss -tulpn | grep -E \":{}\\b\" | grep -v \"docker-proxy\" | grep -q \":{}\"; then \
+                     echo \"===PORT_CONFLICT_SYSTEM===\"; \
                  elif sudo ufw status 2>/dev/null | grep -q \"Status: active\" && ! sudo ufw status | grep -q \"{}/tcp\"; then \
                      echo \"===FIREWALL_BLOCKED===\"; \
                  else \
                      echo \"===PORT_OK===\"; \
                  fi",
-                app.port, app.name, app.name, app.name, app.port, app.port
+                app.port, app.name, app.port, app.port, app.port
             )
         };
 
@@ -198,8 +192,31 @@ pub async fn trigger_deployment_impl(
         let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), port_check_cmd, db_clone.clone(), deploy_id.clone(), check_logs.clone()).await;
         
         let check_output = check_logs.lock().await;
-        if check_output.contains("===PORT_CONFLICT===") {
-            err_msg = format!("[ERROR] Port {} artıq başqa bir xidmət tərəfindən istifadə olunur! Başqa port seçin.\n", app.port);
+        if check_output.contains("===PORT_CONFLICT:") {
+            let conflict_name = check_output
+                .split("===PORT_CONFLICT:")
+                .nth(1)
+                .and_then(|s| s.split("===").next())
+                .unwrap_or("başqa konteyner")
+                .trim();
+            err_msg = format!(
+                "\n============================================================\n\
+                 ❌ [PORT TOQQUŞMASI / PORT CONFLICT]\n\
+                 Serverdə ({}) {} portu artıq '{}' adlı konteyner tərəfindən istifadə olunur!\n\
+                 Eyni serverdə eyni port üzərində iki fərqli layihə işləyə bilməz.\n\
+                 💡 Zəhmət olmasa layihə sazlamalarından (Settings) PORT dəyərini boş bir porta dəyişin (Məs: 8083, 8084 və s.)\n\
+                 ============================================================\n\n",
+                server.ip, app.port, conflict_name
+            );
+        } else if check_output.contains("===PORT_CONFLICT_SYSTEM===") {
+            err_msg = format!(
+                "\n============================================================\n\
+                 ❌ [PORT TOQQUŞMASI / PORT CONFLICT]\n\
+                 Serverdə ({}) {} portu artıq daxili sistem xidməti tərəfindən dinlənilir!\n\
+                 💡 Zəhmət olmasa layihə sazlamalarından (Settings) PORT dəyərini başqa bir porta dəyişin.\n\
+                 ============================================================\n\n",
+                server.ip, app.port
+            );
         } else if check_output.contains("===FIREWALL_BLOCKED===") {
             err_msg = format!("[ERROR] Port {} uzaq server firewall-u (UFW) tərəfindən bloklanıb! Zəhmət olmasa portu açın.\n", app.port);
         } else {
