@@ -46,15 +46,38 @@
                             <span id="btn-app-check-deploy-text">İndi Yoxla</span>
                         </button>
 
-                        <button id="btn-app-cache-deploy" class="hbtn hbtn-cache" onclick="cacheDeployApp()" title="Cache ilə sürətli deploy">
-                            <i data-lucide="zap" style="width:14px;height:14px;"></i>
-                            Cache Deploy
-                        </button>
-
-                        <button id="btn-app-redeploy" class="hbtn hbtn-deploy" onclick="redeployApp()" title="Yeni versiya kimi yayımlayır">
-                            <i data-lucide="send" style="width:14px;height:14px;"></i>
-                            Redeploy
-                        </button>
+                        <!-- Build / Yayım Dropdown -->
+                        <div style="position: relative; display: inline-block;">
+                            <button id="btn-app-redeploy" class="hbtn hbtn-deploy" onclick="toggleBuildMenu(event)" title="Yayım menyusu (Keşli və ya Keşsiz yığım)">
+                                <i data-lucide="hammer" style="width:14px;height:14px;"></i>
+                                <span id="btn-app-build-text">Build</span>
+                                <i data-lucide="chevron-down" style="width:12px;height:12px;margin-left:2px;"></i>
+                            </button>
+                            <div id="app-build-dropdown" class="actions-menu" style="min-width: 250px; right: 0;">
+                                <button class="actions-menu-item" onclick="redeployApp(); closeBuildMenu()" title="Docker keşini sıfırlayır, hər şeyi sıfırdan təmiz yığır (--no-cache)">
+                                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                                        <div style="width: 28px; height: 28px; border-radius: 6px; background: rgba(0, 210, 255, 0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                            <i data-lucide="send" style="width:14px;height:14px; color: #00d2ff;"></i>
+                                        </div>
+                                        <div style="display: flex; flex-direction: column; text-align: left;">
+                                            <span style="font-weight: 600; color: #fff; font-size: 0.82rem;">Redeploy (No Cache)</span>
+                                            <span style="font-size: 0.7rem; color: #94a3b8;">Keşsiz tam təmiz yığım</span>
+                                        </div>
+                                    </div>
+                                </button>
+                                <button class="actions-menu-item" onclick="cacheDeployApp(); closeBuildMenu()" title="Mövcud Docker keşindən istifadə edərək tez yayımlayır">
+                                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                                        <div style="width: 28px; height: 28px; border-radius: 6px; background: rgba(251, 191, 36, 0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                            <i data-lucide="zap" style="width:14px;height:14px; color: #fbbf24;"></i>
+                                        </div>
+                                        <div style="display: flex; flex-direction: column; text-align: left;">
+                                            <span style="font-weight: 600; color: #fbbf24; font-size: 0.82rem;">Cache Deploy</span>
+                                            <span style="font-size: 0.7rem; color: #94a3b8;">Docker keşi ilə sürətli yığım</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
 
                         <!-- More dropdown -->
                         <div style="position: relative; display: inline-block;">

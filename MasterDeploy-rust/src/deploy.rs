@@ -343,7 +343,11 @@ pub async fn trigger_deployment_impl(
 
             {
                 let mut lock = logs.lock().await;
-                lock.push_str("[3/5] Docker image build prosesi başladılır...\n");
+                if no_cache {
+                    lock.push_str("[3/5] Docker image build prosesi başladılır (Rebuild: Keşsiz / No-Cache tam təmiz yığım)...\n");
+                } else {
+                    lock.push_str("[3/5] Docker image build prosesi başladılır (Sürətli: Docker keşi istifadə olunur)...\n");
+                }
                 update_logs_helper(&db_clone, &deploy_id, &lock).await;
             }
 

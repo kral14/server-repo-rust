@@ -1495,36 +1495,207 @@ async function toggleProjectTunnelWatchdog(appId, checkbox) {
     }
 }
 
+let _bgAllLogs = [];
+let _bgSelectedDate = 'all';
+
 async function loadBackgroundActivityLogs() {
     const container = document.getElementById('bg-activity-logs-container');
     if (!container) return;
 
     try {
-        const res = await fetch('/api/activity-logs');
+        await loadBgActivityDates();
+
+        const url = _bgSelectedDate && _bgSelectedDate !== 'all'
+            ? `/api/activity-logs?date=${encodeURIComponent(_bgSelectedDate)}&limit=2000`
+            : `/api/activity-logs?limit=2000`;
+
+        const res = await fetch(url);
         if (!res.ok) return;
-        const logs = await res.json();
+        _bgAllLogs = await res.json();
 
-        if (logs.length === 0) {
-            container.innerHTML = `<div style="color: var(--text-secondary);">Hələ heç bir fəaliyyət loqu qeydə alınmayıb.</div>`;
-            return;
-        }
-
-        container.innerHTML = logs.slice(0, 40).map(log => {
-            let color = '#38bdf8';
-            if (log.log_type === 'warning') color = '#f59e0b';
-            if (log.log_type === 'error') color = '#ef4444';
-            if (log.log_type === 'success') color = '#34d399';
-
-            return `
-                <div style="display: flex; gap: 8px; align-items: baseline; line-height: 1.4;">
-                    <span style="color: #64748b; font-size: 0.72rem; flex-shrink: 0;">[${log.created_at || 'indi'}]</span>
-                    <span style="color: ${color}; font-weight: 600; flex-shrink: 0;">[${(log.module || 'SİSTEM').toUpperCase()}]:</span>
-                    <span style="color: #e2e8f0;">${log.message}</span>
-                </div>
-            `;
-        }).join('');
+        filterAndRenderBgLogs();
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     } catch (e) {
-        container.innerHTML = `<div style="color: #ef4444;">Loqları oxumaq mümkün olmadı: ${e.message}</div>`;
+        container.innerHTML = `<div style="color: #ef4444; padding: 10px;">Loqları oxumaq mümkün olmadı: ${e.message}</div>`;
+    }
+}
+
+async function loadBgActivityDates() {
+    const dateSel = document.getElementById('bg-activity-date-filter');
+    if (!dateSel) return;
+
+    try {
+        const res = await fetch('/api/activity-logs/dates');
+        if (!res.ok) return;
+        const dates = await res.json();
+
+        const currentVal = _bgSelectedDate || 'all';
+        let optionsHtml = '<option value="all">📅 Bütün Günlər (Son 1 Ay)</option>';
+
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+        const yest = new Date(now);
+        yest.setDate(yest.getDate() - 1);
+        const yestStr = `${yest.getFullYear()}-${String(yest.getMonth()+1).padStart(2,'0')}-${String(yest.getDate()).padStart(2,'0')}`;
+
+        dates.forEach(d => {
+            let label = d;
+            if (d === todayStr) label = `${d} (Bugün)`;
+            else if (d === yestStr) label = `${d} (Dünən)`;
+            optionsHtml += `<option value="${d}">${label}</option>`;
+        });
+
+        dateSel.innerHTML = optionsHtml;
+        dateSel.value = currentVal;
+    } catch (e) {
+        console.error("loadBgActivityDates xətası:", e);
+    }
+}
+
+function onBgActivityDateChange(val) {
+    _bgSelectedDate = val;
+    loadBackgroundActivityLogs();
+}
+
+function filterAndRenderBgLogs() {
+    const container = document.getElementById('bg-activity-logs-container');
+    const countBadge = document.getElementById('bg-activity-log-count');
+    const typeFilter = document.getElementById('bg-activity-type-filter')?.value || 'all';
+
+    if (!container) return;
+
+    let filtered = _bgAllLogs;
+    if (typeFilter !== 'all') {
+        filtered = filtered.filter(l => {
+            const t = (l.log_type || '').toLowerCase();
+            if (typeFilter === 'error') return t === 'error';
+            if (typeFilter === 'warning') return t === 'warning';
+            if (typeFilter === 'success') return t === 'success';
+            if (typeFilter === 'deploy') return t === 'deploy';
+            if (typeFilter === 'info') return t === 'info';
+            return true;
+        });
+    }
+
+    if (countBadge) countBadge.textContent = filtered.length;
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<div style="color: var(--text-secondary); padding: 14px; text-align: center;">Seçilmiş meyarlara uyğun heç bir fəaliyyət loqu tapılmadı.</div>`;
+        return;
+    }
+
+    container.innerHTML = filtered.map(log => {
+        let color = '#38bdf8';
+        if (log.log_type === 'warning') color = '#f59e0b';
+        if (log.log_type === 'error') color = '#ef4444';
+        if (log.log_type === 'success') color = '#34d399';
+        if (log.log_type === 'deploy') color = '#a855f7';
+
+        return `
+            <div style="display: flex; gap: 8px; align-items: baseline; line-height: 1.45; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.025);">
+                <span style="color: #64748b; font-size: 0.72rem; flex-shrink: 0; font-family: monospace;">[${log.created_at || 'indi'}]</span>
+                <span style="color: ${color}; font-weight: 600; flex-shrink: 0; font-size: 0.74rem;">[${(log.module || 'SİSTEM').toUpperCase()}]:</span>
+                <span style="color: #e2e8f0; word-break: break-word;">${escapeHtml(log.message)}</span>
+            </div>
+        `;
+    }).join('');
+}
+
+function copyBackgroundActivityLogs(btn) {
+    if (!_bgAllLogs || _bgAllLogs.length === 0) {
+        alert("Kopyalanacaq loq yoxdur.");
+        return;
+    }
+
+    const typeFilter = document.getElementById('bg-activity-type-filter')?.value || 'all';
+    let toCopy = _bgAllLogs;
+    if (typeFilter !== 'all') {
+        toCopy = toCopy.filter(l => (l.log_type || '').toLowerCase() === typeFilter);
+    }
+
+    const textLines = toCopy.map(l => `[${l.created_at}] [${(l.module || 'SYSTEM').toUpperCase()}] [${(l.log_type || 'INFO').toUpperCase()}]: ${l.message}`).join('\n');
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(textLines).then(() => {
+            showBgCopySuccess();
+        }).catch(() => fallbackBgCopyText(textLines));
+    } else {
+        fallbackBgCopyText(textLines);
+    }
+}
+
+function fallbackBgCopyText(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+        document.execCommand('copy');
+        showBgCopySuccess();
+    } catch (e) {
+        alert('Kopyalamaq mümkün olmadı');
+    }
+    document.body.removeChild(ta);
+}
+
+function showBgCopySuccess() {
+    const txt = document.getElementById('btn-bg-copy-logs-txt');
+    if (txt) {
+        const old = txt.textContent;
+        txt.textContent = '✓ Kopyalandı!';
+        setTimeout(() => { txt.textContent = old; }, 1800);
+    }
+}
+
+function downloadBackgroundActivityLogs() {
+    if (!_bgAllLogs || _bgAllLogs.length === 0) {
+        alert("Yükləmək üçün loq tapılmadı.");
+        return;
+    }
+
+    const dateName = _bgSelectedDate && _bgSelectedDate !== 'all' ? _bgSelectedDate : 'son_30_gun';
+    const filename = `masterdeploy_activity_logs_${dateName}.log`;
+
+    const textLines = _bgAllLogs.map(l => `[${l.created_at}] [${(l.module || 'SYSTEM').toUpperCase()}] [${(l.log_type || 'INFO').toUpperCase()}]: ${l.message}`).join('\n');
+
+    const blob = new Blob([textLines], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+async function deleteBackgroundActivityLogsPrompt() {
+    const isDateFiltered = _bgSelectedDate && _bgSelectedDate !== 'all';
+    let deleteUrl = '/api/activity-logs';
+
+    if (isDateFiltered) {
+        const choice = confirm(`🗑️ LOQLARI SİLMƏK:\n\n'OK' (Bəli) — Yalnız seçilmiş günün (${_bgSelectedDate}) loqlarını sil.\n'Cancel' (İmtina) — Əməliyyatı ləğv et.\n\n(Bütün 30 günlük loqları silmək üçün Tarix filtrini 'Bütün Günlər' rejiminə keçirin).`);
+        if (!choice) return;
+        deleteUrl = `/api/activity-logs?date=${encodeURIComponent(_bgSelectedDate)}`;
+    } else {
+        const choice = confirm(`⚠️ DİQQƏT: Bütün 1 aylıq fəaliyyət loqlarını TAMAMİLƏ silmək istədiyinizdən əminsiniz?\n\nBu əməliyyat geri qaytarıla bilməz!`);
+        if (!choice) return;
+    }
+
+    try {
+        const res = await fetch(deleteUrl, { method: 'DELETE' });
+        if (res.ok) {
+            alert(isDateFiltered ? `✅ '${_bgSelectedDate}' tarixinə aid loqlar təmizləndi.` : `✅ Bütün fəaliyyət loqları təmizləndi.`);
+            if (isDateFiltered) _bgSelectedDate = 'all';
+            loadBackgroundActivityLogs();
+        } else {
+            const err = await res.text();
+            alert('❌ Xəta: ' + err);
+        }
+    } catch (e) {
+        alert('❌ Serverlə əlaqə xətası: ' + e.message);
     }
 }
 function refreshActiveBgTab() {

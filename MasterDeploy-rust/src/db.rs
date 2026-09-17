@@ -133,6 +133,7 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     ).execute(&pool).await;
 
     let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_postgres_db_server ON postgres_databases(server_id)").execute(&pool).await;
+    let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC)").execute(&pool).await;
 
     // Avtomatik sinxronizasiya: cloudflare_url olan amma tunnel_id olmayan tətbiqləri tünellər cədvəlinə daxil edirik
     if let Ok(unlinked_apps) = sqlx::query_as::<_, (String, String, String, i64, String)>(

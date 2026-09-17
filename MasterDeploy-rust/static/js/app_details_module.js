@@ -522,7 +522,22 @@ function deleteAppFromDetails() {
 }
 
 // ── Actions dropdown (More menu) ──────────────────────
+function toggleBuildMenu(event) {
+    if (event) event.stopPropagation();
+    closeActionsMenu();
+    const menu = document.getElementById('app-build-dropdown');
+    if (menu) {
+        menu.classList.toggle('open');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+}
+function closeBuildMenu() {
+    const menu = document.getElementById('app-build-dropdown');
+    if (menu) menu.classList.remove('open');
+}
+
 function toggleActionsMenu() {
+    closeBuildMenu();
     const menu = document.getElementById('app-actions-dropdown');
     if (menu) menu.classList.toggle('open');
 }
@@ -530,12 +545,18 @@ function closeActionsMenu() {
     const menu = document.getElementById('app-actions-dropdown');
     if (menu) menu.classList.remove('open');
 }
-// Close dropdown if user clicks outside of it
+// Close dropdowns if user clicks outside
 document.addEventListener('click', function(e) {
-    const btn  = document.getElementById('btn-more-actions');
-    const menu = document.getElementById('app-actions-dropdown');
-    if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
-        menu.classList.remove('open');
+    const moreBtn  = document.getElementById('btn-more-actions');
+    const moreMenu = document.getElementById('app-actions-dropdown');
+    if (moreMenu && moreBtn && !moreBtn.contains(e.target) && !moreMenu.contains(e.target)) {
+        moreMenu.classList.remove('open');
+    }
+
+    const buildBtn  = document.getElementById('btn-app-redeploy');
+    const buildMenu = document.getElementById('app-build-dropdown');
+    if (buildMenu && buildBtn && !buildBtn.contains(e.target) && !buildMenu.contains(e.target)) {
+        buildMenu.classList.remove('open');
     }
 });
 

@@ -1,5 +1,5 @@
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     Json, Router,
     routing::{get, post},
@@ -32,6 +32,7 @@ pub fn settings_router() -> Router<AppState> {
 pub fn activity_logs_router() -> Router<AppState> {
     Router::new()
         .route("/", get(list_activity_logs).post(create_activity_log).delete(clear_activity_logs))
+        .route("/dates", get(list_activity_log_dates))
 }
 
 #[derive(serde::Deserialize)]
@@ -334,12 +335,70 @@ pub async fn trigger_tunnel_check_now(
 }
 
 
-pub async fn list_activity_logs(State(state): State<AppState>) -> Result<Json<Vec<ActivityLog>>, (StatusCode, String)> {
-    let logs = sqlx::query_as::<_, ActivityLog>("SELECT id, message, log_type, module, operator_name, target_id, ip_address, CAST(created_at AS TEXT) as created_at FROM activity_logs ORDER BY created_at DESC LIMIT 250")
+#[derive(serde::Deserialize, Default)]
+pub struct ListActivityLogsQuery {
+    pub limit: Option<i64>,
+    pub date: Option<String>,
+}
+
+#[derive(serde::Deserialize, Default)]
+pub struct DeleteActivityLogsQuery {
+    pub date: Option<String>,
+}
+
+pub async fn list_activity_logs(
+    State(state): State<AppState>,
+    Query(query): Query<ListActivityLogsQuery>,
+) -> Result<Json<Vec<ActivityLog>>, (StatusCode, String)> {
+    let limit = query.limit.unwrap_or(1000);
+    let logs = if let Some(ref d) = query.date {
+        let clean_date = d.trim();
+        if clean_date.is_empty() || clean_date == "all" {
+            sqlx::query_as::<_, ActivityLog>(
+                "SELECT id, message, log_type, module, operator_name, target_id, ip_address, CAST(created_at AS TEXT) as created_at \
+                 FROM activity_logs ORDER BY created_at DESC LIMIT ?"
+            )
+            .bind(limit)
+            .fetch_all(&state.db)
+            .await
+        } else {
+            sqlx::query_as::<_, ActivityLog>(
+                "SELECT id, message, log_type, module, operator_name, target_id, ip_address, CAST(created_at AS TEXT) as created_at \
+                 FROM activity_logs WHERE date(created_at) = date(?) ORDER BY created_at DESC LIMIT ?"
+            )
+            .bind(clean_date)
+            .bind(limit)
+            .fetch_all(&state.db)
+            .await
+        }
+    } else {
+        sqlx::query_as::<_, ActivityLog>(
+            "SELECT id, message, log_type, module, operator_name, target_id, ip_address, CAST(created_at AS TEXT) as created_at \
+             FROM activity_logs ORDER BY created_at DESC LIMIT ?"
+        )
+        .bind(limit)
         .fetch_all(&state.db)
         .await
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    }
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
     Ok(Json(logs))
+}
+
+pub async fn list_activity_log_dates(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<String>>, (StatusCode, String)> {
+    let rows: Vec<(String,)> = sqlx::query_as(
+        "SELECT DISTINCT date(created_at) as log_date FROM activity_logs \
+         WHERE created_at IS NOT NULL \
+         ORDER BY log_date DESC LIMIT 60"
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default();
+
+    let dates = rows.into_iter().map(|r| r.0).collect();
+    Ok(Json(dates))
 }
 
 pub async fn create_activity_log(
@@ -358,7 +417,21 @@ pub async fn create_activity_log(
     Ok(Json(true))
 }
 
-pub async fn clear_activity_logs(State(state): State<AppState>) -> Result<Json<bool>, (StatusCode, String)> {
+pub async fn clear_activity_logs(
+    State(state): State<AppState>,
+    Query(query): Query<DeleteActivityLogsQuery>,
+) -> Result<Json<bool>, (StatusCode, String)> {
+    if let Some(ref d) = query.date {
+        let clean_date = d.trim();
+        if !clean_date.is_empty() && clean_date != "all" {
+            sqlx::query("DELETE FROM activity_logs WHERE date(created_at) = date(?)")
+                .bind(clean_date)
+                .execute(&state.db)
+                .await
+                .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+            return Ok(Json(true));
+        }
+    }
     sqlx::query("DELETE FROM activity_logs")
         .execute(&state.db)
         .await

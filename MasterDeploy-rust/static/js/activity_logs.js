@@ -206,8 +206,8 @@ function toggleActivityAutoScroll() {
 async function fetchAndRenderActivityLogs() {
     if (activityLogsState.isFetching) return;
     activityLogsState.isFetching = true;
-    try {
-        const res = await fetch('/api/activity-logs');
+        const dateParam = activityLogsState.dateFilter && activityLogsState.dateFilter !== 'all' ? `&date=${encodeURIComponent(activityLogsState.dateFilter)}` : '';
+        const res = await fetch(`/api/activity-logs?limit=2000${dateParam}`);
         if (res.ok) {
             const logs = await res.json();
             const hash = JSON.stringify(logs.slice(0, 5));
@@ -495,14 +495,26 @@ function copyLogDetailText() {
 }
 
 async function clearActivityLogs() {
+    const isDateFiltered = activityLogsState.dateFilter && activityLogsState.dateFilter !== 'all';
+    let deleteUrl = '/api/activity-logs';
+
+    if (isDateFiltered) {
+        const choice = confirm(`Yalnız seçilmiş günün (${activityLogsState.dateFilter}) loqlarını silmək istəyirsiniz?\n\n'OK' - Yalnız bu günü sil\n'Cancel' - İmtina et`);
+        if (!choice) return;
+        deleteUrl = `/api/activity-logs?date=${encodeURIComponent(activityLogsState.dateFilter)}`;
+    } else {
+        const choice = confirm("Bütün 1 aylıq fəaliyyət loqlarını silmək istədiyinizdən əminsiniz?\n\nBu əməliyyat geri qaytarıla bilməz!");
+        if (!choice) return;
+    }
+
     try {
-        const res = await fetch('/api/activity-logs', { method: 'DELETE' });
+        const res = await fetch(deleteUrl, { method: 'DELETE' });
         if (res.ok) {
             activityLogsState.allLogs = [];
             activityLogsState.filteredLogs = [];
             activityLogsState.lastHash = '';
             fetchAndRenderActivityLogs();
-            showInfoCard('Təmizləndi', '', 'Fəaliyyət jurnalı uğurla təmizləndi.');
+            showInfoCard('Təmizləndi', '', isDateFiltered ? `Günün (${activityLogsState.dateFilter}) loqları təmizləndi.` : 'Fəaliyyət jurnalı uğurla təmizləndi.');
         }
     } catch (e) {
         console.error("Failed to clear activity logs", e);

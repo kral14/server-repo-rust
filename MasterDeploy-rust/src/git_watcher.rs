@@ -20,6 +20,10 @@ pub async fn git_polling_loop(db: SqlitePool) {
             let days: i32 = autoclean_days_str.parse().unwrap_or(30);
             let query_str = format!("DELETE FROM deployments WHERE created_at < datetime('now', '-{} days')", days);
             let _ = sqlx::query(&query_str).execute(&db).await;
+
+            // 1 ay saxlama qaydası: 30 gündən köhnə fəaliyyət loqlarını avtomatik təmizləyirik
+            let act_query = format!("DELETE FROM activity_logs WHERE created_at < datetime('now', '-{} days')", days);
+            let _ = sqlx::query(&act_query).execute(&db).await;
         }
 
         // 2. Ağıllı Cloudflare Tunel İzləyicisi (Tunnel Watchdog)
@@ -297,9 +301,11 @@ pub async fn git_polling_loop(db: SqlitePool) {
                                             add_activity_log_pro(&db, &format!("[Auto-Deploy Xətası] '{}' layihəsinin avtomatik yenilənməsi başlaya bilmədi: {}", app.name, e), "error", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
                                         }
                                     }
-                                    _ => {
-                                        add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
-                                    }
+                                     _ => {
+                                         if _loop_tick % 120 == 0 {
+                                             add_activity_log_pro(&db, &format!("[Auto-Deploy] '{}' yoxlanıldı. Yenilik yoxdur.", app.name), "info", Some("Auto-Deploy"), Some("system"), Some(&app.id), None).await;
+                                         }
+                                     }
                                 }
                             }
                         } else {

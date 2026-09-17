@@ -18,54 +18,24 @@ import re
 import json
 from datetime import datetime
 
-def bump_cargo_version():
+def get_current_cargo_version():
     cargo_path = os.path.join(ROOT_DIR, "MasterDeploy-rust", "Cargo.toml")
     if not os.path.exists(cargo_path):
-        return None
-    with open(cargo_path, 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    match = re.search(r'version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', content)
-    if match:
-        major, minor, patch = int(match.group(1)), int(match.group(2)), int(match.group(3))
-        new_patch = patch + 1
-        new_version = f'{major}.{minor}.{new_patch}'
-        new_content = content.replace(match.group(0), f'version = "{new_version}"')
-        
-        with open(cargo_path, 'w', encoding='utf-8') as f:
-            f.write(new_content)
-        print(f"BUMPED CARGO VERSION TO: v{new_version}")
-
-        # changelog.json yeniləmək
-        changelog_path = os.path.join(ROOT_DIR, "MasterDeploy-rust", "static", "changelog.json")
-        if os.path.exists(changelog_path):
-            try:
-                with open(changelog_path, 'r', encoding='utf-8') as f:
-                    logs = json.load(f)
-                
-                # Əgər bu versiya artıq yoxdursa əlavə et
-                v_str = f"v{new_version}"
-                if not any(x.get('version') == v_str for x in logs):
-                    new_log = {
-                        "version": v_str,
-                        "date": datetime.now().strftime("%d.%m.%Y %H:%M"),
-                        "changes": ["Avtomatik yenilənmə və təhlükəsizlik təkmilləşdirmələri."]
-                    }
-                    logs.insert(0, new_log)
-                    with open(changelog_path, 'w', encoding='utf-8') as f:
-                        json.dump(logs, f, indent=2, ensure_ascii=False)
-                    print(f"Added {v_str} to changelog.json")
-            except Exception as e:
-                print(f"Warning: Failed to update changelog.json: {e}")
-
-        return new_version
-    return None
+        return "latest"
+    try:
+        with open(cargo_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        match = re.search(r'version\s*=\s*"(\d+\.\d+\.\d+)"', content)
+        if match:
+            return f"v{match.group(1)}"
+    except Exception:
+        pass
+    return "latest"
 
 def main():
-    print("Preparing to push to server-repo-rust...\n")
-    
-    # Hər push-da versiya avtomatik artır ki, Docker-də yeni tag yaransın
-    new_version = bump_cargo_version()
+    curr_version = get_current_cargo_version()
+    print(f"Preparing to push to server-repo-rust (Cari versiya: {curr_version})...\n")
+    print("[Məlumat] Git push zamanı versiya artırılmır. Versiya artımı yalnız 'build & push' zamanı icra olunur.\n")
     
     # 1. Bütün alt .git qovluqlarını silək (submodule xətasının qarşısını almaq üçün)
     for root, dirs, files in os.walk(ROOT_DIR):
