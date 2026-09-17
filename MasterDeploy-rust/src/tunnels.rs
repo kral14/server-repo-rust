@@ -569,7 +569,7 @@ async fn list_app_tunnel_history(
     State(state): State<AppState>,
     AxumPath(app_id): AxumPath<String>,
 ) -> Result<Json<Vec<crate::models::TunnelLinkHistory>>, (StatusCode, String)> {
-    let history = sqlx::query_as::<_, crate::models::TunnelLinkHistory>(
+    let mut history = sqlx::query_as::<_, crate::models::TunnelLinkHistory>(
         "SELECT id, app_id, app_name, tunnel_id, link_type, previous_url, new_url, status, \
          CAST(assigned_at AS TEXT) as assigned_at, CAST(expired_at AS TEXT) as expired_at \
          FROM tunnel_link_history WHERE app_id = ? ORDER BY assigned_at DESC LIMIT 50"
@@ -578,6 +578,26 @@ async fn list_app_tunnel_history(
     .fetch_all(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Real-vaxt yoxlanışı: Əgər tarixçədə 'active' görünən link internetdə ölübsə, dərhal 'expired' edirik
+    if let Ok(client) = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(3))
+        .danger_accept_invalid_certs(true)
+        .build() 
+    {
+        for item in &mut history {
+            if item.status == "active" {
+                let is_alive = crate::plugins::cloudflare::check_tunnel_url_alive(&client, &item.new_url).await;
+                if !is_alive {
+                    item.status = "expired".to_string();
+                    let _ = sqlx::query("UPDATE tunnel_link_history SET status = 'expired', expired_at = CURRENT_TIMESTAMP WHERE id = ?")
+                        .bind(&item.id)
+                        .execute(&state.db)
+                        .await;
+                }
+            }
+        }
+    }
 
     Ok(Json(history))
 }

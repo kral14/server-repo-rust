@@ -1586,26 +1586,73 @@ pub async fn start_backup_tunnel_for_app_internal(db: &sqlx::SqlitePool, app_id:
 }
 
 pub async fn check_tunnel_url_alive(client: &reqwest::Client, url: &str) -> bool {
-    if url.trim().is_empty() {
+    let clean_url = url.trim();
+    if clean_url.is_empty() {
         return false;
     }
-    match client.get(url).send().await {
+    match client.get(clean_url).send().await {
         Ok(res) => {
             let code = res.status().as_u16();
-            // Error 1016, 530, 502, 504 Cloudflare DNS/tunnel ölümüdür
-            if code == 530 || code == 502 || code == 504 {
+            // 2xx, 3xx, 4xx (401, 403, 404 tətbiqin öz cavabıdır, tünel salamatdır)
+            // 5xx (500, 502, 503, 504, 520..530) Cloudflare Argo/Tunnel xətası və server ölümüdür
+            if code >= 500 {
                 false
             } else {
                 true
             }
         }
-        Err(e) => {
-            if e.is_connect() || e.is_timeout() || e.to_string().contains("dns") {
-                false
-            } else {
-                true
-            }
+        Err(_) => false, // Hər hansı DNS, Timeout, Connection Refused xətası baş veribsə link 100% ÖLÜBDÜR
+    }
+}
+
+pub async fn execute_node_cmd(server: &Server, cmd: &str) -> Result<std::process::Output, String> {
+    let is_local = server.ip == "local" || server.ip == "127.0.0.1";
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+
+    if is_local {
+        tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .output()
+            .await
+            .map_err(|e| format!("Local cmd error: {}", e))
+    } else {
+        let temp_key_path = std::env::temp_dir().join(format!("temp_node_cmd_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+        let key_content = if server.ssh_key.contains("BEGIN ") {
+            server.ssh_key.clone()
+        } else {
+            std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        };
+
+        std::fs::write(&temp_key_path, &key_content)
+            .map_err(|e| format!("Key write error: {}", e))?;
+
+        #[cfg(target_os = "windows")]
+        {
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
         }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+        }
+
+        let run_cmd = tokio::process::Command::new(ssh_bin)
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=8",
+                "-i", &temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                cmd
+            ])
+            .output()
+            .await;
+
+        let _ = std::fs::remove_file(&temp_key_path);
+        run_cmd.map_err(|e| format!("SSH node cmd error: {}", e))
     }
 }
 
@@ -1647,6 +1694,22 @@ pub async fn verify_and_heal_dual_tunnel(db: &sqlx::SqlitePool, app: &Applicatio
             let promoted_url = backup_url.to_string();
             println!("[TUNNEL WATCHDOG] ⚡ [ANİ FAILOVER] Ehtiyat link ({}) anında Əsas linkə çevrilir!", promoted_url);
 
+            // 1. İşləyən ehtiyat konteyneri Əsas tünel konteynerinə çeviririk (rename)
+            // Beləliklə canlı əlaqə heç 1 millisaniyə belə kəsilmir!
+            if let Ok(Some(server)) = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+                .bind(&app.server_id)
+                .fetch_optional(db)
+                .await
+            {
+                let rename_cmd = if server.ip == "local" || server.ip == "127.0.0.1" {
+                    format!("docker rm -f cf-tunnel-{} 2>/dev/null || true; docker rename cf-tunnel-bk-{} cf-tunnel-{}", app.id, app.id, app.id)
+                } else {
+                    format!("sudo docker rm -f cf-tunnel-{} 2>/dev/null || true; sudo docker rename cf-tunnel-bk-{} cf-tunnel-{}", app.id, app.id, app.id)
+                };
+                let _ = execute_node_cmd(&server, &rename_cmd).await;
+            }
+
+            // 2. DB-də əsas linki promoted_url edirik, ehtiyat linki boşaldırıq (yeni ehtiyat gələnə qədər)
             let _ = sqlx::query("UPDATE applications SET cloudflare_url = ?, backup_cloudflare_url = NULL WHERE id = ?")
                 .bind(&promoted_url)
                 .bind(&app.id)
@@ -1655,14 +1718,31 @@ pub async fn verify_and_heal_dual_tunnel(db: &sqlx::SqlitePool, app: &Applicatio
 
             let _ = send_url_to_kv(db, &app.name, app.cf_worker_url.clone(), &promoted_url).await;
 
-            // Tarixçədə köhnə əsas linki expired edirik
+            // 3. Tarixçədə köhnə əsas linki expired edirik
             let _ = sqlx::query("UPDATE tunnel_link_history SET status = 'expired', expired_at = CURRENT_TIMESTAMP WHERE app_id = ? AND link_type = 'primary' AND status = 'active'")
                 .bind(&app.id)
                 .execute(db)
                 .await;
 
-            // Ehtiyat linki əsas kimi qeyd edirik
-            record_tunnel_link_change(db, &app.id, &app.name, app.tunnel_id.as_deref(), &promoted_url, "primary").await;
+            // Əvvəlki backup sətrini də expired edirik
+            let _ = sqlx::query("UPDATE tunnel_link_history SET status = 'expired', expired_at = CURRENT_TIMESTAMP WHERE app_id = ? AND link_type = 'backup' AND status = 'active'")
+                .bind(&app.id)
+                .execute(db)
+                .await;
+
+            // Və yeni əsas link kimi tarixçəyə yazırıq
+            let new_hist_id = uuid::Uuid::new_v4().to_string();
+            let _ = sqlx::query(
+                "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, link_type, previous_url, new_url, status) VALUES (?, ?, ?, ?, 'primary', ?, ?, 'active')"
+            )
+            .bind(&new_hist_id)
+            .bind(&app.id)
+            .bind(&app.name)
+            .bind(app.tunnel_id.as_deref())
+            .bind(primary_url)
+            .bind(&promoted_url)
+            .execute(db)
+            .await;
 
             crate::utils::add_activity_log_pro(
                 db,
@@ -1674,10 +1754,11 @@ pub async fn verify_and_heal_dual_tunnel(db: &sqlx::SqlitePool, app: &Applicatio
                 None
             ).await;
 
-            // Və dərhal arxa planda yeni ehtiyat tünel generasiya edirik!
+            // 4. İndi cf-tunnel-bk- adı tamamilə azaddır! Arxa planda dərhal YENİ ehtiyat tünel generasiya edirik
             let db_clone = db.clone();
             let app_id_clone = app.id.clone();
             tokio::spawn(async move {
+                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
                 let _ = start_backup_tunnel_for_app_internal(&db_clone, &app_id_clone).await;
             });
 

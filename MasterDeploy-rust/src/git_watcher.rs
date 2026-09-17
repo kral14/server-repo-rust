@@ -37,7 +37,7 @@ pub async fn git_polling_loop(db: SqlitePool) {
                  build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
                  privileged, memory_limit, cpu_limit, \
                  CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-                 last_commit_hash, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
+                 last_commit_hash, tunnel_id, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
                  auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
                  CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
                  FROM applications \
@@ -72,7 +72,7 @@ pub async fn git_polling_loop(db: SqlitePool) {
              build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
              privileged, memory_limit, cpu_limit, \
              CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-             last_commit_hash, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
+             last_commit_hash, tunnel_id, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
              auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
              CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
              FROM applications \
