@@ -70,7 +70,10 @@ pub struct Application {
     pub created_at: String,
     pub updated_at: String,
     pub last_commit_hash: Option<String>,
+    pub tunnel_id: Option<String>,
     pub cloudflare_url: Option<String>,
+    pub backup_cloudflare_url: Option<String>,
+    pub backup_tunnel_id: Option<String>,
     pub cf_worker_url: Option<String>,
     pub deploy_type: Option<String>,
     pub registry_image: Option<String>,
@@ -235,6 +238,7 @@ pub struct TunnelRouteDetail {
     pub target_port: i64,
     pub route_path: String,
     pub cloudflare_url: Option<String>,
+    pub backup_cloudflare_url: Option<String>,
     pub cf_worker_url: Option<String>,
 }
 
@@ -245,6 +249,9 @@ pub struct TunnelRoute {
     pub app_id: String,
     pub target_port: i64,
     pub route_path: String,
+    pub cloudflare_url: Option<String>,
+    pub backup_cloudflare_url: Option<String>,
+    pub cf_worker_url: Option<String>,
     pub created_at: String,
 }
 
@@ -262,6 +269,7 @@ pub struct TunnelLinkHistory {
     pub app_id: String,
     pub app_name: String,
     pub tunnel_id: Option<String>,
+    pub link_type: Option<String>,
     pub previous_url: Option<String>,
     pub new_url: String,
     pub status: String,

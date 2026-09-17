@@ -413,7 +413,7 @@ pub async fn sync_app_tunnel_active(
     .await;
 
     // Tünel keçid tarixçəsini və Fəaliyyət Jurnalını qeyd et
-    record_tunnel_link_change(pool, app_id, app_name, Some(&tunnel_id), url).await;
+    record_tunnel_link_change(pool, app_id, app_name, Some(&tunnel_id), url, "primary").await;
 }
 
 pub async fn record_tunnel_link_change(
@@ -422,15 +422,17 @@ pub async fn record_tunnel_link_change(
     app_name: &str,
     tunnel_id: Option<&str>,
     new_url: &str,
+    link_type: &str,
 ) {
     if new_url.trim().is_empty() {
         return;
     }
 
     let last_active: Option<(String, String)> = sqlx::query_as(
-        "SELECT id, new_url FROM tunnel_link_history WHERE app_id = ? AND status = 'active' ORDER BY assigned_at DESC LIMIT 1"
+        "SELECT id, new_url FROM tunnel_link_history WHERE app_id = ? AND link_type = ? AND status = 'active' ORDER BY assigned_at DESC LIMIT 1"
     )
     .bind(app_id)
+    .bind(link_type)
     .fetch_optional(pool)
     .await
     .unwrap_or_default();
@@ -449,20 +451,22 @@ pub async fn record_tunnel_link_change(
 
         let new_hist_id = uuid::Uuid::new_v4().to_string();
         let _ = sqlx::query(
-            "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, previous_url, new_url, status) VALUES (?, ?, ?, ?, ?, ?, 'active')"
+            "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, link_type, previous_url, new_url, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'active')"
         )
         .bind(&new_hist_id)
         .bind(app_id)
         .bind(app_name)
         .bind(tunnel_id)
+        .bind(link_type)
         .bind(&old_url)
         .bind(new_url)
         .execute(pool)
         .await;
 
+        let type_label = if link_type == "backup" { "Ehtiyat" } else { "Əsas" };
         let log_msg = format!(
-            "🌐 [Tünel Keçidi] '{}' üçün yeni link aktivləşdirildi: {} (Əvvəlki link qüvvədən düşdü: {})",
-            app_name, new_url, old_url
+            "🌐 [{} Tünel Keçidi] '{}' üçün yeni link aktivləşdirildi: {} (Əvvəlki link qüvvədən düşdü: {})",
+            type_label, app_name, new_url, old_url
         );
         crate::utils::add_activity_log_pro(
             pool,
@@ -476,19 +480,21 @@ pub async fn record_tunnel_link_change(
     } else {
         let new_hist_id = uuid::Uuid::new_v4().to_string();
         let _ = sqlx::query(
-            "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, previous_url, new_url, status) VALUES (?, ?, ?, ?, NULL, ?, 'active')"
+            "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, link_type, previous_url, new_url, status) VALUES (?, ?, ?, ?, ?, NULL, ?, 'active')"
         )
         .bind(&new_hist_id)
         .bind(app_id)
         .bind(app_name)
         .bind(tunnel_id)
+        .bind(link_type)
         .bind(new_url)
         .execute(pool)
         .await;
 
+        let type_label = if link_type == "backup" { "Ehtiyat" } else { "Əsas" };
         let log_msg = format!(
-            "🌐 [Tünel Keçidi] '{}' layihəsinə ilkin canlı keçid linki təyin edildi: {}",
-            app_name, new_url
+            "🌐 [{} Tünel Keçidi] '{}' layihəsinə ilkin canlı keçid linki təyin edildi: {}",
+            type_label, app_name, new_url
         );
         crate::utils::add_activity_log_pro(
             pool,
@@ -1405,30 +1411,188 @@ pub async fn start_tunnel_for_app_internal(db: &sqlx::SqlitePool, app_id: &str) 
             .await;
 
         let _ = send_url_to_kv(db, &app.name, app.cf_worker_url.clone(), &url).await;
+        record_tunnel_link_change(db, app_id, &app.name, app.tunnel_id.as_deref(), &url, "primary").await;
         Ok(url)
     } else {
         Err("Tunel linki loqlardan oxuna bilmədi (Timeout)".to_string())
     }
 }
 
-pub async fn verify_and_heal_tunnel(db: &sqlx::SqlitePool, app: &Application) -> bool {
-    let cf_url = match &app.cloudflare_url {
-        Some(u) if !u.is_empty() => u.clone(),
-        _ => return false,
+pub async fn start_backup_tunnel_for_app_internal(db: &sqlx::SqlitePool, app_id: &str) -> Result<String, String> {
+    let app = sqlx::query_as::<_, Application>("SELECT * FROM applications WHERE id = ?")
+        .bind(app_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Application not found".to_string())?;
+
+    let server = sqlx::query_as::<_, Server>("SELECT * FROM servers WHERE id = ?")
+        .bind(&app.server_id)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Server not found".to_string())?;
+
+    let port = app.port;
+    let ssh_bin = if cfg!(target_os = "windows") { "C:\\Windows\\System32\\OpenSSH\\ssh.exe" } else { "ssh" };
+
+    let (bash_cmd, is_local) = if server.ip == "local" || server.ip == "127.0.0.1" {
+        (
+            format!(
+                "docker rm -f cf-tunnel-bk-{} || true; \
+                 docker run -d --name cf-tunnel-bk-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{}",
+                app_id, app_id, port
+            ),
+            true,
+        )
+    } else {
+        (
+            format!(
+                "sudo docker rm -f cf-tunnel-bk-{} || true; \
+                 sudo docker run -d --name cf-tunnel-bk-{} --network host cloudflare/cloudflared:latest tunnel --url http://localhost:{}",
+                app_id, app_id, port
+            ),
+            false,
+        )
     };
 
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(6))
-        .danger_accept_invalid_certs(true)
-        .build() {
-        Ok(c) => c,
-        Err(_) => return false,
+    if is_local {
+        tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(&bash_cmd)
+            .output()
+            .await
+            .map_err(|e| format!("Local backup start error: {}", e))?;
+    } else {
+        let temp_key_path = std::env::temp_dir().join(format!("temp_bk_tunnel_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+        let key_content = if server.ssh_key.contains("BEGIN ") {
+            server.ssh_key.clone()
+        } else {
+            std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+        };
+
+        std::fs::write(&temp_key_path, &key_content)
+            .map_err(|e| format!("Key write error: {}", e))?;
+
+        #[cfg(target_os = "windows")]
+        {
+            let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+            let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+        }
+
+        let run_cmd = tokio::process::Command::new(ssh_bin)
+            .args(&[
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "BatchMode=yes",
+                "-o", "ConnectTimeout=8",
+                "-i", &temp_key_path,
+                &format!("{}@{}", server.ssh_user, server.ip),
+                &bash_cmd
+            ])
+            .output()
+            .await;
+
+        let _ = std::fs::remove_file(&temp_key_path);
+        run_cmd.map_err(|e| format!("SSH backup tunnel start error: {}", e))?;
+    }
+
+    let log_cmd = if is_local {
+        format!("docker logs cf-tunnel-bk-{}", app_id)
+    } else {
+        format!("sudo docker logs cf-tunnel-bk-{}", app_id)
     };
 
-    let is_alive = match client.get(&cf_url).send().await {
+    let mut found_url: Option<String> = None;
+    for _ in 0..12 {
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        let out_res = if is_local {
+            tokio::process::Command::new("sh").arg("-c").arg(&log_cmd).output().await
+        } else {
+            let temp_key_path = std::env::temp_dir().join(format!("temp_bk_tunnel_key_{}.key", uuid::Uuid::new_v4())).to_string_lossy().into_owned();
+            let key_content = if server.ssh_key.contains("BEGIN ") {
+                server.ssh_key.clone()
+            } else {
+                std::fs::read_to_string(server.ssh_key.trim()).unwrap_or_else(|_| server.ssh_key.clone())
+            };
+            let _ = std::fs::write(&temp_key_path, &key_content);
+
+            #[cfg(target_os = "windows")]
+            {
+                let identity = std::env::var("USERNAME").unwrap_or_else(|_| "Administrator".to_string());
+                let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/inheritance:r"]).output();
+                let _ = std::process::Command::new("icacls").args(&[&temp_key_path, "/grant:r", &format!("{}:F", identity)]).output();
+            }
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = std::process::Command::new("chmod").args(&["600", &temp_key_path]).output();
+            }
+
+            let r = tokio::process::Command::new(ssh_bin)
+                .args(&[
+                    "-o", "StrictHostKeyChecking=no",
+                    "-o", "BatchMode=yes",
+                    "-o", "ConnectTimeout=5",
+                    "-i", &temp_key_path,
+                    &format!("{}@{}", server.ssh_user, server.ip),
+                    &log_cmd
+                ])
+                .output()
+                .await;
+
+            let _ = std::fs::remove_file(&temp_key_path);
+            r
+        };
+
+        if let Ok(out) = out_res {
+            let log_str = format!("{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+            for line in log_str.lines() {
+                if line.contains(".trycloudflare.com") {
+                    if let Some(start_idx) = line.find("https://") {
+                        let rest = &line[start_idx..];
+                        let end_idx = rest.find(|c: char| c.is_whitespace()).unwrap_or(rest.len());
+                        found_url = Some(rest[..end_idx].to_string());
+                        break;
+                    }
+                }
+            }
+        }
+
+        if found_url.is_some() {
+            break;
+        }
+    }
+
+    if let Some(url) = found_url {
+        println!("[TUNNEL WATCHDOG] 🛡️ Yeni Ehtiyat tunel linki uğurla generasiya olundu: {}", url);
+        let _ = sqlx::query("UPDATE applications SET backup_cloudflare_url = ? WHERE id = ?")
+            .bind(&url)
+            .bind(app_id)
+            .execute(db)
+            .await;
+
+        record_tunnel_link_change(db, app_id, &app.name, app.backup_tunnel_id.as_deref(), &url, "backup").await;
+        Ok(url)
+    } else {
+        Err("Ehtiyat tunel linki loqlardan oxuna bilmədi (Timeout)".to_string())
+    }
+}
+
+pub async fn check_tunnel_url_alive(client: &reqwest::Client, url: &str) -> bool {
+    if url.trim().is_empty() {
+        return false;
+    }
+    match client.get(url).send().await {
         Ok(res) => {
             let code = res.status().as_u16();
-            // Error 1016 və ya 530, 502 Cloudflare DNS/tunnel ölümüdür
+            // Error 1016, 530, 502, 504 Cloudflare DNS/tunnel ölümüdür
             if code == 530 || code == 502 || code == 504 {
                 false
             } else {
@@ -1436,59 +1600,154 @@ pub async fn verify_and_heal_tunnel(db: &sqlx::SqlitePool, app: &Application) ->
             }
         }
         Err(e) => {
-            // DNS lookup xətası və ya connect xətası tunelin ölməsi deməkdir
             if e.is_connect() || e.is_timeout() || e.to_string().contains("dns") {
                 false
             } else {
                 true
             }
         }
+    }
+}
+
+pub async fn verify_and_heal_dual_tunnel(db: &sqlx::SqlitePool, app: &Application) -> bool {
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .danger_accept_invalid_certs(true)
+        .build() {
+        Ok(c) => c,
+        Err(_) => return false,
     };
 
-    if !is_alive {
-        println!("[TUNNEL WATCHDOG] ⚠️ '{}' tətbiqinin tuneli cavab vermir (URL: {}). Avtomatik bərpa başladılır...", app.name, cf_url);
-        crate::utils::add_activity_log_pro(
-            db,
-            &format!("Cloudflare Tuneli ('{}') dayanıb (Error 1016/DNS). Arxa planda bərpa icra edilir...", app.name),
-            "warning",
-            Some("Watchdog"),
-            Some("system"),
-            Some(&app.id),
-            None
-        ).await;
+    let primary_url = app.cloudflare_url.as_deref().unwrap_or("");
+    let backup_url = app.backup_cloudflare_url.as_deref().unwrap_or("");
 
-        match start_tunnel_for_app_internal(db, &app.id).await {
-            Ok(new_url) => {
-                println!("[TUNNEL WATCHDOG] ✅ Tunel bərpa edildi və Cloudflare KV-yə ötürüldü: {}", new_url);
-                crate::utils::add_activity_log_pro(
-                    db,
-                    &format!("Cloudflare Tuneli ('{}') uğurla bərpa olundu və yeni link KV bazasına yazıldı: {}", app.name, new_url),
-                    "success",
-                    Some("Watchdog"),
-                    Some("system"),
-                    Some(&app.id),
-                    None
-                ).await;
-                return true;
-            }
-            Err(e) => {
-                eprintln!("[TUNNEL WATCHDOG] ❌ Bərpa xətası: {}", e);
-                crate::utils::add_activity_log_pro(
-                    db,
-                    &format!("Cloudflare Tuneli bərpa olunarkən xəta baş verdi ('{}'): {}", app.name, e),
-                    "error",
-                    Some("Watchdog"),
-                    Some("system"),
-                    Some(&app.id),
-                    None
-                ).await;
-                return false;
-            }
+    // 1. Əgər heç bir əsas tünel yoxdursa, dərhal əsas tüneli qaldırırıq
+    if primary_url.is_empty() {
+        println!("[TUNNEL WATCHDOG] '{}' üçün əsas tünel yoxdur. İlkin işə salınır...", app.name);
+        let _ = start_tunnel_for_app_internal(db, &app.id).await;
+        let _ = start_backup_tunnel_for_app_internal(db, &app.id).await;
+        return true;
+    }
+
+    let is_primary_alive = check_tunnel_url_alive(&client, primary_url).await;
+
+    if !is_primary_alive {
+        println!("[TUNNEL WATCHDOG] ⚠️ [ƏSAS QIRILDI] '{}' tətbiqinin əsas tuneli cavab vermir (URL: {})!", app.name, primary_url);
+
+        let is_backup_alive = if !backup_url.is_empty() {
+            check_tunnel_url_alive(&client, backup_url).await
+        } else {
+            false
+        };
+
+        if is_backup_alive {
+            // ==========================================
+            // 🔥 ANİ FAILOVER: Ehtiyat link ƏSAS link olur!
+            // ==========================================
+            let promoted_url = backup_url.to_string();
+            println!("[TUNNEL WATCHDOG] ⚡ [ANİ FAILOVER] Ehtiyat link ({}) anında Əsas linkə çevrilir!", promoted_url);
+
+            let _ = sqlx::query("UPDATE applications SET cloudflare_url = ?, backup_cloudflare_url = NULL WHERE id = ?")
+                .bind(&promoted_url)
+                .bind(&app.id)
+                .execute(db)
+                .await;
+
+            let _ = send_url_to_kv(db, &app.name, app.cf_worker_url.clone(), &promoted_url).await;
+
+            // Tarixçədə köhnə əsas linki expired edirik
+            let _ = sqlx::query("UPDATE tunnel_link_history SET status = 'expired', expired_at = CURRENT_TIMESTAMP WHERE app_id = ? AND link_type = 'primary' AND status = 'active'")
+                .bind(&app.id)
+                .execute(db)
+                .await;
+
+            // Ehtiyat linki əsas kimi qeyd edirik
+            record_tunnel_link_change(db, &app.id, &app.name, app.tunnel_id.as_deref(), &promoted_url, "primary").await;
+
+            crate::utils::add_activity_log_pro(
+                db,
+                &format!("⚡ [ANİ FAILOVER] '{}' əsas tüneli qırıldı! Ehtiyat link ({}) dərhal Əsas keçid edildi və saytın işi qorundu.", app.name, promoted_url),
+                "warning",
+                Some("Watchdog"),
+                Some("Failover"),
+                Some(&app.id),
+                None
+            ).await;
+
+            // Və dərhal arxa planda yeni ehtiyat tünel generasiya edirik!
+            let db_clone = db.clone();
+            let app_id_clone = app.id.clone();
+            tokio::spawn(async move {
+                let _ = start_backup_tunnel_for_app_internal(&db_clone, &app_id_clone).await;
+            });
+
+            return true;
+        } else {
+            // Həm əsas, həm ehtiyat sönübsə, hər ikisini yenidən bərpa edirik
+            println!("[TUNNEL WATCHDOG] ⚠️ Hər iki tünel cavab vermir. Tam yeniləmə icra olunur...");
+            let _ = start_tunnel_for_app_internal(db, &app.id).await;
+            let _ = start_backup_tunnel_for_app_internal(db, &app.id).await;
+            return true;
         }
+    }
+
+    // 2. Əsas link salamatdırsa, indi Ehtiyat linki yoxlayırıq
+    if backup_url.is_empty() {
+        println!("[TUNNEL WATCHDOG] 🛡️ '{}' üçün aktiv ehtiyat tünel yoxdur. Hazırlanır...", app.name);
+        let _ = start_backup_tunnel_for_app_internal(db, &app.id).await;
+        return true;
+    }
+
+    let is_backup_alive = check_tunnel_url_alive(&client, backup_url).await;
+    if !is_backup_alive {
+        println!("[TUNNEL WATCHDOG] ⚠️ '{}' ehtiyat tüneli sönüb (URL: {}). Yeni ehtiyat generasiya edilir...", app.name, backup_url);
+        let _ = sqlx::query("UPDATE tunnel_link_history SET status = 'expired', expired_at = CURRENT_TIMESTAMP WHERE app_id = ? AND link_type = 'backup' AND status = 'active'")
+            .bind(&app.id)
+            .execute(db)
+            .await;
+        let _ = start_backup_tunnel_for_app_internal(db, &app.id).await;
+        return true;
     }
 
     true
 }
+
+// Bütün aktiv tətbiqlər üçün tünelləri hər 15 saniyədən bir yoxlayan yüksək tezlikli Watchdog Loop
+pub async fn start_tunnel_fast_watchdog_loop(db: sqlx::SqlitePool) {
+    println!("[INFO] ⚡ Fast Tunnel Watchdog & Dual Failover Service is active (15s interval)...");
+    loop {
+        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+
+        let tunnel_watchdog_enabled: String = sqlx::query_scalar("SELECT value FROM settings WHERE key = 'bg_tunnel_watchdog_enabled'")
+            .fetch_optional(&db).await.unwrap_or_default().unwrap_or_else(|| "1".to_string());
+
+        if tunnel_watchdog_enabled != "1" && tunnel_watchdog_enabled != "true" {
+            continue;
+        }
+
+        if let Ok(apps) = sqlx::query_as::<_, Application>("SELECT * FROM applications").fetch_all(&db).await {
+            for app in apps {
+                // Əgər tətbiqin tüneli heç vaxt qurulmayıbsa və quraşdırılmayıbsa yoxlamırıq
+                if app.cloudflare_url.is_none() && app.backup_cloudflare_url.is_none() && app.tunnel_id.is_none() {
+                    continue;
+                }
+
+                let is_disabled: Option<String> = sqlx::query_scalar("SELECT value FROM settings WHERE key = ?")
+                    .bind(format!("tunnel_watchdog_off_{}", app.id))
+                    .fetch_optional(&db)
+                    .await
+                    .unwrap_or_default();
+
+                if is_disabled.as_deref() == Some("1") {
+                    continue;
+                }
+
+                verify_and_heal_dual_tunnel(&db, &app).await;
+            }
+        }
+    }
+}
+
 
 
 

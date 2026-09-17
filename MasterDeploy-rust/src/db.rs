@@ -104,11 +104,14 @@ pub async fn init_db() -> Result<SqlitePool, sqlx::Error> {
     let _ = sqlx::query("CREATE INDEX IF NOT EXISTS idx_tunnel_history_assigned ON tunnel_link_history(assigned_at DESC)").execute(&pool).await;
 
     let _ = sqlx::query("ALTER TABLE applications ADD COLUMN tunnel_id TEXT").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN backup_cloudflare_url TEXT").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE applications ADD COLUMN backup_tunnel_id TEXT").execute(&pool).await;
+    let _ = sqlx::query("ALTER TABLE tunnel_link_history ADD COLUMN link_type TEXT DEFAULT 'primary'").execute(&pool).await;
 
     // Mövcud aktiv cloudflare_url-ləri ilkin tarixçə kimi qeyd edirik
     let _ = sqlx::query(
-        "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, previous_url, new_url, status, assigned_at) \
-         SELECT lower(hex(randomblob(16))), a.id, a.name, a.tunnel_id, NULL, a.cloudflare_url, 'active', a.created_at \
+        "INSERT INTO tunnel_link_history (id, app_id, app_name, tunnel_id, link_type, previous_url, new_url, status, assigned_at) \
+         SELECT lower(hex(randomblob(16))), a.id, a.name, a.tunnel_id, 'primary', NULL, a.cloudflare_url, 'active', a.created_at \
          FROM applications a \
          WHERE a.cloudflare_url IS NOT NULL AND a.cloudflare_url != '' \
          AND NOT EXISTS (SELECT 1 FROM tunnel_link_history h WHERE h.app_id = a.id)"

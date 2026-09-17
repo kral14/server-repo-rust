@@ -283,36 +283,52 @@ async function loadMultiNodeTunnelsOverview(isSilent = false) {
                                 ${routes.length > 0 ? `
                                     <div class="tunnel-routes-list" style="display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; padding-right: 2px;">
                                         ${routes.map(r => {
-                                            const appLink = r.cf_worker_url || r.cloudflare_url || '';
-                                            const searchKey = `${(r.app_name || '').toLowerCase()} ${r.target_port} ${appLink.toLowerCase()} ${tNameLower} ${srvNameLower} ${srvIpLower}`;
+                                            const primaryLink = r.cf_worker_url || r.cloudflare_url || '';
+                                            const backupLink = r.backup_cloudflare_url || '';
+                                            const searchKey = `${(r.app_name || '').toLowerCase()} ${r.target_port} ${primaryLink.toLowerCase()} ${backupLink.toLowerCase()} ${tNameLower} ${srvNameLower} ${srvIpLower}`;
 
                                             return `
-                                            <div class="tunnel-app-row" data-search-key="${searchKey}" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 5px; padding: 3px 8px; font-size: 0.76rem;">
+                                            <div class="tunnel-app-row" data-search-key="${searchKey}" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 5px; padding: 4px 8px; font-size: 0.76rem; flex-wrap: wrap;">
                                                 <!-- Sol: Layihə Adı və Port -->
-                                                <div style="display: flex; align-items: center; gap: 6px; min-width: 150px; flex-shrink: 0;">
+                                                <div style="display: flex; align-items: center; gap: 6px; min-width: 140px; flex-shrink: 0;">
                                                     <i data-lucide="box" style="width: 13px; height: 13px; color: #38bdf8; flex-shrink: 0;"></i>
                                                     <strong style="color: #f1f5f9; font-size: 0.79rem;">${r.app_name}</strong>
                                                     <span style="color: #38bdf8; font-size: 0.7rem; font-family: monospace; background: rgba(56, 189, 248, 0.1); padding: 0 4px; border-radius: 3px;">:${r.target_port}</span>
                                                 </div>
 
-                                                <!-- Orta: Fərdi Keçid Linki -->
-                                                <div style="display: flex; align-items: center; gap: 5px; flex: 1; min-width: 180px;">
-                                                    ${appLink ? `
-                                                        <div style="display: flex; align-items: center; gap: 5px; background: rgba(0,0,0,0.3); border: 1px solid rgba(0,210,255,0.15); border-radius: 4px; padding: 1px 6px; width: 100%; max-width: 440px;">
-                                                            <span style="color: #00d2ff; font-size: 0.65rem; font-weight: 700; flex-shrink: 0;">${r.cf_worker_url ? 'WORKER' : 'KEÇİD'}:</span>
-                                                            <a href="${appLink}" target="_blank" style="color: #38bdf8; font-size: 0.72rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${appLink}">
-                                                                ${appLink}
+                                                <!-- Orta: Əsas və Ehtiyat Keçid Linkləri (Dual-Tunnel HA) -->
+                                                <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 280px; flex-wrap: wrap;">
+                                                    <!-- ƏSAS LİNK -->
+                                                    <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.35); border: 1px solid ${primaryLink ? 'rgba(0,210,255,0.2)' : 'rgba(234, 179, 8, 0.25)'}; border-radius: 4px; padding: 1px 6px; flex: 1; min-width: 200px;">
+                                                        <span style="width: 6px; height: 6px; border-radius: 50%; background: ${primaryLink ? '#4ade80' : '#eab308'}; box-shadow: 0 0 5px ${primaryLink ? '#4ade80' : '#eab308'}; flex-shrink: 0;"></span>
+                                                        <span style="color: #00d2ff; font-size: 0.64rem; font-weight: 700; flex-shrink: 0;">${r.cf_worker_url ? 'WORKER' : 'ƏSAS'}:</span>
+                                                        ${primaryLink ? `
+                                                            <a href="${primaryLink}" target="_blank" style="color: #38bdf8; font-size: 0.71rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${primaryLink}">
+                                                                ${primaryLink}
                                                             </a>
-                                                            <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${appLink}'); showToast('Layihə linki kopyalandı!', 'info');" style="padding: 1px 5px; font-size: 0.65rem; border-radius: 3px; flex-shrink: 0; display: inline-flex; align-items: center;" title="Linki kopyala">
+                                                            <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${primaryLink}'); showToast('Əsas link kopyalandı!', 'info');" style="padding: 1px 4px; font-size: 0.62rem; border-radius: 3px; flex-shrink: 0;" title="Kopyala">
                                                                 <i data-lucide="copy" style="width: 10px; height: 10px;"></i>
                                                             </button>
-                                                        </div>
-                                                    ` : `
-                                                        <span style="color: #eab308; font-size: 0.7rem; display: inline-flex; align-items: center; gap: 5px; font-style: italic; background: rgba(234, 179, 8, 0.08); padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(234, 179, 8, 0.2);">
-                                                            <i data-lucide="loader-2" style="width: 11px; height: 11px; animation: spin 1.5s linear infinite;"></i>
-                                                            <span>Keçid hazırlanır (canlı izlənilir)...</span>
-                                                        </span>
-                                                    `}
+                                                        ` : `
+                                                            <span style="color: #eab308; font-size: 0.67rem; font-style: italic;">Əsas hazırlanır...</span>
+                                                        `}
+                                                    </div>
+
+                                                    <!-- EHTİYAT LİNK -->
+                                                    <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.25); border: 1px solid ${backupLink ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255,255,255,0.06)'}; border-radius: 4px; padding: 1px 6px; flex: 1; min-width: 200px;">
+                                                        <span style="width: 6px; height: 6px; border-radius: 50%; background: ${backupLink ? '#c084fc' : '#64748b'}; box-shadow: 0 0 5px ${backupLink ? '#c084fc' : 'transparent'}; flex-shrink: 0;"></span>
+                                                        <span style="color: #c084fc; font-size: 0.64rem; font-weight: 700; flex-shrink: 0;">EHTİYAT:</span>
+                                                        ${backupLink ? `
+                                                            <a href="${backupLink}" target="_blank" style="color: #c084fc; font-size: 0.71rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${backupLink}">
+                                                                ${backupLink}
+                                                            </a>
+                                                            <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${backupLink}'); showToast('Ehtiyat link kopyalandı!', 'info');" style="padding: 1px 4px; font-size: 0.62rem; border-radius: 3px; flex-shrink: 0;" title="Kopyala">
+                                                                <i data-lucide="copy" style="width: 10px; height: 10px;"></i>
+                                                            </button>
+                                                        ` : `
+                                                            <span style="color: #94a3b8; font-size: 0.67rem; font-style: italic;">Standby hazırlanır...</span>
+                                                        `}
+                                                    </div>
                                                 </div>
 
                                                 <!-- Sağ: Düymələr (Tarixçə, Loq, Dayandır, Ayır) -->
@@ -1857,35 +1873,44 @@ async function openTunnelLinkHistoryModal(appId, appName) {
 
         listEl.innerHTML = history.map(item => {
             const isActive = item.status === 'active';
-            const statusColor = isActive ? '#00e676' : '#94a3b8';
-            const statusBg = isActive ? 'rgba(0,230,118,0.07)' : 'rgba(255,255,255,0.03)';
-            const statusBorder = isActive ? 'rgba(0,230,118,0.25)' : 'rgba(255,255,255,0.06)';
+            const isBackup = item.link_type === 'backup';
+            const statusColor = isActive ? '#00e676' : '#ef4444';
+            const statusBg = isActive ? 'rgba(0,230,118,0.06)' : 'rgba(239,68,68,0.04)';
+            const statusBorder = isActive ? 'rgba(0,230,118,0.25)' : 'rgba(239,68,68,0.2)';
+            
+            const roleBadge = isBackup
+                ? '<span style="display:inline-flex; align-items:center; gap:4px; font-size: 0.69rem; font-weight: 700; color: #c084fc; background: rgba(168,85,247,0.15); border: 1px solid rgba(168,85,247,0.3); padding: 2px 7px; border-radius: 4px;"><i data-lucide="shield" style="width:11px;height:11px;"></i>Ehtiyat Link</span>'
+                : '<span style="display:inline-flex; align-items:center; gap:4px; font-size: 0.69rem; font-weight: 700; color: #38bdf8; background: rgba(56,189,248,0.15); border: 1px solid rgba(56,189,248,0.3); padding: 2px 7px; border-radius: 4px;"><i data-lucide="globe" style="width:11px;height:11px;"></i>Əsas Link</span>';
+
             const statusLabel = isActive 
-                ? '<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#00e676;box-shadow:0 0 6px #00e676;"></span>Aktiv Canlı Link</span>' 
+                ? '<span style="display:inline-flex; align-items:center; gap:5px; color:#00e676;"><span style="width:6px;height:6px;border-radius:50%;background:#00e676;box-shadow:0 0 6px #00e676;"></span>Aktiv (İşlək)</span>' 
                 : (item.status === 'stopped' 
-                    ? '<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;"></span>Dayandırılıb</span>' 
-                    : '<span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:6px;height:6px;border-radius:50%;background:#94a3b8;"></span>Qüvvədən Düşüb</span>');
+                    ? '<span style="display:inline-flex; align-items:center; gap:5px; color:#f97316;"><span style="width:6px;height:6px;border-radius:50%;background:#f97316;"></span>Dayandırılıb</span>' 
+                    : '<span style="display:inline-flex; align-items:center; gap:5px; color:#ef4444;"><span style="width:6px;height:6px;border-radius:50%;background:#ef4444;"></span>Deaktiv (Qırılıb / Vaxtı bitib)</span>');
 
             let assignedTimeFormatted = item.assigned_at || '-';
-            let expiredTimeFormatted = item.expired_at || (isActive ? 'Hazırda aktivdir' : '-');
+            let expiredTimeFormatted = item.expired_at || (isActive ? 'Hazırda canlı və aktivdir' : '-');
 
             return `
-                <div style="background: ${statusBg}; border: 1px solid ${statusBorder}; border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; transition: all 0.2s;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-                        <span style="font-size: 0.75rem; font-weight: 700; color: ${statusColor}; text-transform: uppercase; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px;">
-                            ${statusLabel}
-                        </span>
+                <div style="background: ${statusBg}; border: 1px solid ${statusBorder}; border-radius: 9px; padding: 11px 14px; display: flex; flex-direction: column; gap: 7px; transition: all 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            ${roleBadge}
+                            <span style="font-size: 0.73rem; font-weight: 700; background: rgba(0,0,0,0.3); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.06);">
+                                ${statusLabel}
+                            </span>
+                        </div>
                         <div style="font-size: 0.72rem; color: var(--text-secondary); font-family: monospace; display: inline-flex; align-items: center; gap: 4px;">
                             <i data-lucide="calendar" style="width: 12px; height: 12px; color: #94a3b8;"></i>
-                            <span>Təyin tarixi:</span>
+                            <span>Yaranma tarixi:</span>
                             <strong style="color: #cbd5e1;">${assignedTimeFormatted}</strong>
                         </div>
                     </div>
 
-                    <!-- Yeni Təyin Olunan Link -->
-                    <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.05);">
-                        <span style="font-size: 0.75rem; color: #38bdf8; font-weight: 600; flex-shrink: 0;">Link:</span>
-                        <a href="${item.new_url}" target="_blank" style="color: #00d2ff; font-family: monospace; font-size: 0.78rem; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${item.new_url}">
+                    <!-- Link Sətri -->
+                    <div style="display: flex; align-items: center; gap: 8px; background: rgba(0,0,0,0.35); padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);">
+                        <span style="font-size: 0.74rem; color: ${isBackup ? '#c084fc' : '#38bdf8'}; font-weight: 600; flex-shrink: 0;">Link:</span>
+                        <a href="${item.new_url}" target="_blank" style="color: ${isActive ? '#00d2ff' : '#94a3b8'}; font-family: monospace; font-size: 0.78rem; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; ${!isActive ? 'text-decoration: line-through; opacity: 0.7;' : ''}" title="${item.new_url}">
                             ${item.new_url}
                         </a>
                         <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${item.new_url}'); showToast('Link kopyalandı', 'info');" style="padding: 2px 6px; font-size: 0.65rem; display: inline-flex; align-items: center;">
@@ -1893,9 +1918,9 @@ async function openTunnelLinkHistoryModal(appId, appName) {
                         </button>
                     </div>
 
-                    <!-- Əgər Köhnə Link Varsa -->
+                    <!-- Əgər Əvvəlki Link Varsa -->
                     ${item.previous_url ? `
-                        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.73rem; color: #94a3b8; padding: 0 4px;">
+                        <div style="display: flex; align-items: center; gap: 6px; font-size: 0.72rem; color: #94a3b8; padding: 0 4px;">
                             <i data-lucide="corner-down-left" style="width: 12px; height: 12px; color: #f87171; flex-shrink: 0;"></i>
                             <span style="color: #f87171; flex-shrink: 0;">Əvvəlki link:</span>
                             <span style="font-family: monospace; text-decoration: line-through; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
@@ -1904,14 +1929,12 @@ async function openTunnelLinkHistoryModal(appId, appName) {
                         </div>
                     ` : ''}
 
-                    <!-- Qüvvədən Düşmə Vaxtı -->
-                    ${!isActive && item.expired_at ? `
-                        <div style="font-size: 0.72rem; color: #f87171; display: flex; align-items: center; gap: 5px; padding-top: 2px;">
-                            <i data-lucide="clock" style="width: 12px; height: 12px; color: #f87171;"></i>
-                            <span>Qüvvədən düşmə tarixi:</span>
-                            <strong style="font-family: monospace;">${expiredTimeFormatted}</strong>
-                        </div>
-                    ` : ''}
+                    <!-- Qüvvədən Düşmə / Deaktiv Olma Vaxtı -->
+                    <div style="font-size: 0.72rem; color: ${isActive ? '#4ade80' : '#f87171'}; display: flex; align-items: center; gap: 5px; padding-top: 1px;">
+                        <i data-lucide="${isActive ? 'check-circle' : 'clock'}" style="width: 12px; height: 12px; color: ${isActive ? '#4ade80' : '#f87171'};"></i>
+                        <span>${isActive ? 'Cari vəziyyət:' : 'Deaktiv olma tarixi:'}</span>
+                        <strong style="font-family: monospace;">${expiredTimeFormatted}</strong>
+                    </div>
                 </div>
             `;
         }).join('');

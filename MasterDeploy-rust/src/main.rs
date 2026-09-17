@@ -80,6 +80,8 @@ async fn main() {
 
     // Git repositoriyalarını yeniliklər üçün yoxlayan arxa plan loopunu başladırıq
     tokio::spawn(git_watcher::git_polling_loop(pool.clone()));
+    // Cloudflare Dual-Tunnel Failover və ani watchdog xidmətini başladırıq (15s)
+    tokio::spawn(crate::plugins::cloudflare::start_tunnel_fast_watchdog_loop(pool.clone()));
 
     let app = Router::new()
         .nest_service("/", ServeDir::new("static"))

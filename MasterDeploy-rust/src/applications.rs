@@ -29,7 +29,7 @@ pub async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         last_commit_hash, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
          auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
          CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
          FROM applications \
@@ -49,12 +49,11 @@ pub async fn list_applications(State(state): State<AppState>) -> Result<Json<Vec
 
 pub async fn list_autodeploy_applications(State(state): State<AppState>) -> Result<Json<Vec<Application>>, (StatusCode, String)> {
     let apps = match sqlx::query_as::<_, Application>(
-
         "SELECT id, name, repo_url, branch, port, server_id, status, env_vars, build_pack_type, \
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         last_commit_hash, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
          auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
          CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
          FROM applications \
@@ -142,7 +141,10 @@ pub async fn create_application(State(state): State<AppState>, Json(input): Json
         memory_limit: input.memory_limit,
         cpu_limit: input.cpu_limit,
         last_commit_hash: None,
+        tunnel_id: None,
         cloudflare_url: None,
+        backup_cloudflare_url: None,
+        backup_tunnel_id: None,
         cf_worker_url: None,
         deploy_type: Some(dep_type),
         registry_image: input.registry_image,
@@ -165,7 +167,7 @@ pub async fn get_application(State(state): State<AppState>, AxumPath(app_id): Ax
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         last_commit_hash, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
          auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
          CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
          FROM applications WHERE id = ?"
@@ -316,7 +318,7 @@ pub async fn check_application_deploy(
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         last_commit_hash, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
          auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
          CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
          FROM applications WHERE id = ?"
@@ -637,7 +639,7 @@ pub async fn check_all_applications_deploy(
          build_command, run_command, dockerfile_path, entrypoint, command, target, work_dir, \
          privileged, memory_limit, cpu_limit, \
          CAST(created_at AS TEXT) as created_at, CAST(updated_at AS TEXT) as updated_at, \
-         last_commit_hash, cloudflare_url, cf_worker_url, deploy_type, registry_image, \
+         last_commit_hash, cloudflare_url, backup_cloudflare_url, backup_tunnel_id, cf_worker_url, deploy_type, registry_image, \
          auto_deploy_enabled, auto_deploy_interval, auto_deploy_timeout, \
          CAST(last_auto_deploy_check AS TEXT) as last_auto_deploy_check \
          FROM applications \

@@ -43,14 +43,14 @@ async fn populate_tunnel_details(pool: &sqlx::SqlitePool, tunnels: Vec<Tunnel>) 
 
         let mut routes = Vec::new();
         for (r_id, a_id, port, r_path) in routes_raw {
-            let (app_name, cloudflare_url, cf_worker_url): (String, Option<String>, Option<String>) = match sqlx::query_as(
-                "SELECT name, cloudflare_url, cf_worker_url FROM applications WHERE id = ?"
+            let (app_name, cloudflare_url, backup_cloudflare_url, cf_worker_url): (String, Option<String>, Option<String>, Option<String>) = match sqlx::query_as(
+                "SELECT name, cloudflare_url, backup_cloudflare_url, cf_worker_url FROM applications WHERE id = ?"
             )
             .bind(&a_id)
             .fetch_optional(pool)
             .await {
-                Ok(Some((name, cf_url, worker_url))) => (name, cf_url, worker_url),
-                _ => ("Tətbiq".to_string(), None, None),
+                Ok(Some((name, cf_url, backup_url, worker_url))) => (name, cf_url, backup_url, worker_url),
+                _ => ("Tətbiq".to_string(), None, None, None),
             };
 
             routes.push(TunnelRouteDetail {
@@ -60,6 +60,7 @@ async fn populate_tunnel_details(pool: &sqlx::SqlitePool, tunnels: Vec<Tunnel>) 
                 target_port: port,
                 route_path: r_path,
                 cloudflare_url,
+                backup_cloudflare_url,
                 cf_worker_url,
             });
         }
@@ -553,7 +554,7 @@ async fn list_all_tunnel_history(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<crate::models::TunnelLinkHistory>>, (StatusCode, String)> {
     let history = sqlx::query_as::<_, crate::models::TunnelLinkHistory>(
-        "SELECT id, app_id, app_name, tunnel_id, previous_url, new_url, status, \
+        "SELECT id, app_id, app_name, tunnel_id, link_type, previous_url, new_url, status, \
          CAST(assigned_at AS TEXT) as assigned_at, CAST(expired_at AS TEXT) as expired_at \
          FROM tunnel_link_history ORDER BY assigned_at DESC LIMIT 100"
     )
@@ -569,7 +570,7 @@ async fn list_app_tunnel_history(
     AxumPath(app_id): AxumPath<String>,
 ) -> Result<Json<Vec<crate::models::TunnelLinkHistory>>, (StatusCode, String)> {
     let history = sqlx::query_as::<_, crate::models::TunnelLinkHistory>(
-        "SELECT id, app_id, app_name, tunnel_id, previous_url, new_url, status, \
+        "SELECT id, app_id, app_name, tunnel_id, link_type, previous_url, new_url, status, \
          CAST(assigned_at AS TEXT) as assigned_at, CAST(expired_at AS TEXT) as expired_at \
          FROM tunnel_link_history WHERE app_id = ? ORDER BY assigned_at DESC LIMIT 50"
     )

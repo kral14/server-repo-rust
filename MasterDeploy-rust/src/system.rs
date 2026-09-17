@@ -326,7 +326,7 @@ pub async fn trigger_tunnel_check_now(
             continue;
         }
 
-        if !crate::plugins::cloudflare::verify_and_heal_tunnel(&state.db, &app).await {
+        if !crate::plugins::cloudflare::verify_and_heal_dual_tunnel(&state.db, &app).await {
             healed += 1;
         }
     }
