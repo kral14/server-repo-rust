@@ -206,6 +206,7 @@ function toggleActivityAutoScroll() {
 async function fetchAndRenderActivityLogs() {
     if (activityLogsState.isFetching) return;
     activityLogsState.isFetching = true;
+    try {
         const dateParam = activityLogsState.dateFilter && activityLogsState.dateFilter !== 'all' ? `&date=${encodeURIComponent(activityLogsState.dateFilter)}` : '';
         const res = await fetch(`/api/activity-logs?limit=2000${dateParam}`);
         if (res.ok) {

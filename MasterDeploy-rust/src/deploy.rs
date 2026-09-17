@@ -290,6 +290,8 @@ pub async fn trigger_deployment_impl(
                     return;
                 }
             }
+
+            perform_preflight_env_and_service_checks(&app, &server, &temp_key_path, &db_clone, &deploy_id, &logs, false).await;
         } else {
             let branch = if app.branch.trim().is_empty() {
                 "main".to_string()
@@ -341,6 +343,8 @@ pub async fn trigger_deployment_impl(
                 }
             }
 
+            perform_preflight_env_and_service_checks(&app, &server, &temp_key_path, &db_clone, &deploy_id, &logs, true).await;
+
             {
                 let mut lock = logs.lock().await;
                 if no_cache {
@@ -349,6 +353,22 @@ pub async fn trigger_deployment_impl(
                     lock.push_str("[3/5] Docker image build prosesi başladılır (Sürətli: Docker keşi istifadə olunur)...\n");
                 }
                 update_logs_helper(&db_clone, &deploy_id, &lock).await;
+            }
+
+            let mut docker_env_instructions = String::new();
+            if let Some(ref env_vars_str) = app.env_vars {
+                for line in env_vars_str.lines() {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() || trimmed.starts_with('#') {
+                        continue;
+                    }
+                    if let Some(eq_idx) = trimmed.find('=') {
+                        let k = trimmed[..eq_idx].trim();
+                        let v = trimmed[eq_idx + 1..].trim();
+                        let escaped_v = v.replace('\\', "\\\\").replace('"', "\\\"");
+                        docker_env_instructions.push_str(&format!("ENV {}=\\\"{}\\\"\\\\n", k, escaped_v));
+                    }
+                }
             }
 
             let build_pack_type = app.build_pack_type.clone().unwrap_or_else(|| "dockerfile".to_string());
@@ -367,34 +387,34 @@ pub async fn trigger_deployment_impl(
                     "cd /data/masterdeploy/apps/{} && \
                      if [ -f package.json ]; then \
                          echo 'Node.js project detected.'; \
-                         BUILD_CMD=\"{}\"; [ -z \"$BUILD_CMD\" ] && ( grep -q '\"build\":' package.json && BUILD_CMD=\"npm install && npm run build\" || BUILD_CMD=\"npm install\" ); \
-                         RUN_CMD=\"{}\"; [ -z \"$RUN_CMD\" ] && RUN_CMD=\"npm start\"; \
-                         echo -e \"FROM node:20-alpine AS builder\\nWORKDIR /app\\nCOPY . .\\nRUN $BUILD_CMD\\nFROM node:20-alpine\\nWORKDIR /app\\nCOPY --from=builder /app .\\nEXPOSE {}\\nCMD $RUN_CMD\" > Dockerfile; \
+                         BUILD_CMD=\"{}\"; if [ -z \"$BUILD_CMD\" ]; then if grep -q '\"build\":' package.json; then BUILD_CMD=\"npm install && npm run build\"; else BUILD_CMD=\"npm install\"; fi; fi; \
+                         RUN_CMD=\"{}\"; if [ -z \"$RUN_CMD\" ]; then RUN_CMD=\"npm start\"; fi; \
+                         echo -e \"FROM node:20-alpine AS builder\\nWORKDIR /app\\n{}COPY . .\\nRUN $BUILD_CMD\\nFROM node:20-alpine\\nWORKDIR /app\\n{}COPY --from=builder /app .\\nEXPOSE {}\\nCMD $RUN_CMD\" > Dockerfile; \
                      elif [ -f requirements.txt ]; then \
                          echo 'Python project detected.'; \
-                         BUILD_CMD=\"{}\"; [ -z \"$BUILD_CMD\" ] && BUILD_CMD=\"pip install --no-cache-dir -r requirements.txt\"; \
-                         RUN_CMD=\"{}\"; [ -z \"$RUN_CMD\" ] && ( [ -f main.py ] && RUN_CMD=\"python main.py\" || RUN_CMD=\"python app.py\" ); \
-                         echo -e \"FROM python:3.11-slim\\nWORKDIR /app\\nCOPY . .\\nRUN $BUILD_CMD\\nEXPOSE {}\\nCMD $RUN_CMD\" > Dockerfile; \
+                         BUILD_CMD=\"{}\"; if [ -z \"$BUILD_CMD\" ]; then BUILD_CMD=\"pip install --no-cache-dir -r requirements.txt\"; fi; \
+                         RUN_CMD=\"{}\"; if [ -z \"$RUN_CMD\" ]; then if [ -f main.py ]; then RUN_CMD=\"python main.py\"; else RUN_CMD=\"python app.py\"; fi; fi; \
+                         echo -e \"FROM python:3.11-slim\\nWORKDIR /app\\n{}COPY . .\\nRUN $BUILD_CMD\\nEXPOSE {}\\nCMD $RUN_CMD\" > Dockerfile; \
                      elif [ -f go.mod ]; then \
                          echo 'Go project detected.'; \
-                         BUILD_CMD=\"{}\"; [ -z \"$BUILD_CMD\" ] && BUILD_CMD=\"go build -o main .\"; \
-                         RUN_CMD=\"{}\"; [ -z \"$RUN_CMD\" ] && RUN_CMD=\"./main\"; \
-                         echo -e \"FROM golang:1.21-alpine AS builder\\nWORKDIR /app\\nCOPY . .\\nRUN $BUILD_CMD\\nFROM alpine:latest\\nWORKDIR /app\\nCOPY --from=builder /app/main .\\nEXPOSE {}\\nCMD $RUN_CMD\" > Dockerfile; \
+                         BUILD_CMD=\"{}\"; if [ -z \"$BUILD_CMD\" ]; then BUILD_CMD=\"go build -o main .\"; fi; \
+                         RUN_CMD=\"{}\"; if [ -z \"$RUN_CMD\" ]; then RUN_CMD=\"./main\"; fi; \
+                         echo -e \"FROM golang:1.21-alpine AS builder\\nWORKDIR /app\\n{}COPY . .\\nRUN $BUILD_CMD\\nFROM alpine:latest\\nWORKDIR /app\\n{}COPY --from=builder /app/main .\\nEXPOSE {}\\nCMD $RUN_CMD\" > Dockerfile; \
                      elif [ -f Cargo.toml ]; then \
                          echo 'Rust project detected.'; \
-                         BUILD_CMD=\"{}\"; [ -z \"$BUILD_CMD\" ] && BUILD_CMD=\"cargo build --release -j 1\"; \
-                         RUN_CMD=\"{}\"; [ -z \"$RUN_CMD\" ] && RUN_CMD=\"./target/release/$(sed -n 's/^name *= *\"\\(.*\\)\"/\\1/p' Cargo.toml | head -n 1)\"; \
+                         BUILD_CMD=\"{}\"; if [ -z \"$BUILD_CMD\" ]; then BUILD_CMD=\"cargo build --release -j 1\"; fi; \
+                         RUN_CMD=\"{}\"; if [ -z \"$RUN_CMD\" ]; then RUN_CMD=\"./target/release/$(sed -n 's/^name *= *\"\\(.*\\)\"/\\1/p' Cargo.toml | head -n 1)\"; fi; \
                          rm -f Cargo.lock; \
-                         echo -e \"FROM rust:1-slim AS builder\\nRUN apt-get update && apt-get install -y pkg-config libssl-dev\\nWORKDIR /app\\nCOPY . .\\nRUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/app/target $BUILD_CMD && cp $RUN_CMD ./app_bin\\nFROM debian:bookworm-slim\\nRUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*\\nWORKDIR /app\\nCOPY --from=builder /app/app_bin ./app_bin\\nEXPOSE {}\\nCMD [\\\"./app_bin\\\"]\" > Dockerfile; \
+                         echo -e \"FROM rust:1-slim AS builder\\nRUN apt-get update && apt-get install -y pkg-config libssl-dev\\nWORKDIR /app\\n{}COPY . .\\nRUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,target=/app/target $BUILD_CMD && cp $RUN_CMD ./app_bin\\nFROM debian:bookworm-slim\\nRUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*\\nWORKDIR /app\\n{}COPY --from=builder /app/app_bin ./app_bin\\nEXPOSE {}\\nCMD [\\\"./app_bin\\\"]\" > Dockerfile; \
                      else \
                          echo 'Fallback static/generic server.'; \
                          echo -e \"FROM alpine:latest\\nRUN apk add --no-cache curl\\nCMD [\\\"sleep\\\", \\\"3600\\\"]\" > Dockerfile; \
                      fi && DOCKER_BUILDKIT=0 sudo docker build {} -t {}:latest .",
                     app.name, 
-                    bc, rc, app.port,
-                    bc, rc, app.port,
-                    bc, rc, app.port,
-                    bc, rc, app.port,
+                    bc, rc, docker_env_instructions, docker_env_instructions, app.port,
+                    bc, rc, docker_env_instructions, app.port,
+                    bc, rc, docker_env_instructions, docker_env_instructions, app.port,
+                    bc, rc, docker_env_instructions, docker_env_instructions, app.port,
                     if no_cache { "--no-cache" } else { "" },
                     app.name
                 )
@@ -510,20 +530,97 @@ pub async fn trigger_deployment_impl(
         
         match run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), run_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await {
             Ok(true) => {
-                let inspect_new_cmd = format!(
-                    "sudo docker inspect --format 'SHA: {{{{.Image}}}} | Yaradılma: {{{{.Created}}}} | Başlama: {{{{.State.StartedAt}}}} | Digest: {{{{range .RepoDigests}}}}{{{{.}}}}{{{{end}}}}' {} 2>/dev/null || echo 'Tapılmadı'",
-                    app.name
-                );
-                let new_image_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
-                let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_new_cmd, db_clone.clone(), String::new(), new_image_logs.clone()).await;
-                let new_image_info = new_image_logs.lock().await.trim().to_string();
-                
+                // ========================================================
+                // 🛡️ RENDER-STYLE CRASH GUARD & POST-DEPLOY HEALTHCHECK
+                // ========================================================
                 {
                     let mut lock = logs.lock().await;
-                    if !new_image_info.is_empty() && new_image_info != "Tapılmadı" {
-                        lock.push_str(&format!("[INFO] Qurulan yeni versiya məlumatı:\n  {}\n", new_image_info));
+                    lock.push_str("[HEALTHCHECK] ⏳ Konteynerin başlanğıc vəziyyəti və sağlamlığı yoxlanılır (Crash Guard)...\n");
+                    update_logs_helper(&db_clone, &deploy_id, &lock).await;
+                }
+                
+                // Konteyner daxilindəki tətbiqin (Node.js/Python/Go) ayağa qalxması üçün 4 saniyə gözləyirik
+                tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
+
+                // 1. Konteynerin işləyib-işləmədiyini (və ya dərhal çöküb-çökmədiyini) yoxlayırıq
+                let inspect_state_cmd = format!(
+                    "sudo docker inspect --format '{{{{.State.Status}}}}|{{{{.State.Running}}}}|{{{{.State.ExitCode}}}}|{{{{.State.Error}}}}' {} 2>/dev/null || echo 'NOT_FOUND'",
+                    app.name
+                );
+                let state_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+                let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), inspect_state_cmd, db_clone.clone(), String::new(), state_logs.clone()).await;
+                let state_str = state_logs.lock().await.trim().to_string();
+
+                let mut is_running = false;
+                let mut exit_code = "0".to_string();
+                let mut status_val = "unknown".to_string();
+
+                if !state_str.is_empty() && state_str != "NOT_FOUND" {
+                    let parts: Vec<&str> = state_str.split('|').collect();
+                    if parts.len() >= 3 {
+                        status_val = parts[0].to_string();
+                        is_running = parts[1] == "true";
+                        exit_code = parts[2].to_string();
                     }
-                    lock.push_str("[SUCCESS] Tətbiq uğurla deploy olundu! 🎉\n");
+                }
+
+                if !is_running || exit_code != "0" {
+                    // ❌ KONTEYNER ÇÖKÜB / CRASHED!
+                    // Konteynerin daxili xəta loqlarını dərhal çəkirik
+                    let app_crash_logs_cmd = format!("sudo docker logs --tail 40 {} 2>&1", app.name);
+                    let crash_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+                    let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), app_crash_logs_cmd, db_clone.clone(), String::new(), crash_logs.clone()).await;
+                    let crash_output = crash_logs.lock().await.trim().to_string();
+
+                    {
+                        let mut lock = logs.lock().await;
+                        lock.push_str("\n============================================================\n");
+                        lock.push_str(&format!("❌ [CRASH GUARD] Tətbiq konteyneri işə düşən kimi dayandı! (Status: {}, Exit Code: {})\n", status_val, exit_code));
+                        lock.push_str("============================================================\n");
+                        lock.push_str("📜 [TƏTBİQİN DAXİLİ XƏTA LOQU]:\n");
+                        lock.push_str(&crash_output);
+                        lock.push_str("\n------------------------------------------------------------\n");
+                        lock.push_str("💡 [TÖVSİYƏ]: Tətbiq mühit dəyişənləri (məs: DATABASE_URL, PORT) çatışmadığı və ya kod xətası səbəbindən işə düşə bilmədi.\n");
+                        lock.push_str("Zəhmət olmasa layihə sazlamalarında tələb olunan mühit dəyişənlərini əlavə edin.\n");
+                        lock.push_str("============================================================\n\n");
+                        update_logs_helper(&db_clone, &deploy_id, &lock).await;
+                    }
+
+                    // Əgər əvvəlki işlək versiya varsa, avtomatik Rollback icra edirik
+                    if !old_image_id.is_empty() && old_image_id != "Tapılmadı" {
+                        let mut lock = logs.lock().await;
+                        lock.push_str(&format!("[ROLLBACK] Əvvəlki işlək versiyaya (SHA: {}) geri qayıdış başladılır...\n", old_image_id));
+                        update_logs_helper(&db_clone, &deploy_id, &lock).await;
+
+                        let rollback_cmd = format!(
+                            "sudo docker rm -f {} || true && sudo docker run -d --name {} --restart always -p {}:{} {} {}",
+                            app.name, app.name, app.port, app.port, env_args, old_image_id
+                        );
+                        let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), rollback_cmd, db_clone.clone(), deploy_id.clone(), logs.clone()).await;
+                    }
+
+                    let _ = std::fs::remove_file(&temp_key_path);
+                    finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+                    return;
+                }
+
+                // 2. Konteyner sağdır, indi HTTP port cavabını yoxlayırıq (5 saniyəlik grace period)
+                let http_check_cmd = format!(
+                    "for i in 1 2 3 4 5; do CODE=$(curl -s -o /dev/null -w '%{{http_code}}' --max-time 2 http://localhost:{}/ 2>/dev/null || echo '000'); if [ \"$CODE\" != '000' ] && [ -n \"$CODE\" ]; then echo \"$CODE\"; exit 0; fi; sleep 1; done; echo '000'",
+                    app.port
+                );
+                let http_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+                let _ = run_ssh_cmd_stream_helper(temp_key_path.clone(), server.ssh_user.clone(), server.ip.clone(), http_check_cmd, db_clone.clone(), String::new(), http_logs.clone()).await;
+                let http_code = http_logs.lock().await.lines().last().unwrap_or("000").trim().to_string();
+
+                {
+                    let mut lock = logs.lock().await;
+                    if http_code != "000" && !http_code.is_empty() {
+                        lock.push_str(&format!("✅ [HEALTHCHECK] Tətbiq aktivdir və cavab verir (Port: {}, HTTP Status: {})!\n", app.port, http_code));
+                    } else {
+                        lock.push_str(&format!("ℹ️ [HEALTHCHECK] Konteyner işləkdir (Status: {}). Port: {}\n", status_val, app.port));
+                    }
+                    lock.push_str("[SUCCESS] Tətbiq uğurla deploy olundu və yayımdadır! 🎉\n");
                     lock.push_str("[CLEANUP] Köhnə Docker image-ları təmizlənir...\n");
                     update_logs_helper(&db_clone, &deploy_id, &lock).await;
                 }
@@ -815,3 +912,266 @@ pub async fn run_ssh_cmd_stream_helper(
     let exit_status = child.wait().await?;
     Ok(exit_status.success())
 }
+
+fn mask_conn_url(url: &str) -> String {
+    if let Some(proto_end) = url.find("://") {
+        let proto = &url[..proto_end + 3];
+        let rest = &url[proto_end + 3..];
+        if let Some(at_idx) = rest.find('@') {
+            let auth = &rest[..at_idx];
+            let after_at = &rest[at_idx..];
+            let masked_auth = if let Some(colon_idx) = auth.find(':') {
+                format!("{}:******", &auth[..colon_idx])
+            } else {
+                "******".to_string()
+            };
+            return format!("{}{}{}", proto, masked_auth, after_at);
+        }
+    }
+    url.to_string()
+}
+
+fn extract_host_port(url_or_conn: &str, default_port: u16) -> Option<(String, u16)> {
+    let s = url_or_conn.trim();
+    if let Some(proto_end) = s.find("://") {
+        let after_proto = &s[proto_end + 3..];
+        let auth_host = after_proto.split('/').next().unwrap_or(after_proto);
+        let auth_host = auth_host.split('?').next().unwrap_or(auth_host);
+        let host_port = if let Some(at_idx) = auth_host.rfind('@') {
+            &auth_host[at_idx + 1..]
+        } else {
+            auth_host
+        };
+        if let Some(colon_idx) = host_port.rfind(':') {
+            let host = &host_port[..colon_idx];
+            let port_str = &host_port[colon_idx + 1..];
+            if let Ok(p) = port_str.parse::<u16>() {
+                return Some((host.to_string(), p));
+            }
+        } else if !host_port.is_empty() {
+            return Some((host_port.to_string(), default_port));
+        }
+    } else if let Some(colon_idx) = s.rfind(':') {
+        let host = &s[..colon_idx];
+        let port_str = &s[colon_idx + 1..];
+        if let Ok(p) = port_str.parse::<u16>() {
+            return Some((host.to_string(), p));
+        }
+    }
+    None
+}
+
+pub async fn perform_preflight_env_and_service_checks(
+    app: &Application,
+    server: &Server,
+    temp_key_path: &str,
+    db_clone: &SqlitePool,
+    deploy_id: &str,
+    logs: &std::sync::Arc<tokio::sync::Mutex<String>>,
+    is_git: bool,
+) {
+    let mut report = String::new();
+    report.push_str("\n============================================================\n");
+    report.push_str("🔍 [PRE-FLIGHT] Mühit Dəyişənləri və Qoşulma Yoxlanışı\n");
+    report.push_str("============================================================\n");
+
+    let mut configured_keys: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut db_targets: Vec<(String, String, u16)> = Vec::new();
+
+    if let Some(ref env_vars_str) = app.env_vars {
+        for line in env_vars_str.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with('#') {
+                continue;
+            }
+            if let Some(eq_idx) = trimmed.find('=') {
+                let k = trimmed[..eq_idx].trim().to_string();
+                let v = trimmed[eq_idx + 1..].trim().to_string();
+                configured_keys.insert(k, v);
+            }
+        }
+    }
+
+    if !configured_keys.contains_key("PORT") {
+        configured_keys.insert("PORT".to_string(), app.port.to_string());
+    }
+
+    report.push_str(&format!("📦 Layihə üçün təyin edilmiş mühit dəyişənləri (Cəmi: {}):\n", configured_keys.len()));
+    let mut sorted_keys: Vec<String> = configured_keys.keys().cloned().collect();
+    sorted_keys.sort();
+
+    for k in &sorted_keys {
+        let val = &configured_keys[k];
+        let upper_k = k.to_uppercase();
+        let is_sensitive = upper_k.contains("PASS") 
+            || upper_k.contains("SECRET") 
+            || upper_k.contains("KEY") 
+            || upper_k.contains("TOKEN") 
+            || upper_k.contains("AUTH")
+            || upper_k.contains("CREDENTIAL");
+
+        let display_val = if val.contains("://") && val.contains('@') {
+            mask_conn_url(val)
+        } else if is_sensitive {
+            if val.len() > 6 {
+                format!("{}***{}", &val[..2], &val[val.len()-2..])
+            } else {
+                "******".to_string()
+            }
+        } else if val.len() > 60 {
+            format!("{}...", &val[..60])
+        } else {
+            val.clone()
+        };
+
+        report.push_str(&format!("  ├── 🔑 {} = {} (✅ Təyin olunub)\n", k, display_val));
+
+        if upper_k.contains("DATABASE_URL") || upper_k.contains("POSTGRES_URL") || upper_k.contains("DB_URL") || upper_k.contains("POSTGRESQL_URL") {
+            if let Some((h, p)) = extract_host_port(val, 5432) {
+                db_targets.push(("PostgreSQL / Verilənlər Bazası".to_string(), h, p));
+            }
+        } else if upper_k.contains("MYSQL_URL") {
+            if let Some((h, p)) = extract_host_port(val, 3306) {
+                db_targets.push(("MySQL Verilənlər Bazası".to_string(), h, p));
+            }
+        } else if upper_k.contains("REDIS_URL") {
+            if let Some((h, p)) = extract_host_port(val, 6379) {
+                db_targets.push(("Redis Keş Xidməti".to_string(), h, p));
+            }
+        } else if upper_k.contains("MONGO_URL") || upper_k.contains("MONGODB_URL") {
+            if let Some((h, p)) = extract_host_port(val, 27017) {
+                db_targets.push(("MongoDB Verilənlər Bazası".to_string(), h, p));
+            }
+        }
+    }
+
+    let db_host_opt = configured_keys.get("DB_HOST").or_else(|| configured_keys.get("POSTGRES_HOST")).or_else(|| configured_keys.get("DATABASE_HOST"));
+    if let Some(host) = db_host_opt {
+        let port = configured_keys.get("DB_PORT").or_else(|| configured_keys.get("POSTGRES_PORT"))
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(5432);
+        if !db_targets.iter().any(|(_, h, p)| h == host && *p == port) {
+            db_targets.push(("Verilənlər Bazası (Host:Port)".to_string(), host.clone(), port));
+        }
+    }
+
+    if is_git {
+        let check_example_cmd = format!(
+            "if [ -f \"/data/masterdeploy/apps/{}/.env.example\" ]; then cat \"/data/masterdeploy/apps/{}/.env.example\"; \
+             elif [ -f \"/data/masterdeploy/apps/{}/.env.sample\" ]; then cat \"/data/masterdeploy/apps/{}/.env.sample\"; \
+             elif [ -f \"/data/masterdeploy/apps/{}/.env.template\" ]; then cat \"/data/masterdeploy/apps/{}/.env.template\"; fi",
+            app.name, app.name, app.name, app.name, app.name, app.name
+        );
+        let sample_output_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+        let _ = run_ssh_cmd_stream_helper(
+            temp_key_path.to_string(),
+            server.ssh_user.clone(),
+            server.ip.clone(),
+            check_example_cmd,
+            db_clone.clone(),
+            String::new(),
+            sample_output_logs.clone(),
+        ).await;
+
+        let sample_content = sample_output_logs.lock().await.clone();
+        if !sample_content.trim().is_empty() {
+            let mut missing_keys: Vec<String> = Vec::new();
+            for line in sample_content.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                let k = if let Some(idx) = trimmed.find('=') {
+                    trimmed[..idx].trim().to_string()
+                } else {
+                    trimmed.to_string()
+                };
+                if !k.is_empty() && !configured_keys.contains_key(&k) {
+                    missing_keys.push(k);
+                }
+            }
+
+            if !missing_keys.is_empty() {
+                report.push_str("\n  ⚠️ [ENV XƏBƏRDARLIQ] Layihənin .env.example faylında tələb olunan aşağıdakı dəyişənlər sazlamalarda tapılmadı:\n");
+                for mk in missing_keys {
+                    report.push_str(&format!("  │   └── ⚠️ {} (Təyin olunmayıb! Layihə tələb edirsə, sazlamalara əlavə edin)\n", mk));
+                }
+            } else {
+                report.push_str("  ├── ✅ [ENV ŞABLON] .env.example faylında tələb olunan bütün dəyişənlər təmin edilib.\n");
+            }
+        }
+
+        // KOD ANALİZİ: Layihə asılılıqlarında verilənlər bazası tələb olunurmu?
+        let code_check_cmd = format!(
+            "cd /data/masterdeploy/apps/{} && \
+             if [ -f package.json ] && grep -E -q '\"(pg|mysql2|prisma|typeorm|mongoose|sequelize)\"' package.json; then echo '===HAS_DB_DEP:Node.js==='; \
+             elif [ -f requirements.txt ] && grep -E -i -q '(psycopg2|asyncpg|sqlalchemy|mysqlclient|pymongo)' requirements.txt; then echo '===HAS_DB_DEP:Python==='; \
+             elif [ -f Cargo.toml ] && grep -E -q '(sqlx|diesel|tokio-postgres)' Cargo.toml; then echo '===HAS_DB_DEP:Rust==='; \
+             elif [ -f go.mod ] && grep -E -q '(lib/pq|gorm|pgx)' go.mod; then echo '===HAS_DB_DEP:Go==='; fi",
+            app.name
+        );
+        let code_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+        let _ = run_ssh_cmd_stream_helper(
+            temp_key_path.to_string(),
+            server.ssh_user.clone(),
+            server.ip.clone(),
+            code_check_cmd,
+            db_clone.clone(),
+            String::new(),
+            code_logs.clone(),
+        ).await;
+
+        let code_out = code_logs.lock().await.clone();
+        if code_out.contains("===HAS_DB_DEP:") && db_targets.is_empty() {
+            report.push_str("\n  ⚠️ [KOD ANALİZİ XƏBƏRDARLIĞI] Layihə asılılıqlarında (package.json/requirements) Verilənlər Bazası kitabxanası ('pg' və s.) aşkarlandı, lakin sazlamalarda heç bir 'DATABASE_URL' təyin edilməyib!\n");
+            report.push_str("  │   💡 Qeyd: Əgər tətbiq mərkəzi PostgreSQL bazası tələb edirsə, sazlamalara mütləq DATABASE_URL əlavə edin!\n");
+        }
+    }
+
+    if db_targets.is_empty() {
+        report.push_str("\n  ℹ️ [QOŞULMA YOXLANIŞI] Konfiqurasiyada xarici baza ünvanı (DATABASE_URL və s.) aşkar edilmədi.\n");
+    } else {
+        report.push_str("\n🔌 [ŞƏBƏKƏ VƏ BAZA YOXLANIŞI] Aşkar edilmiş xidmətlərin əlçatanlığı yoxlanılır:\n");
+        for (label, host, port) in db_targets {
+            report.push_str(&format!("  ├── 🌐 {} yoxlanılır: {}:{} ...\n", label, host, port));
+
+            if host == "localhost" || host == "127.0.0.1" {
+                report.push_str("  │   ⚠️ [DİQQƏT] Host 'localhost' olaraq təyin edilib. Docker konteyneri daxilindən ana serverin (host) bazasına qoşulmaq üçün 'host.docker.internal' və ya serverin xarici IP-si tələb oluna bilər!\n");
+            }
+
+            let test_cmd = format!(
+                "python3 -c \"import socket; s=socket.socket(); s.settimeout(4); res = s.connect_ex(('{}', {})); print('===CONN_OK===' if res==0 else f'===CONN_ERR_{{res}}==='); s.close()\" 2>/dev/null || \
+                 (timeout 4 bash -c \"cat < /dev/null > /dev/tcp/{}/{}\" 2>/dev/null && echo \"===CONN_OK===\" || echo \"===CONN_FAIL===\")",
+                host, port, host, port
+            );
+
+            let ping_logs = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
+            let _ = run_ssh_cmd_stream_helper(
+                temp_key_path.to_string(),
+                server.ssh_user.clone(),
+                server.ip.clone(),
+                test_cmd,
+                db_clone.clone(),
+                String::new(),
+                ping_logs.clone(),
+            ).await;
+
+            let out = ping_logs.lock().await.clone();
+            if out.contains("===CONN_OK===") {
+                report.push_str(&format!("  │   ✅ UĞURLU: '{}:{}' aktivdir və cavab verir! Qoşulma təsdiqləndi.\n", host, port));
+            } else {
+                report.push_str(&format!("  │   ❌ QOŞULMA XƏTASI: '{}:{}' ünvanına qoşulmaq mümkün olmadı (Port qapalıdır və ya cavab vermir)!\n", host, port));
+                report.push_str("  │   💡 Tövsiyə: Verilənlər bazası xidmətinin işləkliyini, port icazəsini və firewall (UFW/Cloud Security List) qaydalarını yoxlayın.\n");
+            }
+        }
+    }
+
+    report.push_str("============================================================\n\n");
+
+    {
+        let mut lock = logs.lock().await;
+        lock.push_str(&report);
+        update_logs_helper(db_clone, deploy_id, &lock).await;
+    }
+}
+
