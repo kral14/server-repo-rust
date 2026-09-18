@@ -182,6 +182,143 @@ function applySavedPosition(id, card) {
     setTimeout(() => clampWindowToScreen(card), 10);
 }
 
+// =========================================================================
+// Window Zoom / Scale Management (Desktop App Experience)
+// =========================================================================
+function getSavedWindowZoom(backdropId) {
+    const saved = localStorage.getItem(`win_zoom_${backdropId}`);
+    if (saved) {
+        const val = parseInt(saved, 10);
+        if (!isNaN(val) && val >= 50 && val <= 200) {
+            return val;
+        }
+    }
+    return 100;
+}
+
+function applySavedZoom(backdropId, card) {
+    if (!card) {
+        const backdrop = document.getElementById(backdropId);
+        if (!backdrop) return;
+        card = backdrop.querySelector('.modal-card');
+    }
+    if (!card) return;
+    const zoomVal = getSavedWindowZoom(backdropId);
+    applyWindowZoom(backdropId, card, zoomVal, false);
+}
+
+function applyWindowZoom(backdropId, card, zoomVal, saveToStorage = false) {
+    zoomVal = Math.min(Math.max(parseInt(zoomVal, 10) || 100, 50), 200);
+    if (!card) {
+        const backdrop = document.getElementById(backdropId);
+        if (!backdrop) return;
+        card = backdrop.querySelector('.modal-card');
+    }
+    if (!card) return;
+
+    const winBody = card.querySelector('.win-body');
+    if (winBody) {
+        winBody.style.zoom = (zoomVal / 100);
+    }
+
+    // UI indikatorlarını yenilə
+    const label = card.querySelector('.win-zoom-label');
+    if (label) label.textContent = `${zoomVal}%`;
+
+    const badge = card.querySelector('.win-zoom-pop-badge');
+    if (badge) badge.textContent = `${zoomVal}%`;
+
+    const slider = card.querySelector('.win-zoom-slider');
+    if (slider) slider.value = zoomVal;
+
+    const manualInput = card.querySelector('.win-zoom-manual-input');
+    if (manualInput) manualInput.value = zoomVal;
+
+    const presets = card.querySelectorAll('.win-zoom-preset-btn');
+    presets.forEach(btn => {
+        btn.classList.toggle('active', parseInt(btn.dataset.zoom, 10) === zoomVal);
+    });
+
+    if (saveToStorage) {
+        localStorage.setItem(`win_zoom_${backdropId}`, zoomVal.toString());
+        if (typeof showToast === 'function') {
+            showToast(`Görünüş miqyası ${zoomVal}% olaraq yadda saxlanıldı`, 'success');
+        }
+    }
+}
+
+function toggleWindowZoomMenu(backdropId, event) {
+    if (event) event.stopPropagation();
+    // Digər pəncərələrin menyularını bağla
+    document.querySelectorAll('.win-zoom-popover.open').forEach(el => {
+        if (el.id !== `win-zoom-pop-${backdropId}`) {
+            el.classList.remove('open');
+        }
+    });
+
+    const pop = document.getElementById(`win-zoom-pop-${backdropId}`);
+    if (pop) {
+        pop.classList.toggle('open');
+    }
+}
+
+function closeAllWindowZoomMenus() {
+    document.querySelectorAll('.win-zoom-popover.open').forEach(el => el.classList.remove('open'));
+}
+
+function setWindowZoomPreset(backdropId, zoomVal) {
+    const backdrop = document.getElementById(backdropId);
+    const card = backdrop ? backdrop.querySelector('.modal-card') : null;
+    applyWindowZoom(backdropId, card, zoomVal, false);
+}
+
+function onWindowZoomSliderChange(backdropId, zoomVal) {
+    const backdrop = document.getElementById(backdropId);
+    const card = backdrop ? backdrop.querySelector('.modal-card') : null;
+    applyWindowZoom(backdropId, card, zoomVal, false);
+}
+
+function onWindowZoomManualChange(backdropId, zoomVal) {
+    const backdrop = document.getElementById(backdropId);
+    const card = backdrop ? backdrop.querySelector('.modal-card') : null;
+    applyWindowZoom(backdropId, card, zoomVal, false);
+}
+
+function saveCurrentWindowZoom(backdropId) {
+    const backdrop = document.getElementById(backdropId);
+    const card = backdrop ? backdrop.querySelector('.modal-card') : null;
+    if (!card) return;
+    const manualInput = card.querySelector('.win-zoom-manual-input');
+    const zoomVal = manualInput ? parseInt(manualInput.value, 10) : getSavedWindowZoom(backdropId);
+    applyWindowZoom(backdropId, card, zoomVal, true);
+    const pop = document.getElementById(`win-zoom-pop-${backdropId}`);
+    if (pop) pop.classList.remove('open');
+}
+
+function resetWindowZoom(backdropId) {
+    const backdrop = document.getElementById(backdropId);
+    const card = backdrop ? backdrop.querySelector('.modal-card') : null;
+    applyWindowZoom(backdropId, card, 100, true);
+    const pop = document.getElementById(`win-zoom-pop-${backdropId}`);
+    if (pop) pop.classList.remove('open');
+}
+
+// Qlobal funksiyaları təyin et
+window.toggleWindowZoomMenu = toggleWindowZoomMenu;
+window.closeAllWindowZoomMenus = closeAllWindowZoomMenus;
+window.setWindowZoomPreset = setWindowZoomPreset;
+window.onWindowZoomSliderChange = onWindowZoomSliderChange;
+window.onWindowZoomManualChange = onWindowZoomManualChange;
+window.saveCurrentWindowZoom = saveCurrentWindowZoom;
+window.resetWindowZoom = resetWindowZoom;
+
+// Sənəddə kənara klikləyəndə popover-ləri bağla
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.win-btn-zoom-container')) {
+        closeAllWindowZoomMenus();
+    }
+});
+
 // Səhifə yenilənəndə bütün açıq və kiçildilmiş pəncərələrin statusunu yadda saxla
 function saveActiveWindowsState() {
     try {
@@ -282,7 +419,50 @@ function initializeWindow(backdropId, titleText) {
                 <div class="neuro-logo"></div>
                 <span class="win-title-text">${titleText}</span>
             </div>
-            <div class="window-controls" style="display: flex; gap: 12px; align-items: center;">
+            <div class="window-controls" style="display: flex; gap: 8px; align-items: center;">
+                <!-- Window Zoom / Scale Control -->
+                <div class="win-btn-zoom-container">
+                    <button type="button" class="win-btn-zoom" title="Görünüş Miqyası (Zoom)" onclick="toggleWindowZoomMenu('${backdropId}', event)">
+                        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                        <span class="win-zoom-label">100%</span>
+                    </button>
+                    <div class="win-zoom-popover" id="win-zoom-pop-${backdropId}" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
+                        <div class="win-zoom-pop-header">
+                            <span class="win-zoom-pop-title">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                Miqyas
+                            </span>
+                            <span class="win-zoom-pop-badge">100%</span>
+                        </div>
+                        <div class="win-zoom-presets-grid">
+                            <button type="button" class="win-zoom-preset-btn" data-zoom="75" onclick="setWindowZoomPreset('${backdropId}', 75)">75%</button>
+                            <button type="button" class="win-zoom-preset-btn" data-zoom="85" onclick="setWindowZoomPreset('${backdropId}', 85)">85%</button>
+                            <button type="button" class="win-zoom-preset-btn" data-zoom="90" onclick="setWindowZoomPreset('${backdropId}', 90)">90%</button>
+                            <button type="button" class="win-zoom-preset-btn" data-zoom="100" onclick="setWindowZoomPreset('${backdropId}', 100)">100%</button>
+                            <button type="button" class="win-zoom-preset-btn" data-zoom="110" onclick="setWindowZoomPreset('${backdropId}', 110)">110%</button>
+                            <button type="button" class="win-zoom-preset-btn" data-zoom="125" onclick="setWindowZoomPreset('${backdropId}', 125)">125%</button>
+                        </div>
+                        <div class="win-zoom-input-row">
+                            <input type="range" class="win-zoom-slider" min="50" max="150" value="100" oninput="onWindowZoomSliderChange('${backdropId}', this.value)" onmousedown="event.stopPropagation()">
+                            <div class="win-zoom-manual-wrap" onmousedown="event.stopPropagation()">
+                                <input type="number" class="win-zoom-manual-input" min="50" max="200" value="100" onchange="onWindowZoomManualChange('${backdropId}', this.value)" onmousedown="event.stopPropagation()">
+                                <span class="win-zoom-manual-unit">%</span>
+                            </div>
+                        </div>
+                        <div class="win-zoom-actions">
+                            <button type="button" class="win-zoom-btn-save" onclick="saveCurrentWindowZoom('${backdropId}')">
+                                💾 Yadda Saxla
+                            </button>
+                            <button type="button" class="win-zoom-btn-reset" onclick="resetWindowZoom('${backdropId}')" title="100%-ə qaytar">
+                                ↺ Sıfırla
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <button class="win-btn-min" title="Kiçilt"></button>
                 <div class="win-btn-max-container">
                     <button class="win-btn-max" title="Böyüt"></button>
@@ -325,6 +505,7 @@ function initializeWindow(backdropId, titleText) {
     `;
 
     card.querySelector('.win-body').appendChild(existingContent);
+    applySavedZoom(backdropId, card);
 
     // Hide duplicate H2 titles in content
     const oldH2 = card.querySelector('.win-body h2');
@@ -350,13 +531,13 @@ function initializeWindow(backdropId, titleText) {
 
     // Double click to maximize/restore window
     header.addEventListener('dblclick', (e) => {
-        if (e.target.tagName === 'BUTTON') return;
+        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.win-zoom-popover')) return;
         maximizeWindow(backdropId);
     });
 
     header.addEventListener('mousedown', (e) => {
         bringToFront(backdropId);
-        if (e.target.tagName === 'BUTTON') return;
+        if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.win-zoom-popover') || e.target.closest('.window-controls')) return;
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
@@ -1047,14 +1228,12 @@ async function showModal(id) {
     const backdrop = document.getElementById(id);
     if (!backdrop) return;
 
-    backdrop.classList.add('active');
-    backdrop.style.display = 'flex';
-
     const name = windowNames[id] || '💻 Pəncərə';
     initializeWindow(id, name);
     const card = backdrop.querySelector('.modal-card');
     if (card) {
         applySavedPosition(id, card);
+        applySavedZoom(id, card);
         const curTop = parseInt(card.style.top, 10);
         if (isNaN(curTop) || curTop < 52) {
             card.style.top = '56px';
@@ -1064,6 +1243,9 @@ async function showModal(id) {
         setTimeout(() => cleanDuplicateWindowCloseButtons(card), 80);
         setTimeout(() => cleanDuplicateWindowCloseButtons(card), 300);
     }
+
+    backdrop.classList.add('active');
+    backdrop.style.display = 'flex';
 
     activeWindows[id] = true;
     delete minimizedWindows[id];
@@ -1256,16 +1438,30 @@ async function openDesktopWindow(tabId) {
         const card = document.createElement('div');
         card.className = 'modal-card desktop-tab-card';
 
-        // Geniş iş sahəsi ölçüləri
-        let initialW = Math.min(Math.max(window.innerWidth * 0.82, 720), 1200);
-        let initialH = Math.min(Math.max(window.innerHeight * 0.78, 520), 800);
-        if (tabId === 'dashboard') {
-            initialW = Math.min(Math.max(window.innerWidth * 0.70, 680), 920);
-            initialH = Math.min(Math.max(window.innerHeight * 0.68, 480), 620);
+        // Əvvəl saxlanmış ölçü və koordinatlar varsa, kart hələ ekrana düşməmiş təyin edirik (No flicker)
+        const savedPosRaw = localStorage.getItem(`win_pos_${winId}`);
+        let hasSavedDimensions = false;
+        if (savedPosRaw) {
+            try {
+                const pos = JSON.parse(savedPosRaw);
+                if (pos.width) { card.style.width = pos.width; hasSavedDimensions = true; }
+                if (pos.height) { card.style.height = pos.height; hasSavedDimensions = true; }
+                if (pos.top) card.style.top = pos.top;
+                if (pos.left) card.style.left = pos.left;
+            } catch (e) {}
         }
 
-        card.style.width = `${initialW}px`;
-        card.style.height = `${initialH}px`;
+        if (!hasSavedDimensions) {
+            // Geniş iş sahəsi ölçüləri
+            let initialW = Math.min(Math.max(window.innerWidth * 0.82, 720), 1200);
+            let initialH = Math.min(Math.max(window.innerHeight * 0.78, 520), 800);
+            if (tabId === 'dashboard') {
+                initialW = Math.min(Math.max(window.innerWidth * 0.70, 680), 920);
+                initialH = Math.min(Math.max(window.innerHeight * 0.68, 480), 620);
+            }
+            card.style.width = `${initialW}px`;
+            card.style.height = `${initialH}px`;
+        }
         card.style.minWidth = '480px';
         card.style.minHeight = '360px';
 

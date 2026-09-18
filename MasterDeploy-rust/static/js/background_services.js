@@ -233,8 +233,8 @@ async function loadMultiNodeTunnelsOverview(isSilent = false) {
                     ${hasTunnels ? srvTunnels.map(t => {
                         const isShared = t.tunnel_type === 'shared';
                         const isRunning = t.status === 'active' || t.status === 'running';
-                        const liveUrl = t.public_url || '';
                         const routes = Array.isArray(t.routes) ? t.routes : [];
+                        const liveUrl = (routes.length === 1 && routes[0].cloudflare_url) ? routes[0].cloudflare_url : (t.public_url || '');
                         const tNameLower = (t.name || '').toLowerCase();
 
                         return `
@@ -283,9 +283,10 @@ async function loadMultiNodeTunnelsOverview(isSilent = false) {
                                 ${routes.length > 0 ? `
                                     <div class="tunnel-routes-list" style="display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; padding-right: 2px;">
                                         ${routes.map(r => {
-                                            const primaryLink = r.cf_worker_url || r.cloudflare_url || '';
+                                            const mainCfLink = r.cloudflare_url || '';
                                             const backupLink = r.backup_cloudflare_url || '';
-                                            const searchKey = `${(r.app_name || '').toLowerCase()} ${r.target_port} ${primaryLink.toLowerCase()} ${backupLink.toLowerCase()} ${tNameLower} ${srvNameLower} ${srvIpLower}`;
+                                            const workerLink = r.cf_worker_url || '';
+                                            const searchKey = `${(r.app_name || '').toLowerCase()} ${r.target_port} ${mainCfLink.toLowerCase()} ${backupLink.toLowerCase()} ${workerLink.toLowerCase()} ${tNameLower} ${srvNameLower} ${srvIpLower}`;
 
                                             return `
                                             <div class="tunnel-app-row" data-search-key="${searchKey}" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 5px; padding: 4px 8px; font-size: 0.76rem; flex-wrap: wrap;">
@@ -296,17 +297,17 @@ async function loadMultiNodeTunnelsOverview(isSilent = false) {
                                                     <span style="color: #38bdf8; font-size: 0.7rem; font-family: monospace; background: rgba(56, 189, 248, 0.1); padding: 0 4px; border-radius: 3px;">:${r.target_port}</span>
                                                 </div>
 
-                                                <!-- Orta: Əsas və Ehtiyat Keçid Linkləri (Dual-Tunnel HA) -->
+                                                <!-- Orta: Əsas, Ehtiyat və Worker Keçid Linkləri -->
                                                 <div style="display: flex; align-items: center; gap: 6px; flex: 1; min-width: 280px; flex-wrap: wrap;">
-                                                    <!-- ƏSAS LİNK -->
-                                                    <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.35); border: 1px solid ${primaryLink ? 'rgba(0,210,255,0.2)' : 'rgba(234, 179, 8, 0.25)'}; border-radius: 4px; padding: 1px 6px; flex: 1; min-width: 200px;">
-                                                        <span style="width: 6px; height: 6px; border-radius: 50%; background: ${primaryLink ? '#4ade80' : '#eab308'}; box-shadow: 0 0 5px ${primaryLink ? '#4ade80' : '#eab308'}; flex-shrink: 0;"></span>
-                                                        <span style="color: #00d2ff; font-size: 0.64rem; font-weight: 700; flex-shrink: 0;">${r.cf_worker_url ? 'WORKER' : 'ƏSAS'}:</span>
-                                                        ${primaryLink ? `
-                                                            <a href="${primaryLink}" target="_blank" style="color: #38bdf8; font-size: 0.71rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${primaryLink}">
-                                                                ${primaryLink}
+                                                    <!-- ƏSAS TÜNEL LİNKİ -->
+                                                    <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.35); border: 1px solid ${mainCfLink ? 'rgba(0,210,255,0.25)' : 'rgba(234, 179, 8, 0.25)'}; border-radius: 4px; padding: 1px 6px; flex: 1; min-width: 180px;">
+                                                        <span style="width: 6px; height: 6px; border-radius: 50%; background: ${mainCfLink ? '#4ade80' : '#eab308'}; box-shadow: 0 0 5px ${mainCfLink ? '#4ade80' : '#eab308'}; flex-shrink: 0;"></span>
+                                                        <span style="color: #00d2ff; font-size: 0.64rem; font-weight: 700; flex-shrink: 0;">ƏSAS:</span>
+                                                        ${mainCfLink ? `
+                                                            <a href="${mainCfLink}" target="_blank" style="color: #38bdf8; font-size: 0.71rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${mainCfLink}">
+                                                                ${mainCfLink}
                                                             </a>
-                                                            <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${primaryLink}'); showToast('Əsas link kopyalandı!', 'info');" style="padding: 1px 4px; font-size: 0.62rem; border-radius: 3px; flex-shrink: 0;" title="Kopyala">
+                                                            <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${mainCfLink}'); showToast('Əsas tünel linki kopyalandı!', 'info');" style="padding: 1px 4px; font-size: 0.62rem; border-radius: 3px; flex-shrink: 0;" title="Kopyala">
                                                                 <i data-lucide="copy" style="width: 10px; height: 10px;"></i>
                                                             </button>
                                                         ` : `
@@ -314,21 +315,33 @@ async function loadMultiNodeTunnelsOverview(isSilent = false) {
                                                         `}
                                                     </div>
 
-                                                    <!-- EHTİYAT LİNK -->
-                                                    <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.25); border: 1px solid ${backupLink ? 'rgba(168, 85, 247, 0.25)' : 'rgba(255,255,255,0.06)'}; border-radius: 4px; padding: 1px 6px; flex: 1; min-width: 200px;">
-                                                        <span style="width: 6px; height: 6px; border-radius: 50%; background: ${backupLink ? '#c084fc' : '#64748b'}; box-shadow: 0 0 5px ${backupLink ? '#c084fc' : 'transparent'}; flex-shrink: 0;"></span>
+                                                    <!-- EHTİYAT TÜNEL LİNKİ -->
+                                                    ${backupLink ? `
+                                                    <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.25); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 4px; padding: 1px 6px; flex: 1; min-width: 180px;">
+                                                        <span style="width: 6px; height: 6px; border-radius: 50%; background: #c084fc; box-shadow: 0 0 5px #c084fc; flex-shrink: 0;"></span>
                                                         <span style="color: #c084fc; font-size: 0.64rem; font-weight: 700; flex-shrink: 0;">EHTİYAT:</span>
-                                                        ${backupLink ? `
-                                                            <a href="${backupLink}" target="_blank" style="color: #c084fc; font-size: 0.71rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${backupLink}">
-                                                                ${backupLink}
-                                                            </a>
-                                                            <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${backupLink}'); showToast('Ehtiyat link kopyalandı!', 'info');" style="padding: 1px 4px; font-size: 0.62rem; border-radius: 3px; flex-shrink: 0;" title="Kopyala">
-                                                                <i data-lucide="copy" style="width: 10px; height: 10px;"></i>
-                                                            </button>
-                                                        ` : `
-                                                            <span style="color: #94a3b8; font-size: 0.67rem; font-style: italic;">Standby hazırlanır...</span>
-                                                        `}
+                                                        <a href="${backupLink}" target="_blank" style="color: #c084fc; font-size: 0.71rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${backupLink}">
+                                                            ${backupLink}
+                                                        </a>
+                                                        <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${backupLink}'); showToast('Ehtiyat link kopyalandı!', 'info');" style="padding: 1px 4px; font-size: 0.62rem; border-radius: 3px; flex-shrink: 0;" title="Kopyala">
+                                                            <i data-lucide="copy" style="width: 10px; height: 10px;"></i>
+                                                        </button>
                                                     </div>
+                                                    ` : ''}
+
+                                                    <!-- WORKER LİNKİ (Varsa) -->
+                                                    ${workerLink ? `
+                                                    <div style="display: flex; align-items: center; gap: 4px; background: rgba(0,0,0,0.25); border: 1px solid rgba(52, 211, 153, 0.25); border-radius: 4px; padding: 1px 6px; flex: 1; min-width: 180px;">
+                                                        <span style="width: 6px; height: 6px; border-radius: 50%; background: #34d399; box-shadow: 0 0 5px #34d399; flex-shrink: 0;"></span>
+                                                        <span style="color: #34d399; font-size: 0.64rem; font-weight: 700; flex-shrink: 0;">WORKER:</span>
+                                                        <a href="${workerLink}" target="_blank" style="color: #34d399; font-size: 0.71rem; font-family: monospace; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" title="${workerLink}">
+                                                            ${workerLink}
+                                                        </a>
+                                                        <button class="btn btn-secondary btn-xs" onclick="navigator.clipboard.writeText('${workerLink}'); showToast('Worker linki kopyalandı!', 'info');" style="padding: 1px 4px; font-size: 0.62rem; border-radius: 3px; flex-shrink: 0;" title="Kopyala">
+                                                            <i data-lucide="copy" style="width: 10px; height: 10px;"></i>
+                                                        </button>
+                                                    </div>
+                                                    ` : ''}
                                                 </div>
 
                                                 <!-- Sağ: Düymələr (Tarixçə, Loq, Dayandır, Ayır) -->
