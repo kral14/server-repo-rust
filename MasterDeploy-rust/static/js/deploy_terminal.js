@@ -110,7 +110,8 @@ function viewLogs(appId, switchMainTab = true, specificDeployId = null) {
 
     // Əgər spesifik bir deployment ID-si verilməyibsə, ən sonuncunu tapmaq üçün sorğu atırıq
     async function initLogs() {
-        if (!currentActiveDeploymentId) {
+        if (!currentActiveDeploymentId || currentActiveDeploymentId === 'null' || currentActiveDeploymentId === 'undefined') {
+            currentActiveDeploymentId = null;
             try {
                 const res = await fetch(`/api/deployments/${appId}`);
                 if (res.ok) {
@@ -124,15 +125,20 @@ function viewLogs(appId, switchMainTab = true, specificDeployId = null) {
             }
         }
         
-        if (!currentActiveDeploymentId) {
+        if (!currentActiveDeploymentId || currentActiveDeploymentId === 'null' || currentActiveDeploymentId === 'undefined') {
             terminal.innerText = "[MƏLUMAT] Bu layihə üçün hələ heç bir yayım (deploy) edilməyib.";
             const statusDot = document.getElementById('stream-status-dot');
             if (statusDot) statusDot.innerText = 'Yayım yoxdur';
+            stopLogPolling();
             return;
         }
 
         // Poll logs every 1 second
         logInterval = setInterval(async () => {
+            if (!currentActiveDeploymentId || currentActiveDeploymentId === 'null' || currentActiveDeploymentId === 'undefined') {
+                stopLogPolling();
+                return;
+            }
             try {
                 const res = await fetch(`/api/deployments/single/${currentActiveDeploymentId}`);
                 if (!res.ok) {

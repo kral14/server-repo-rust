@@ -1,5 +1,12 @@
 [
   {
+    "version": "v1.0.187",
+    "date": "18.09.2026 11:10",
+    "changes": [
+      "Lokal suretli build ve tehlukesizlik tekmillesdirmeleri."
+    ]
+  },
+  {
     "version": "v1.0.186",
     "date": "18.09.2026 10:21",
     "changes": [

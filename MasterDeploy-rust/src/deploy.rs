@@ -35,7 +35,13 @@ pub async fn trigger_deployment(
     let no_cache = query.no_cache.unwrap_or(false);
     match trigger_deployment_impl(state.db, app_id, no_cache).await {
         Ok(dep) => Ok(Json(dep)),
-        Err(err) => Err((StatusCode::INTERNAL_SERVER_ERROR, err)),
+        Err(err) => {
+            if err.to_lowercase().contains("not found") {
+                Err((StatusCode::NOT_FOUND, err))
+            } else {
+                Err((StatusCode::INTERNAL_SERVER_ERROR, err))
+            }
+        }
     }
 }
 
@@ -308,7 +314,14 @@ pub async fn trigger_deployment_impl(
                 }
             }
 
-            perform_preflight_env_and_service_checks(&app, &server, &temp_key_path, &db_clone, &deploy_id, &logs, false).await;
+            if let Err(preflight_err) = perform_preflight_env_and_service_checks(&app, &server, &temp_key_path, &db_clone, &deploy_id, &logs, false).await {
+                let mut lock = logs.lock().await;
+                lock.push_str(&format!("\n[XƏTA] Deploy dayandırıldı: {}\n", preflight_err));
+                update_logs_helper(&db_clone, &deploy_id, &lock).await;
+                let _ = std::fs::remove_file(&temp_key_path);
+                finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+                return;
+            }
         } else {
             let branch = if app.branch.trim().is_empty() {
                 "main".to_string()
@@ -360,7 +373,14 @@ pub async fn trigger_deployment_impl(
                 }
             }
 
-            perform_preflight_env_and_service_checks(&app, &server, &temp_key_path, &db_clone, &deploy_id, &logs, true).await;
+            if let Err(preflight_err) = perform_preflight_env_and_service_checks(&app, &server, &temp_key_path, &db_clone, &deploy_id, &logs, true).await {
+                let mut lock = logs.lock().await;
+                lock.push_str(&format!("\n[XƏTA] Deploy dayandırıldı: {}\n", preflight_err));
+                update_logs_helper(&db_clone, &deploy_id, &lock).await;
+                let _ = std::fs::remove_file(&temp_key_path);
+                finalize_deploy(&db_clone, &deploy_id, &app_id_clone, "failed").await;
+                return;
+            }
 
             {
                 let mut lock = logs.lock().await;
@@ -986,7 +1006,8 @@ pub async fn perform_preflight_env_and_service_checks(
     deploy_id: &str,
     logs: &std::sync::Arc<tokio::sync::Mutex<String>>,
     is_git: bool,
-) {
+) -> Result<(), String> {
+    let mut fatal_error: Option<String> = None;
     let mut report = String::new();
     report.push_str("\n============================================================\n");
     report.push_str("🔍 [PRE-FLIGHT] Mühit Dəyişənləri və Qoşulma Yoxlanışı\n");
@@ -1140,8 +1161,9 @@ pub async fn perform_preflight_env_and_service_checks(
 
         let code_out = code_logs.lock().await.clone();
         if code_out.contains("===HAS_DB_DEP:") && db_targets.is_empty() {
-            report.push_str("\n  ⚠️ [KOD ANALİZİ XƏBƏRDARLIĞI] Layihə asılılıqlarında (package.json/requirements) Verilənlər Bazası kitabxanası ('pg' və s.) aşkarlandı, lakin sazlamalarda heç bir 'DATABASE_URL' təyin edilməyib!\n");
-            report.push_str("  │   💡 Qeyd: Əgər tətbiq mərkəzi PostgreSQL bazası tələb edirsə, sazlamalara mütləq DATABASE_URL əlavə edin!\n");
+            report.push_str("\n  ❌ [PRE-FLIGHT XƏTASI] Layihə asılılıqlarında Verilənlər Bazası kitabxanası ('pg' və s.) aşkarlandı, lakin mühit dəyişənlərində 'DATABASE_URL' təyin edilməyib.\n");
+            report.push_str("  │   💡 Tələb: Layihə sazlamalarına daxil olaraq 'DATABASE_URL' mühit dəyişənini təyin edin.\n");
+            fatal_error = Some("Layihə asılılıqlarında Verilənlər Bazası kitabxanası aşkarlandı, lakin 'DATABASE_URL' təyin edilməyib.".to_string());
         }
     }
 
@@ -1190,5 +1212,11 @@ pub async fn perform_preflight_env_and_service_checks(
         lock.push_str(&report);
         update_logs_helper(db_clone, deploy_id, &lock).await;
     }
+
+    if let Some(err) = fatal_error {
+        return Err(err);
+    }
+
+    Ok(())
 }
 

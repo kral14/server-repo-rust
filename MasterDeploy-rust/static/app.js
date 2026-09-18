@@ -133,15 +133,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (appId) {
             currentAppDetailsId = appId;
             const subTab = localStorage.getItem('active_app_subtab') || 'overview';
-            switchTab('app-details').then(() => {
-                if (typeof openAppDetails === 'function') {
-                    openAppDetails(appId, false);
+            fetch(`/api/applications/${appId}`).then(res => {
+                if (res.ok) {
+                    switchTab('app-details').then(() => {
+                        if (typeof openAppDetails === 'function') {
+                            openAppDetails(appId, false);
+                        }
+                        if (typeof switchAppTab === 'function') {
+                            switchAppTab(subTab);
+                        }
+                    });
+                } else {
+                    // Əgər layihə silinibdirsə, təmizlə və layihələr tabına yönləndir
+                    localStorage.removeItem('active_app_id');
+                    localStorage.setItem('active_tab', 'applications');
+                    switchTab('applications');
                 }
-                if (typeof switchAppTab === 'function') {
-                    switchAppTab(subTab);
-                }
+            }).catch(() => {
+                switchTab('applications');
             });
         } else {
+            localStorage.setItem('active_tab', 'applications');
             switchTab('applications');
         }
     } else {

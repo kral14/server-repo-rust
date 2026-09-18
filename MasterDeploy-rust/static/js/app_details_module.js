@@ -362,7 +362,20 @@ async function openAppDetails(appId, autoSwitchToOverview = true) {
         const res = await fetch(`/api/applications/${appId}`);
         console.timeEnd("[FETCH] Application Details");
         
-        if (!res.ok) { alert('Layihə məlumatları yüklənmədi.'); return; }
+        if (!res.ok) {
+            localStorage.removeItem('active_app_id');
+            currentAppDetailsId = null;
+            if (typeof showToast === 'function') {
+                showToast('Bu layihə bazada tapılmadı və ya silinib.', 'warning');
+            }
+            if (typeof closeModal === 'function') {
+                closeModal('win-app-details');
+            }
+            if (typeof openDesktopWindow === 'function') {
+                openDesktopWindow('applications');
+            }
+            return;
+        }
         const app = await res.json();
         currentAppDetailsName = app.name;
 
